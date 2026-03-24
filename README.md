@@ -256,6 +256,7 @@ This public-ready bundle excludes generated caches, local runtime artifacts, emb
 - [docs/quickstarts/operator.md](docs/quickstarts/operator.md)
 - [docs/quickstarts/admin.md](docs/quickstarts/admin.md)
 - [docs/quickstarts/developer.md](docs/quickstarts/developer.md)
+- [24-month product strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
 
 ## Project status
 
