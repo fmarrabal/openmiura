@@ -1,4 +1,0 @@
-python -m compileall -q app.py openmiura tests
-node --check openmiura/ui/static/app.js
-pytest --collect-only -q
-pytest -q <bloques 1..12 de la suite completa>

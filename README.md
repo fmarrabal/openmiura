@@ -1,7 +1,14 @@
 <p align="center">
-  <img src="assets/logo/openmiura-logo.png" alt="openMiura logo" width="420">
+  <img src="assets/logo/openmiura-logo.png" alt="openMiura logo" width="220">
 </p>
 
+<p align="center">
+  Governed Agent Operations Platform
+</p>
+
+<p align="center">
+  Deploy agents with control, approvals, auditability, and runtime governance
+</p>
 <p align="center">
   Governed agent operations platform for secure, auditable, multi-agent workflows
 </p>
@@ -10,10 +17,19 @@
   Local-first • Multi-tenant • Policy-driven • Auditable • Extensible
 </p>
 
+openMiura is a **governed agent operations platform** designed for organizations that need to run AI agents across email, terminal, Slack, browsers, CRM, ERP, and internal tools with policy control, approvals, secrets isolation, auditability, and rollback.
 
-openMiura is a **governed agent operations platform** for teams that need more than a chat interface. It is designed to operate AI agents under explicit control: with multi-tenant segregation, policy enforcement, approvals, audit trails, release governance, evaluation gates, canary routing, operational voice flows, mobile/PWA surfaces, and a live canvas for monitoring and collaboration.
+Bring your runtime. openMiura governs it.
 
 The project evolved across **nine implementation phases**. The current repository is the consolidated baseline that brings together the foundations, enterprise controls, operational surfaces, packaging, and hardening work completed across those phases.
+
+## Key documents
+
+- [Agent Control Plane overview](docs/openMiura_agent_control_plane.md)
+- [24-month investor strategy roadmap](docs/ROADMAP_24M_INVESTOR_STRATEGY.md)
+- [Commercial one-pager](docs/openMiura_one_pager_commercial.md)
+- [Use cases](docs/use_cases.md)
+
 
 ## What openMiura is
 
@@ -255,6 +271,7 @@ This public-ready bundle excludes generated caches, local runtime artifacts, emb
 - [docs/quickstarts/admin.md](docs/quickstarts/admin.md)
 - [docs/quickstarts/developer.md](docs/quickstarts/developer.md)
 - [24-month product strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
+- [openMiura Agent Control Plane](docs/openMiura_agent_control_plane.md)
 
 ## Project status
 
