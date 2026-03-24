@@ -2,8 +2,6 @@
   <img src="assets/logo/openmiura-logo.png" alt="openMiura logo" width="420">
 </p>
 
-<h1 align="center">openMiura</h1>
-
 <p align="center">
   Governed agent operations platform for secure, auditable, multi-agent workflows
 </p>
