@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo/openmiura-logo.png" alt="openMiura logo" width="220">
+  <img src="assets/logo/openmiura-logo.png" alt="openMiura logo" width="320">
 </p>
 
 <h1 align="center">openMiura</h1>
