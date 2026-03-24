@@ -116,9 +116,13 @@ jobs:
           cache: pip
 
       - name: Install dependencies
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -e ".[dev]"
+          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+          python -m pip check
 
       - name: Build deterministic package
         run: |

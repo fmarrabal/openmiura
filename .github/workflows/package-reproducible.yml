@@ -10,16 +10,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+
       - name: Install dependencies
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -e ".[dev]"
+          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+          python -m pip check
+
       - name: Build deterministic package
+        shell: bash
         run: |
-          python scripts/reproducible_package.py --target desktop --label "CI reproducible build" --version "${GITHUB_SHA::12}" --output-dir dist
+          set -euo pipefail
+          python scripts/reproducible_package.py \
+            --target desktop \
+            --label "CI reproducible build" \
+            --version "${GITHUB_SHA::12}" \
+            --output-dir dist
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -27,3 +42,4 @@ jobs:
           path: |
             dist/*.zip
             dist/*.manifest.json
+          if-no-files-found: error
