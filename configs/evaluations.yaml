@@ -1,0 +1,46 @@
+defaults:
+  provider: ollama
+  model: qwen2.5:7b-instruct
+  agent_name: default
+
+suites:
+  smoke:
+    description: Basic smoke checks for imported agent observations.
+    use_case: smoke-validation
+    tags: [smoke, ci]
+    is_regression_suite: true
+    cases:
+      - id: greeting_contains_hello
+        name: Greeting contains hello
+        assertions:
+          - type: contains
+            expected: hello
+          - type: latency_max_ms
+            max_ms: 2000
+      - id: time_tool_used
+        name: Time tool was used
+        assertions:
+          - type: tool_used
+            tool_name: time_now
+          - type: policy_adherence
+            expected: true
+
+  ops_agent_regression:
+    description: Regression suite for the default ops agent against the default Ollama model.
+    use_case: ops-assistance
+    tags: [regression, ops-agent]
+    agent_name: ops-agent
+    provider: ollama
+    model: qwen2.5:7b-instruct
+    is_regression_suite: true
+    cases:
+      - id: greeting_contains_hello
+        name: Greeting contains hello
+        assertions:
+          - type: contains
+            expected: hello
+      - id: time_tool_used
+        name: Time tool was used
+        assertions:
+          - type: tool_used
+            tool_name: time_now

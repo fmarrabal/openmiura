@@ -1,0 +1,24 @@
+# Ejemplos locales de arranque para openMiura
+# Sustituye los valores de entorno por los tuyos. No pegues secretos reales aquí.
+
+# PowerShell
+$env:OPENMIURA_CONFIG="configs/openmiura.yaml"
+$env:OPENMIURA_TELEGRAM_BOT_TOKEN="<tu_token_telegram>"
+python -m openmiura run --config configs/openmiura.yaml
+
+# En otra terminal, si usas Telegram polling
+$env:OPENMIURA_CONFIG="configs/openmiura.yaml"
+$env:OPENMIURA_TELEGRAM_BOT_TOKEN="<tu_token_telegram>"
+python scripts/telegram_poll_worker.py
+
+# Discord worker opcional
+python scripts/discord_worker.py
+
+# Diagnóstico
+python -m openmiura doctor --config configs/openmiura.yaml
+
+# Salud HTTP
+curl http://127.0.0.1:8081/health
+
+# Admin API (si está habilitada)
+curl -H "Authorization: Bearer <tu_admin_token>" http://127.0.0.1:8081/admin/status

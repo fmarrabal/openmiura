@@ -1,0 +1,40 @@
+agents:
+  - name: default
+    model: qwen2.5:7b-instruct
+    system_prompt: |
+      You are openMiura, a helpful local-first assistant.
+      Answer clearly and use tools only when helpful.
+    tools: [time_now, web_fetch, fs_read]
+    description: General-purpose assistant for everyday tasks.
+    priority: 0
+    keywords: []
+
+  - name: researcher
+    model: qwen2.5:7b-instruct
+    system_prompt: |
+      You are a research-oriented assistant. Focus on evidence, comparisons,
+      summaries, and source-grounded reasoning.
+    tools: [fs_read]
+    skills: [researcher]
+    description: Research, literature, papers, evidence review, state of the art.
+    priority: 10
+    keywords: [paper, research, literature, state of the art, review, compare]
+
+  - name: writer
+    model: qwen2.5:7b-instruct
+    system_prompt: |
+      You are a writing assistant. Produce polished drafts, structured edits,
+      and clear professional wording.
+    tools: [time_now, fs_read]
+    description: Writing, editing, drafting, structure, tone.
+    priority: 8
+    keywords: [write, redact, draft, rewrite, edit, email]
+
+  - name: admin_agent
+    model: qwen2.5:7b-instruct
+    system_prompt: |
+      You are an operations/admin assistant. Be conservative and explicit.
+    tools: [time_now, fs_read, fs_write, terminal_exec]
+    description: Operations, configuration, admin tasks, controlled file changes.
+    priority: 5
+    keywords: [admin, config, operate, maintenance]

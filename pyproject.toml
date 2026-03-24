@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmiura"
+version = "1.0.0"
+description = "Governed agent operations platform with releases, policies, approvals, voice, PWA and live canvas operations"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Francisco Arrabal" }
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["agents", "agent-ops", "governance", "fastapi", "ollama", "voice", "pwa", "canvas"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Framework :: FastAPI",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.23",
+  "httpx>=0.27",
+  "numpy>=1.26",
+  "pydantic>=2.6",
+  "PyYAML>=6.0",
+  "click>=8.1",
+  "discord.py>=2.4",
+  "cryptography>=46.0",
+  "prometheus-client>=0.21",
+  "mcp>=1.0",
+]
+
+
+[project.optional-dependencies]
+postgres = [
+  "psycopg[binary]>=3.2",
+]
+dev = [
+  "pytest>=8.0",
+  "build>=1.2",
+  "twine>=5.1",
+  "pip-audit>=2.8",
+]
+
+[project.urls]
+Homepage = "https://github.com/fmarrabal/openmiura"
+Repository = "https://github.com/fmarrabal/openmiura"
+
+[project.scripts]
+openmiura = "openmiura.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = ["app"]
+
+[tool.setuptools.packages.find]
+include = ["openmiura*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+markers = [
+  "unit: fast unit tests",
+  "integration: integration and flow tests",
+]
+filterwarnings = [
+  "ignore:Please use `import python_multipart` instead:PendingDeprecationWarning",
+]
+
+[tool.setuptools.package-data]
+openmiura = ["builtin_skills/**/*.yaml", "builtin_skills/**/*.md", "ui/static/*"]

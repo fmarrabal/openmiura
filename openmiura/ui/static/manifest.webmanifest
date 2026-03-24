@@ -1,0 +1,20 @@
+{
+  "name": "openMiura Operator App",
+  "short_name": "openMiura",
+  "description": "PWA operativa para operator console, approvals, replay y voz.",
+  "start_url": "./index.html?tab=operator",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#121a31",
+  "orientation": "portrait-primary",
+  "icons": [
+    {"src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Operator Console", "url": "./index.html?tab=operator", "description": "Abrir colas operativas"},
+    {"name": "Replay", "url": "./index.html?tab=replay", "description": "Abrir replay explorer"},
+    {"name": "Voice Runtime", "url": "./index.html?tab=voice", "description": "Abrir runtime de voz"}
+  ]
+}

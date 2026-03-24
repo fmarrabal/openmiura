@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openMiura UI</title>
+  <meta name="theme-color" content="#121a31" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><h1>openMiura</h1><p>Workspace & Admin Console</p></div>
+      <section class="panel compact stack">
+        <div class="row between"><h2>Authentication</h2><button id="logoutBtn" class="ghost">Logout</button></div>
+        <label>Broker base URL</label>
+        <input id="baseUrl" placeholder="http://127.0.0.1:8081/broker" />
+        <label>Auth mode</label>
+        <select id="authModeSelect">
+          <option value="token">Static token</option>
+          <option value="login">Username + password</option>
+        </select>
+        <div id="tokenFields" class="stack compact-row">
+          <label>Token</label>
+          <input id="token" type="password" placeholder="Broker token or session token" />
+        </div>
+        <div id="loginFields" class="stack compact-row hidden">
+          <label>Username</label>
+          <input id="username" placeholder="admin" />
+          <label>Password</label>
+          <input id="password" type="password" placeholder="••••••••" />
+        </div>
+        <div class="row between"><button id="connectBtn">Connect</button><button id="adminRefreshBtn" class="ghost">Admin refresh</button></div>
+        <div id="connectStatus" class="muted"></div>
+        <div id="meBadge" class="badge">Not authenticated</div>
+        <div id="permBadge" class="muted"></div>
+      </section>
+      <section class="panel compact stack">
+        <div class="row between"><h2>Sessions</h2><button id="refreshSessionsBtn" class="ghost">↻</button></div>
+        <div id="sessionList" class="list tall"></div>
+      </section>
+      <section class="panel compact stack">
+        <div class="row between"><h2>Pending confirmations</h2><button id="refreshPendingBtn" class="ghost">↻</button></div>
+        <div id="pendingList" class="list"></div>
+      </section>
+    </aside>
+    <main class="main">
+      <div class="topbar panel">
+        <div>
+          <h2>Workspace</h2>
+          <div id="statusLine" class="muted">Ready</div>
+        </div>
+        <div class="row wrap">
+          <button class="tab-btn active" data-tab="workspace">Workspace</button>
+          <button class="tab-btn" data-tab="builder">Builder</button>
+          <button class="tab-btn" data-tab="policies">Policies</button>
+          <button class="tab-btn" data-tab="secrets">Secrets</button>
+          <button class="tab-btn" data-tab="replay">Replay</button>
+          <button class="tab-btn" data-tab="operator">Operator</button>
+          <button class="tab-btn" data-tab="releases">Releases</button>
+          <button class="tab-btn" data-tab="voice">Voice</button>
+          <button class="tab-btn" data-tab="app">App</button>
+          <button class="tab-btn" data-tab="canvas">Canvas</button>
+          <button class="tab-btn" data-tab="admin">Admin</button>
+          <select id="agentSelect"></select>
+          <button id="refreshAgentsBtn" class="ghost">Refresh agents</button>
+        </div>
+      </div>
+
+      <section id="workspaceTab" class="tab active stack">
+        <div class="grid-two">
+          <section class="panel">
+            <div class="row between"><h3>Chat</h3><span id="chatSessionLabel" class="muted">No session selected</span></div>
+            <div id="chatLog" class="chat-log"></div>
+            <div class="composer">
+              <textarea id="chatInput" placeholder="Write a message…"></textarea>
+              <div class="row between wrap"><button id="newSessionBtn" class="ghost">New session</button><label class="check"><input id="chatStreamToggle" type="checkbox" checked /> stream</label><button id="sendBtn">Send</button></div>
+            </div>
+          </section>
+          <section class="panel stack">
+            <div>
+              <div class="row between"><h3>Metrics summary</h3><button id="refreshMetricsBtn" class="ghost">Refresh</button></div>
+              <pre id="metricsBox" class="code-box"></pre>
+            </div>
+            <div>
+              <div class="row between"><h3>Memory search</h3><button id="memorySearchBtn" class="ghost">Search</button></div>
+              <div class="row wrap"><input id="memoryQuery" placeholder="Search memory…" /><input id="memoryUserKey" placeholder="user_key override" /></div>
+              <div id="memoryResults" class="list"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Session history</h3><button id="refreshHistoryBtn" class="ghost">Refresh</button></div>
+            <div id="historyBox" class="history"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Tool calls</h3><button id="refreshToolCallsBtn" class="ghost">Refresh</button></div>
+            <div id="toolCallsBox" class="history admin-list"></div>
+          </section>
+        </div>
+
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Terminal stream</h3><button id="runTerminalBtn">Run</button></div>
+            <input id="terminalCommand" placeholder="python --version" />
+            <input id="terminalCwd" placeholder="relative cwd inside sandbox (optional)" />
+            <label class="check"><input id="terminalConfirmed" type="checkbox" /> confirmed</label>
+            <pre id="terminalOutput" class="code-box terminal"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Live events</h3><button id="reconnectLiveBtn" class="ghost">Reconnect</button></div>
+            <div id="liveEventsBox" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
+
+
+      <section id="builderTab" class="tab stack hidden">
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Workflow Builder</h3><div class="row wrap"><select id="builderPlaybookSelect"></select><button id="loadBuilderPlaybookBtn" class="ghost">Load playbook</button><button id="refreshBuilderCatalogBtn" class="ghost">Refresh catalog</button></div></div>
+            <div class="row wrap"><input id="builderName" placeholder="Workflow name" /><label class="check"><input id="builderAutorun" type="checkbox" checked /> autorun</label></div>
+            <div class="grid-two builder-input-grid">
+              <div class="stack">
+                <div class="row between"><h4>Input JSON</h4><button id="formatBuilderInputBtn" class="ghost">Format</button></div>
+                <textarea id="builderInput" class="builder-json" placeholder='{"subject":"ops"}'></textarea>
+              </div>
+              <div class="stack">
+                <div class="row between"><h4>Definition JSON</h4><button id="formatBuilderDefinitionBtn" class="ghost">Format</button></div>
+                <textarea id="builderDefinition" class="builder-json" placeholder='{"steps":[]}'></textarea>
+              </div>
+            </div>
+            <div class="row wrap">
+              <button id="validateBuilderBtn">Validate</button>
+              <button id="createBuilderWorkflowBtn">Create workflow</button>
+            </div>
+            <pre id="builderValidation" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Catalog</h3><span class="muted" id="builderCatalogSummary">Not loaded</span></div>
+            <div id="builderCatalog" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Graph preview</h3><span id="builderGraphStats" class="muted">No graph yet</span></div>
+            <div id="builderGraph" class="builder-graph"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Edges</h3><button id="copyBuilderDefinitionBtn" class="ghost">Copy definition</button></div>
+            <div id="builderEdges" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="policiesTab" class="tab stack hidden">
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Policy Explorer</h3><div class="row wrap"><button id="refreshPolicyExplorerBtn" class="ghost">Load current policy</button><button id="copyPolicySnapshotBtn" class="ghost">Copy current</button></div></div>
+            <div class="grid-two builder-input-grid">
+              <div class="stack">
+                <div class="row between"><h4>Simulation request</h4><button id="formatPolicyRequestBtn" class="ghost">Format</button></div>
+                <textarea id="policyExplorerRequest" class="builder-json" placeholder='{"scope":"tool","resource_name":"web_fetch","action":"use"}'></textarea>
+              </div>
+              <div class="stack">
+                <div class="row between"><h4>Candidate policy YAML</h4><button id="clearPolicyCandidateBtn" class="ghost">Clear</button></div>
+                <textarea id="policyExplorerCandidate" class="builder-json" placeholder="tool_rules:
+  - name: allow_web_fetch
+    tool: web_fetch
+    effect: allow"></textarea>
+              </div>
+            </div>
+            <div class="row wrap">
+              <button id="simulateCurrentPolicyBtn">Simulate current</button>
+              <button id="simulateCandidatePolicyBtn">Simulate candidate</button>
+              <button id="diffPolicyBtn">Diff</button>
+            </div>
+            <pre id="policyExplorerSummary" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Current policy snapshot</h3><span id="policySignatureBadge" class="muted">Not loaded</span></div>
+            <pre id="policySnapshotBox" class="code-box"></pre>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Simulation output</h3><span class="muted">Baseline vs candidate</span></div>
+            <pre id="policySimulationBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Policy diff</h3><span class="muted">Section-level changes</span></div>
+            <pre id="policyDiffBox" class="code-box"></pre>
+          </section>
+        </div>
+      </section>
+
+      <section id="secretsTab" class="tab stack hidden">
+        <div class="grid-three">
+          <section class="panel stat-card"><h3>Secret governance</h3><div id="secretOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Usage summary</h3><div id="secretUsageOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><div class="row between"><h3>Explain access</h3><button id="refreshSecretsBtn" class="ghost">Refresh</button></div><pre id="secretExplainBox" class="code-box"></pre></section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Catalog</h3><div class="row wrap"><button id="runSecretExplainBtn">Explain</button><button id="copySecretCatalogBtn" class="ghost">Copy catalog</button></div></div>
+            <div class="row wrap"><input id="secretFilterQ" placeholder="search secret refs / owner / domain" /><input id="secretFilterRef" placeholder="secret ref" /></div>
+            <div class="row wrap"><input id="secretFilterTool" placeholder="tool name" /><input id="secretFilterDomain" placeholder="domain for explain" /><input id="secretLimit" type="number" min="1" max="500" value="100" /></div>
+            <div class="row wrap"><input id="secretExplainRole" placeholder="role" value="admin" /><input id="secretExplainTenant" placeholder="tenant_id" /><input id="secretExplainWorkspace" placeholder="workspace_id" /><input id="secretExplainEnvironment" placeholder="environment" /></div>
+            <pre id="secretSummaryBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Usage</h3><span class="muted">secret_resolved events</span></div>
+            <pre id="secretUsageSummaryBox" class="code-box"></pre>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Secret catalog</h3><span class="muted">refs · visibility · rotation</span></div>
+            <div id="secretCatalogBox" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Usage groups</h3><span class="muted">grouped by ref</span></div>
+            <div id="secretUsageBox" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="replayTab" class="tab stack hidden">
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Replay Explorer</h3><div class="row wrap"><button id="loadReplaySessionBtn" class="ghost">Load selected session</button><button id="loadReplayWorkflowBtn" class="ghost">Load workflow</button></div></div>
+            <div class="grid-two builder-input-grid">
+              <div class="stack">
+                <label>Session ID</label>
+                <input id="replaySessionId" placeholder="ui:... or workflow:..." />
+                <label>Workflow ID</label>
+                <input id="replayWorkflowId" placeholder="wf_..." />
+                <label>Limit</label>
+                <input id="replayLimit" type="number" value="120" min="1" max="500" />
+              </div>
+              <div class="stack">
+                <label>Compare left</label>
+                <div class="row wrap"><select id="replayCompareLeftKind"><option value="session">session</option><option value="workflow">workflow</option></select><input id="replayCompareLeftId" placeholder="left id" /></div>
+                <label>Compare right</label>
+                <div class="row wrap"><select id="replayCompareRightKind"><option value="session">session</option><option value="workflow">workflow</option></select><input id="replayCompareRightId" placeholder="right id" /></div>
+                <div class="row wrap"><button id="runReplayCompareBtn">Compare</button><button id="copyReplaySummaryBtn" class="ghost">Copy summary</button></div>
+              </div>
+            </div>
+            <pre id="replaySummaryBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Timeline</h3><span id="replayTimelineStats" class="muted">No replay loaded</span></div>
+            <div id="replayTimelineBox" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Execution details</h3><span class="muted">messages · tools · traces</span></div>
+            <pre id="replayDetailsBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Comparison</h3><span class="muted">diff by status/events/tools</span></div>
+            <div id="replayCompareSummary" class="overview-grid"></div>
+            <div id="replayCompareHighlights" class="history admin-list compact-list"></div>
+            <pre id="replayCompareBox" class="code-box"></pre>
+          </section>
+        </div>
+      </section>
+
+      <section id="operatorTab" class="tab stack hidden">
+        <div class="grid-three">
+          <section class="panel stat-card"><h3>Operator overview</h3><div id="operatorOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Queues</h3><div id="operatorQueues" class="overview-grid"></div></section>
+          <section class="panel stat-card"><div class="row between"><h3>Policy surface</h3><button id="refreshOperatorBtn" class="ghost">Refresh</button></div><pre id="operatorPolicySummaryBox" class="code-box"></pre></section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Operator Console</h3><div class="row wrap"><button id="loadOperatorSessionBtn" class="ghost">Load session</button><button id="loadOperatorWorkflowBtn" class="ghost">Load workflow</button><button id="applyOperatorFiltersBtn" class="ghost">Apply filters</button></div></div>
+            <div class="row wrap"><input id="operatorSessionId" placeholder="session_id" /><input id="operatorWorkflowId" placeholder="workflow_id" /></div>
+            <div class="row wrap">
+              <input id="operatorFilterQ" placeholder="search text / id / error" />
+              <select id="operatorFilterKind"><option value="">all kinds</option><option value="session">session</option><option value="workflow">workflow</option><option value="approval">approval</option><option value="trace">trace</option><option value="event">event</option><option value="failure">failure</option><option value="tool_call">tool_call</option><option value="message">message</option></select>
+              <select id="operatorFilterStatus"><option value="">all statuses</option><option value="pending">pending</option><option value="running">running</option><option value="waiting_approval">waiting_approval</option><option value="approved">approved</option><option value="rejected">rejected</option><option value="expired">expired</option><option value="failed">failed</option><option value="cancelled">cancelled</option><option value="ok">ok</option></select>
+              <label class="toggle"><input id="operatorOnlyFailures" type="checkbox" /> only failures</label>
+              <input id="operatorLimit" type="number" min="1" max="500" value="200" />
+            </div>
+            <pre id="operatorSummaryBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Inspector + policy hints</h3><span class="muted">replay · traces · approvals</span></div>
+            <pre id="operatorInspectorBox" class="code-box"></pre>
+            <pre id="operatorPolicyBox" class="code-box"></pre>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Timeline</h3><span id="operatorTimelineStats" class="muted">Not loaded</span></div>
+            <div id="operatorTimelineBox" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Recent failures</h3><span class="muted">sessions · workflows · tools</span></div>
+            <div id="operatorRecentFailures" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Recent sessions</h3><span class="muted">click to inspect</span></div>
+            <div id="operatorRecentSessions" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Recent workflows</h3><span class="muted">click to inspect</span></div>
+            <div id="operatorRecentWorkflows" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Pending approvals</h3><span class="muted">operational queue</span></div>
+            <div id="operatorPendingApprovals" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Recent traces</h3><span class="muted">decision inspector</span></div>
+            <div id="operatorRecentTraces" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Quick actions</h3><span class="muted">workflow + approvals</span></div>
+            <div class="row wrap"><input id="operatorActionWorkflowId" placeholder="workflow_id" /><button id="operatorCancelWorkflowBtn" class="ghost">Cancel workflow</button></div>
+            <div class="row wrap"><input id="operatorActionApprovalId" placeholder="approval_id" /><button id="operatorClaimApprovalBtn" class="ghost">Claim</button><button id="operatorApproveApprovalBtn" class="ghost">Approve</button><button id="operatorRejectApprovalBtn" class="ghost">Reject</button></div>
+            <textarea id="operatorActionReason" class="builder-json" placeholder="optional reason"></textarea>
+            <pre id="operatorActionResultBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Filter snapshot</h3><span class="muted">effective scope</span></div>
+            <pre id="operatorFiltersBox" class="code-box"></pre>
+          </section>
+        </div>
+      </section>
+
+
+      <section id="releasesTab" class="tab stack hidden">
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Release Governance</h3><div class="row wrap"><button id="refreshReleasesBtn" class="ghost">Refresh</button><button id="createReleaseBtn">Create draft</button></div></div>
+            <div class="row wrap"><input id="releaseKind" placeholder="workflow|agent|policy_bundle" value="workflow" /><input id="releaseName" placeholder="Release name" /><input id="releaseVersion" placeholder="1.0.0" /></div>
+            <div class="row wrap"><input id="releaseEnvironment" placeholder="dev" value="dev" /><input id="releaseTenant" placeholder="tenant (optional)" /><input id="releaseWorkspace" placeholder="workspace (optional)" /></div>
+            <div class="row wrap"><input id="releaseActor" placeholder="actor" value="admin" /><input id="releaseTargetEnvironment" placeholder="target env for promote" value="staging" /><input id="releaseReason" placeholder="reason / notes" /></div>
+            <textarea id="releaseItems" class="builder-json" placeholder='[{"item_kind":"workflow","item_key":"invoice-flow","item_version":"1.0.0","payload":{"steps":3}}]'></textarea>
+            <div class="row wrap">
+              <button id="submitReleaseBtn">Submit</button>
+              <button id="approveReleaseBtn">Approve</button>
+              <button id="promoteReleaseBtn">Promote</button>
+              <button id="rollbackReleaseBtn" class="ghost">Rollback</button>
+            </div>
+            <pre id="releaseSummaryBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Releases</h3><span id="releaseListSummary" class="muted">Not loaded</span></div>
+            <div id="releaseList" class="history admin-list"></div>
+          </section>
+        </div>
+        <section class="panel stack">
+          <div class="row between"><h3>Release detail</h3><span id="releaseSelectedLabel" class="muted">No release selected</span></div>
+          <pre id="releaseDetailBox" class="code-box"></pre>
+        </section>
+      </section>
+
+      
+
+      <section id="voiceTab" class="tab stack hidden">
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Voice Runtime</h3><div class="row wrap"><button id="refreshVoiceBtn" class="ghost">Refresh</button><button id="startVoiceBtn">Start session</button></div></div>
+            <div class="row wrap"><input id="voiceUserKey" placeholder="user_key" /><input id="voiceLocale" placeholder="es-ES" value="es-ES" /></div>
+            <div class="row wrap"><input id="voiceTenant" placeholder="tenant_id" /><input id="voiceWorkspace" placeholder="workspace_id" /></div>
+            <div class="row between wrap"><div class="badge" id="voiceSelectedLabel" data-voice-session-id="">No voice session</div><input id="voiceName" placeholder="assistant" value="assistant" /></div>
+            <textarea id="voiceTranscriptText" class="builder-json" placeholder="Say: check status or promote release to production"></textarea>
+            <div class="row wrap">
+              <button id="transcribeVoiceBtn">Push-to-talk</button>
+              <button id="respondVoiceBtn" class="ghost">Speak reply</button>
+              <button id="confirmVoiceBtn" class="ghost">Confirm</button>
+              <button id="cancelVoiceBtn" class="ghost">Cancel</button>
+              <button id="closeVoiceBtn" class="ghost">Close</button>
+            </div>
+            <pre id="voiceSummaryBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Voice sessions</h3><span id="voiceListSummary" class="muted">Not loaded</span></div>
+            <div id="voiceSessionList" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Transcripts</h3><span class="muted">STT history</span></div>
+            <div id="voiceTranscriptList" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Outputs & commands</h3><span class="muted">TTS + policy</span></div>
+            <div id="voiceOutputList" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
+
+      <section id="appTab" class="tab stack hidden">
+        <div class="grid-three">
+          <section class="panel stat-card"><div class="row between"><h3>PWA status</h3><button id="refreshAppFoundationBtn" class="ghost">Refresh</button></div><div id="appOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Install + notifications</h3><div class="stack"><div id="pwaSupportBadge" class="badge">Checking browser support…</div><div class="row wrap"><button id="installPwaBtn">Install app</button><button id="requestNotificationsBtn" class="ghost">Enable notifications</button></div></div></section>
+          <section class="panel stat-card"><h3>Deep link preview</h3><pre id="appDeepLinkPreview" class="code-box"></pre></section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Register current device</h3><button id="registerCurrentPwaBtn">Register installation</button></div>
+            <div class="row wrap"><input id="appUserKey" placeholder="user_key" /><input id="appPlatform" placeholder="pwa|android|ios|desktop" value="pwa" /></div>
+            <div class="row wrap"><input id="appDeviceLabel" placeholder="Current browser / mobile" /><input id="appTenant" placeholder="tenant_id" /><input id="appWorkspace" placeholder="workspace_id" /></div>
+            <div class="row wrap"><label class="toggle"><input id="appPushCapable" type="checkbox" /> push capable</label><input id="appNotificationPermission" placeholder="default|granted|denied" value="default" /></div>
+            <pre id="appInstallResultBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Operator notification</h3><button id="createAppNotificationBtn">Create notification</button></div>
+            <div class="row wrap"><input id="appNotificationTitle" placeholder="Approval pending" value="Approval pending" /><input id="appNotificationCategory" placeholder="operator" value="operator" /></div>
+            <div class="row wrap"><input id="appNotificationTargetPath" placeholder="/ui/?tab=operator" value="/ui/?tab=operator" /><input id="appNotificationInstallationId" placeholder="installation_id (optional)" /></div>
+            <textarea id="appNotificationBody" class="builder-json" placeholder="Operator action required">A release is waiting for approval in staging.</textarea>
+            <pre id="appNotificationResultBox" class="code-box"></pre>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Deep links</h3><button id="createAppDeepLinkBtn">Create deep link</button></div>
+            <div class="row wrap"><input id="appDeepLinkView" placeholder="operator|replay|voice" value="operator" /><input id="appDeepLinkTargetType" placeholder="approval|session|workflow|voice" value="approval" /></div>
+            <div class="row wrap"><input id="appDeepLinkTargetId" placeholder="target id" /><input id="appDeepLinkExpiry" type="number" min="60" max="604800" value="3600" /></div>
+            <textarea id="appDeepLinkParams" class="builder-json" placeholder='{"tab":"operator"}'>{"tab":"operator"}</textarea>
+            <pre id="appDeepLinkResultBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Installations</h3><span id="appInstallationSummary" class="muted">Not loaded</span></div>
+            <div id="appInstallationList" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Notifications</h3><span class="muted">Latest operator pushes</span></div>
+            <div id="appNotificationList" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Deep link registry</h3><span class="muted">Secure routing</span></div>
+            <div id="appDeepLinkList" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Packaging &amp; hardening</h3><div class="row wrap"><button id="refreshPackagingBtn" class="ghost">Refresh</button><button id="recordPackageBuildBtn">Record build</button></div></div>
+            <div class="row wrap"><input id="packageBuildTarget" placeholder="desktop|mobile" value="desktop" /><input id="packageBuildLabel" placeholder="Phase 8 desktop shell" value="Phase 8 desktop shell" /></div>
+            <div class="row wrap"><input id="packageBuildVersion" placeholder="phase8-pr8" value="phase8-pr8" /><input id="packageBuildArtifactPath" placeholder="dist/openmiura-phase8-desktop.zip" value="dist/openmiura-phase8-desktop.zip" /></div>
+            <pre id="packagingSummaryBox" class="code-box"></pre>
+            <pre id="hardeningSummaryBox" class="code-box"></pre>
+            <pre id="packageBuildResultBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Package builds</h3><span id="packageBuildSummary" class="muted">Not loaded</span></div>
+            <div id="packageBuildList" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
+
+
+<section id="canvasTab" class="tab stack hidden">
+  <div class="grid-three">
+    <section class="panel stat-card"><div class="row between"><h3>Live Canvas</h3><button id="refreshCanvasBtn" class="ghost">Refresh</button></div><div id="canvasOverview" class="overview-grid"></div></section>
+    <section class="panel stat-card"><h3>Selected canvas</h3><div id="canvasSelectedLabel" class="badge" data-canvas-id="">No canvas selected</div></section>
+    <section class="panel stat-card"><h3>Realtime intent</h3><pre id="canvasEventSummaryBox" class="code-box"></pre></section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between wrap"><h3>Create canvas</h3><button id="createCanvasBtn">Create canvas</button></div>
+      <div class="row wrap"><input id="canvasTitle" placeholder="Operations canvas" value="Operations canvas" /><input id="canvasDescription" placeholder="Description" value="Live operational view" /></div>
+      <div class="row wrap"><input id="canvasTenant" placeholder="tenant_id" /><input id="canvasWorkspace" placeholder="workspace_id" /><input id="canvasEnvironment" placeholder="environment" value="dev" /></div>
+      <pre id="canvasCreateResultBox" class="code-box"></pre>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Canvas registry</h3><span id="canvasListSummary" class="muted">Not loaded</span></div>
+      <div id="canvasDocumentList" class="history admin-list"></div>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between wrap"><h3>Nodes and edges</h3><div class="row wrap"><button id="upsertCanvasNodeBtn">Upsert node</button><button id="upsertCanvasEdgeBtn" class="ghost">Upsert edge</button></div></div>
+      <div class="row wrap"><input id="canvasNodeId" placeholder="node_id (optional)" /><input id="canvasNodeType" placeholder="workflow|step|tool|note" value="workflow" /></div>
+      <div class="row wrap"><input id="canvasNodeLabel" placeholder="Node label" value="Workflow root" /><input id="canvasNodePosX" type="number" value="120" /><input id="canvasNodePosY" type="number" value="80" /></div>
+      <div class="row wrap"><input id="canvasEdgeSource" placeholder="source_node_id" /><input id="canvasEdgeTarget" placeholder="target_node_id" /><input id="canvasEdgeLabel" placeholder="edge label" value="flows_to" /></div>
+      <pre id="canvasMutationResultBox" class="code-box"></pre>
+    </section>
+    <section class="panel stack">
+      <div class="row between wrap"><h3>View and presence</h3><div class="row wrap"><button id="saveCanvasViewBtn">Save view</button><button id="updateCanvasPresenceBtn" class="ghost">Presence</button></div></div>
+      <div class="row wrap"><input id="canvasViewName" placeholder="Ops default" value="Ops default" /><label class="toggle"><input id="canvasViewDefault" type="checkbox" checked /> default</label><input id="canvasPresenceUser" placeholder="user_key" /></div>
+      <div class="row wrap"><input id="canvasPresenceX" type="number" value="0" /><input id="canvasPresenceY" type="number" value="0" /><input id="canvasPresenceSelectedNode" placeholder="selected_node_id" /></div>
+      <pre id="canvasViewResultBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between"><h3>Canvas detail</h3><span class="muted">Nodes, edges, views, presence</span></div>
+      <pre id="canvasDetailBox" class="code-box"></pre>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Canvas events</h3><span class="muted">Recent realtime trail</span></div>
+      <div id="canvasEventList" class="history admin-list"></div>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between"><h3>Collaboration</h3><span class="muted">Comments, snapshots and shared presence</span></div>
+      <pre id="canvasCollabSummaryBox" class="code-box"></pre>
+      <div id="canvasCommentList" class="history admin-list"></div>
+      <div id="canvasSnapshotList" class="history admin-list"></div>
+      <div id="canvasPresenceEventList" class="history admin-list"></div>
+    </section>
+
+    <section class="panel stack">
+      <div class="row between wrap"><h3>Canvas overlays</h3><div class="row wrap"><button id="refreshCanvasOverlaysBtn">Refresh overlays</button><button id="saveCanvasOverlayStateBtn" class="ghost">Save overlay state</button></div></div>
+      <div class="row wrap">
+        <label class="toggle"><input id="canvasOverlayPolicy" type="checkbox" checked /> policy</label>
+        <label class="toggle"><input id="canvasOverlayCost" type="checkbox" checked /> cost</label>
+        <label class="toggle"><input id="canvasOverlayTraces" type="checkbox" checked /> traces</label>
+        <label class="toggle"><input id="canvasOverlayFailures" type="checkbox" checked /> failures</label>
+        <label class="toggle"><input id="canvasOverlayApprovals" type="checkbox" checked /> approvals</label>
+        <label class="toggle"><input id="canvasOverlaySecrets" type="checkbox" checked /> secrets</label>
+      </div>
+      <div class="row wrap"><input id="canvasOverlayStateKey" placeholder="state_key" value="default" /><input id="canvasOverlaySelectedNode" placeholder="selected_node_id (optional)" /></div>
+      <pre id="canvasOverlaySummaryBox" class="code-box"></pre>
+      <pre id="canvasOverlayStateBox" class="code-box"></pre>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Overlay inspector</h3><span class="muted">Policy, cost, failures, approvals, secrets</span></div>
+      <div id="canvasOverlayList" class="history admin-list"></div>
+    </section>
+  </div>
+</section>
+
+<section id="adminTab" class="tab stack hidden">
+        <div class="grid-three">
+          <section class="panel stat-card"><h3>Overview</h3><div id="adminOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Channels</h3><div id="adminChannels" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Actions</h3><div class="stack"><button id="reloadConfigBtn">Reload config</button><div id="reloadResult" class="muted"></div></div></section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Admin sessions</h3><button id="refreshAdminSessionsBtn" class="ghost">Refresh</button></div>
+            <div id="adminSessions" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Admin memory</h3><button id="refreshAdminMemoryBtn" class="ghost">Refresh</button></div>
+            <div class="row wrap"><input id="adminMemoryQuery" placeholder="filter memory text" /><input id="adminMemoryUserKey" placeholder="user_key" /></div>
+            <div id="adminMemory" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Recent events</h3><button id="refreshEventsBtn" class="ghost">Refresh</button></div>
+            <div id="adminEvents" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Identity links</h3><button id="refreshIdentitiesBtn" class="ghost">Refresh</button></div>
+            <div id="adminIdentities" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Admin metrics</h3><button id="refreshAdminMetricsBtn" class="ghost">Refresh</button></div>
+            <pre id="adminMetricsBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Admin tool calls</h3><button id="refreshAdminToolCallsBtn" class="ghost">Refresh</button></div>
+            <div id="adminToolCalls" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Auth users</h3><button id="refreshUsersBtn" class="ghost">Refresh</button></div>
+            <div id="adminUsers" class="history admin-list"></div>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Create user</h3><button id="createUserBtn">Create</button></div>
+            <input id="newUsername" placeholder="username" />
+            <input id="newPassword" type="password" placeholder="password" />
+            <select id="newRole"><option value="user">user</option><option value="operator">operator</option><option value="admin">admin</option></select>
+            <input id="newUserKey" placeholder="user_key (optional)" />
+            <div id="createUserResult" class="muted"></div>
+            <div class="row between"><h3>Role catalog</h3><button id="refreshRolesBtn" class="ghost">Refresh</button></div>
+            <div id="roleCatalog" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>

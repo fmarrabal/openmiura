@@ -1,0 +1,215 @@
+server:
+  host: "env:OPENMIURA_SERVER_HOST|127.0.0.1"
+  port: "env:OPENMIURA_SERVER_PORT|8081"
+
+storage:
+  backend: "env:OPENMIURA_DB_BACKEND|sqlite"
+  db_path: "env:OPENMIURA_DB_PATH|data/audit.db"
+  database_url: "env:OPENMIURA_DATABASE_URL|"
+  backup_dir: "env:OPENMIURA_BACKUP_DIR|data/backups"
+  auto_migrate: "env:OPENMIURA_DB_AUTO_MIGRATE|true"
+
+llm:
+  provider: "env:OPENMIURA_LLM_PROVIDER|ollama"
+  base_url: "env:OPENMIURA_LLM_BASE_URL|http://127.0.0.1:11434"
+  model: "env:OPENMIURA_LLM_MODEL|qwen2.5:7b-instruct"
+  timeout_s: "env:OPENMIURA_LLM_TIMEOUT_S|60"
+  api_key_env_var: "env:OPENMIURA_LLM_API_KEY_ENV_VAR|"
+  anthropic_version: "env:OPENMIURA_ANTHROPIC_VERSION|2023-06-01"
+  max_output_tokens: "env:OPENMIURA_LLM_MAX_OUTPUT_TOKENS|2048"
+
+runtime:
+  history_limit: 12
+  default_session_prefix:
+    http: "http"
+    telegram: "tg"
+    slack: "slack"
+    discord: "dc"
+    mcp: "mcp"
+  pending_confirmation_ttl_s: 900
+  confirmation_cleanup_interval_s: 60
+  worker_mode: "env:OPENMIURA_WORKER_MODE|external"
+
+telegram:
+  bot_token: "env:OPENMIURA_TELEGRAM_BOT_TOKEN|"
+  mode: "env:OPENMIURA_TELEGRAM_MODE|polling"
+  webhook_secret: "env:OPENMIURA_TELEGRAM_WEBHOOK_SECRET|"
+  allowlist:
+    enabled: false
+    allow_user_ids: []
+    allow_chat_ids: []
+    allow_groups: false
+    deny_message: "⛔ No autorizado. Pide acceso al administrador."
+
+slack:
+  bot_token: "env:OPENMIURA_SLACK_BOT_TOKEN|"
+  signing_secret: "env:OPENMIURA_SLACK_SIGNING_SECRET|"
+  bot_user_id: "env:OPENMIURA_SLACK_BOT_USER_ID|"
+  reply_in_thread: true
+  allowlist:
+    enabled: false
+    allow_team_ids: []
+    allow_channel_ids: []
+    allow_im: true
+    deny_message: "⛔ No autorizado. Pide acceso al administrador."
+
+agents:
+  default:
+    system_prompt: |
+      You are openMiura (also known as Miura or MiuraBot), Curro's personal AI agent and full digital extension.
+
+      Mission:
+      - Work FOR Curro and ACT ON HIS BEHALF when (and only when) the required capability exists and is enabled.
+      - You are being built iteratively. Be honest about what is already implemented vs planned.
+
+      Personality & Style:
+      - Concise, direct, and straight to the point (no fluff).
+      - Extremely helpful, highly proactive, and solution-oriented.
+      - Loyal, discreet, and trustworthy.
+      - Respond to Curro in Spanish by default (switch languages only if he explicitly asks).
+
+      Non-negotiable Truthfulness Rules (anti-hallucination):
+      - Never claim you performed an action you did not actually perform.
+      - Never claim you have access to calendar, email, files, devices, accounts, or the internet unless the corresponding tool/feature is explicitly implemented and enabled.
+      - If Curro asks for something outside current capabilities, say clearly: “Aún no lo tengo implementado en openMiura”, and propose the next concrete step to implement it.
+      - If you don't know something, say “No lo sé” or “Necesito más información”. Do not guess.
+
+      Capability Awareness (current project state):
+      - Current implemented commands (authoritative list):
+        - /help (or /ayuda): show the real available commands
+        - /status: show runtime status and IDs
+        - /reset: reset session context (history) without deleting long-term memory
+        - /forget: delete long-term memory for the user_key and reset session context
+        - /link <global_user_key>: link channel identity (e.g., tg:<id>) to a global user key for unified memory
+      - If Curro asks “dime los comandos”, “lista de comandos”, “qué comandos hay”, you must answer ONLY with the list above (and brief explanations).
+      - Tools currently available: local LLM chat + semantic memory (embeddings) + SQLite audit. No calendar/email/files/system control unless explicitly added later.
+
+      Local-First Operating Principles:
+      - Prioritize privacy and local execution whenever possible.
+      - Prefer designs that store state locally (SQLite) and avoid unnecessary external services.
+      - When you propose an automation or integration, explain what must be added (e.g., Slack/Discord adapter, tool runtime) before it can work.
+
+      Proactivity (within reality):
+      - Be proactive by suggesting next steps that are implementable now.
+      - When appropriate, offer to add missing capabilities (e.g., web_fetch tool, Slack adapter, Discord worker) rather than pretending they already exist.
+
+      Signature rule:
+      At the very end of EVERY response, always append this exact signature on its own line:
+
+      Drafted with assistance from MiuraBot🤖 AI Research Assistant | Powered by science, caffeine & late-night coding sessions
+
+    allowed_tools: ["time_now", "web_fetch", "fs_read", "fs_write"]
+
+memory:
+  enabled: true
+  embed_model: "env:OPENMIURA_EMBED_MODEL|nomic-embed-text"
+  embed_base_url: "env:OPENMIURA_EMBED_BASE_URL|http://127.0.0.1:11434"
+  top_k: 6
+  min_score: 0.25
+  scan_limit: 400
+  max_items_per_user: 2000
+  dedupe_threshold: 0.92
+  store_user_facts: true
+  short_ttl_s: 86400
+  medium_ttl_s: 2592000
+  short_promote_repeat: 3
+  medium_promote_access: 5
+  vault:
+    enabled: "env:OPENMIURA_VAULT_ENABLED|false"
+    passphrase_env_var: "OPENMIURA_VAULT_PASSPHRASE"
+    pbkdf2_iterations: 390000
+
+tools:
+  sandbox_dir: "env:OPENMIURA_SANDBOX_DIR|data/sandbox"
+  web_fetch:
+    timeout_s: 20
+    max_bytes: 250000
+    allow_all_domains: true
+    allowed_domains: []
+    block_private_ips: true
+  terminal:
+    enabled: true
+    timeout_s: 30
+    max_timeout_s: 120
+    max_output_chars: 12000
+    shell_executable: "env:OPENMIURA_TERMINAL_SHELL|"
+    allow_shell: "env:OPENMIURA_TERMINAL_ALLOW_SHELL|true"
+    allow_shell_metacharacters: "env:OPENMIURA_TERMINAL_ALLOW_METACHARACTERS|true"
+    allow_multiline: false
+    require_explicit_allowlist: false
+    allowed_commands: []
+    blocked_commands: []
+    blocked_patterns: []
+    role_policies:
+      user:
+        allow_shell: false
+        allow_shell_metacharacters: false
+        allowed_commands: []
+      operator:
+        allow_shell: false
+        allow_shell_metacharacters: false
+        allowed_commands: []
+      admin:
+        allowed_commands: []
+  tool_role_policies:
+    user:
+      blocked_tools: ["fs_write", "terminal_exec"]
+    operator:
+      blocked_tools: []
+    admin:
+      blocked_tools: []
+
+secrets:
+  enabled: "env:OPENMIURA_SECRETS_ENABLED|false"
+  redact_logs: "env:OPENMIURA_SECRETS_REDACT_LOGS|true"
+  refs: {}
+
+cost_governance:
+  enabled: true
+  default_window_hours: 720
+  default_scan_limit: 2000
+  budgets: []
+
+admin:
+  enabled: "env:OPENMIURA_ADMIN_ENABLED|false"
+  token: "env:OPENMIURA_ADMIN_TOKEN|"
+  max_search_results: 100
+  rate_limit_per_minute: 60
+
+mcp:
+  enabled: "env:OPENMIURA_MCP_ENABLED|false"
+  host: "env:OPENMIURA_MCP_HOST|127.0.0.1"
+  port: "env:OPENMIURA_MCP_PORT|8091"
+  sse_path: "env:OPENMIURA_MCP_SSE_PATH|/mcp"
+
+broker:
+  enabled: "env:OPENMIURA_BROKER_ENABLED|false"
+  host: "env:OPENMIURA_BROKER_HOST|127.0.0.1"
+  port: "env:OPENMIURA_BROKER_PORT|8081"
+  base_path: "env:OPENMIURA_BROKER_BASE_PATH|/broker"
+  token: "env:OPENMIURA_BROKER_TOKEN|"
+  rate_limit_per_minute: "env:OPENMIURA_BROKER_RATE_LIMIT_PER_MINUTE|120"
+  auth_rate_limit_per_minute: "env:OPENMIURA_BROKER_AUTH_RATE_LIMIT_PER_MINUTE|20"
+
+auth:
+  enabled: "env:OPENMIURA_AUTH_ENABLED|true"
+  session_ttl_s: "env:OPENMIURA_AUTH_SESSION_TTL_S|86400"
+  session_idle_ttl_s: "env:OPENMIURA_AUTH_SESSION_IDLE_TTL_S|0"
+  max_sessions_per_user: "env:OPENMIURA_AUTH_MAX_SESSIONS_PER_USER|0"
+  session_rotation_interval_s: "env:OPENMIURA_AUTH_SESSION_ROTATION_INTERVAL_S|0"
+  api_token_default_ttl_s: "env:OPENMIURA_AUTH_API_TOKEN_DEFAULT_TTL_S|0"
+  api_token_idle_ttl_s: "env:OPENMIURA_AUTH_API_TOKEN_IDLE_TTL_S|0"
+  api_token_rotation_interval_s: "env:OPENMIURA_AUTH_API_TOKEN_ROTATION_INTERVAL_S|0"
+  session_cookie_enabled: "env:OPENMIURA_AUTH_COOKIE_ENABLED|false"
+  session_cookie_name: "env:OPENMIURA_AUTH_COOKIE_NAME|openmiura_session"
+  session_cookie_secure: "env:OPENMIURA_AUTH_COOKIE_SECURE|false"
+  session_cookie_samesite: "env:OPENMIURA_AUTH_COOKIE_SAMESITE|lax"
+  csrf_enabled: "env:OPENMIURA_AUTH_CSRF_ENABLED|false"
+  csrf_cookie_name: "env:OPENMIURA_AUTH_CSRF_COOKIE_NAME|openmiura_csrf"
+  csrf_header_name: "env:OPENMIURA_AUTH_CSRF_HEADER_NAME|X-CSRF-Token"
+  bootstrap_admin_username_env: "OPENMIURA_UI_ADMIN_USERNAME"
+  bootstrap_admin_password_env: "OPENMIURA_UI_ADMIN_PASSWORD"
+
+agents_path: "env:OPENMIURA_AGENTS_PATH|agents.yaml"
+policies_path: "env:OPENMIURA_POLICIES_PATH|policies.yaml"
+skills_path: "env:OPENMIURA_SKILLS_PATH|skills"

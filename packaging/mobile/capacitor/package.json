@@ -1,0 +1,9 @@
+{
+  "name": "openmiura-phase8-mobile-shell",
+  "version": "0.8.0",
+  "private": true,
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/cli": "^7.0.0"
+  }
+}

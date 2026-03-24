@@ -1,0 +1,28 @@
+[
+  {
+    "labels": {
+      "alertname": "OpenMiuraSyntheticCritical",
+      "service": "openmiura",
+      "severity": "critical"
+    },
+    "annotations": {
+      "summary": "Alerta sintética crítica de openMiura",
+      "description": "Payload de prueba para validar el circuito Alertmanager.",
+      "runbook_url": "docs/runbooks/alerts.md#openmiurasyntheticcritical"
+    },
+    "startsAt": "2026-03-18T10:00:00Z"
+  },
+  {
+    "labels": {
+      "alertname": "OpenMiuraSyntheticWarning",
+      "service": "openmiura",
+      "severity": "warning"
+    },
+    "annotations": {
+      "summary": "Alerta sintética warning de openMiura",
+      "description": "Payload de prueba para rutas no críticas.",
+      "runbook_url": "docs/runbooks/alerts.md#openmiurasyntheticwarning"
+    },
+    "startsAt": "2026-03-18T10:00:00Z"
+  }
+]

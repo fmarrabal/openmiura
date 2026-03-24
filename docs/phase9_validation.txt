@@ -1,0 +1,4 @@
+python -m compileall -q app.py openmiura tests  -> OK
+node --check openmiura/ui/static/app.js         -> OK
+pytest phase9 + migrations subset               -> 9 passed
+pytest phase8 regression subset                 -> 7 passed

@@ -1,0 +1,127 @@
+# =========================
+# openMiura - Git ignore
+# public release / clean tree
+# =========================
+
+# Python cache / bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# Packaging / build artifacts
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+*.tar.gz
+
+# Virtual environments
+.venv/
+venv/
+env/
+.venv-smoke/
+.python-version
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.secret
+secrets/
+
+# Logs / runtime DB / pids
+logs/
+*.log
+*.pid
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.backup
+*.backup-*.db
+
+# Project runtime folders
+/data/*
+!/data/.gitkeep
+!/data/backups/
+!/data/backups/.gitkeep
+!/data/sandbox/
+!/data/sandbox/.gitkeep
+!/data/voice_assets/
+!/data/voice_assets/.gitkeep
+/data/**/*.db
+/data/**/*.sqlite*
+/data/**/*.log
+/data/tmp/
+/data/cache/
+
+# Audio / generated media from local voice runs
+*.wav
+*.mp3
+*.ogg
+*.m4a
+*.flac
+/tmp_audio/
+voice_outputs/
+
+# Reproducible/package outputs
+*.manifest.json
+artifacts/
+releases/
+package-output/
+
+# Node / frontend transient files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editors / IDE
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker local overrides
+.docker/
+docker-compose.override.yml
+
+# Local notebooks / scratch work
+.ipynb_checkpoints/
+scratch/
+notes-local/
+
+# Terraform / infra scratch (future-proof)
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# GitHub Actions local runner temp
+.runner/

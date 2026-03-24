@@ -1,0 +1,31 @@
+# Default owners
+* @your-org/platform-admins
+
+# Core application areas
+/app.py @your-org/platform-admins @your-org/core-runtime
+/openmiura/application/ @your-org/core-runtime
+/openmiura/domain/ @your-org/core-runtime
+/openmiura/infrastructure/ @your-org/platform-admins @your-org/core-runtime
+
+# Interfaces and operational surfaces
+/openmiura/interfaces/ @your-org/platform-admins @your-org/interfaces-team
+/openmiura/ui/ @your-org/ui-team @your-org/platform-admins
+
+# Security-sensitive areas
+/openmiura/security/ @your-org/security-team @your-org/platform-admins
+/openmiura/extensions/ @your-org/security-team @your-org/extensions-team
+/openmiura/extensions/sdk/ @your-org/security-team @your-org/extensions-team
+
+# Packaging and release
+/packaging/ @your-org/release-engineering @your-org/platform-admins
+/scripts/ @your-org/release-engineering @your-org/platform-admins
+/.github/workflows/ @your-org/release-engineering @your-org/platform-admins
+
+# Tests and docs
+/tests/ @your-org/qa-team @your-org/platform-admins
+/docs/ @your-org/platform-admins @your-org/docs-team
+
+# Role-based quickstarts and security docs
+/SECURITY.md @your-org/security-team @your-org/platform-admins
+/README.md @your-org/platform-admins @your-org/docs-team
+/LICENSE @your-org/platform-admins
