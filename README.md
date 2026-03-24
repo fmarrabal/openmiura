@@ -12,7 +12,6 @@
   Local-first • Multi-tenant • Policy-driven • Auditable • Extensible
 </p>
 
-# openMiura
 
 openMiura is a **governed agent operations platform** for teams that need more than a chat interface. It is designed to operate AI agents under explicit control: with multi-tenant segregation, policy enforcement, approvals, audit trails, release governance, evaluation gates, canary routing, operational voice flows, mobile/PWA surfaces, and a live canvas for monitoring and collaboration.
 
