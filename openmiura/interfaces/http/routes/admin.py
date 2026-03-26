@@ -470,6 +470,16 @@ class CanvasShareViewRequest(BaseModel):
     workspace_id: Optional[str] = Field(default=None)
     environment: Optional[str] = Field(default=None)
 
+
+class CanvasNodeActionRequest(BaseModel):
+    actor: str = Field(default="admin")
+    reason: str = Field(default="")
+    payload: dict = Field(default_factory=dict)
+    session_id: str = Field(default="canvas")
+    tenant_id: Optional[str] = Field(default=None)
+    workspace_id: Optional[str] = Field(default=None)
+    environment: Optional[str] = Field(default=None)
+
 class SecretGovernanceExplainRequest(BaseModel):
     ref: str = Field(...)
     tool_name: str = Field(...)
@@ -551,6 +561,98 @@ def _require_admin(request: Request) -> Gateway:
     if not provided_token or not secrets.compare_digest(provided_token, configured_token):
         raise HTTPException(status_code=401, detail="Invalid admin token")
     return gw
+
+
+@router.get("/admin/openclaw/runtimes")
+def admin_openclaw_runtimes(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=300),
+    status: Optional[str] = Query(default=None),
+    tenant_id: Optional[str] = Query(default=None),
+    workspace_id: Optional[str] = Query(default=None),
+    environment: Optional[str] = Query(default=None),
+):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.list_openclaw_runtimes(gw, limit=limit, status=status, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+    _audit_admin(gw, 'openclaw_runtimes', {'count': len(response.get('items', [])), 'status': status, 'tenant_id': tenant_id, 'workspace_id': workspace_id, 'environment': environment})
+    return response
+
+
+@router.post("/admin/openclaw/runtimes")
+async def admin_openclaw_register_runtime(request: Request):
+    gw = _require_admin(request)
+    payload = await request.json()
+    response = _ADMIN_SERVICE.register_openclaw_runtime(
+        gw,
+        actor=str(payload.get('actor') or 'admin'),
+        name=str(payload.get('name') or ''),
+        base_url=str(payload.get('base_url') or ''),
+        transport=str(payload.get('transport') or 'http'),
+        auth_secret_ref=str(payload.get('auth_secret_ref') or ''),
+        capabilities=list(payload.get('capabilities') or []),
+        allowed_agents=list(payload.get('allowed_agents') or []),
+        metadata=dict(payload.get('metadata') or {}),
+        runtime_id=payload.get('runtime_id'),
+        tenant_id=payload.get('tenant_id'),
+        workspace_id=payload.get('workspace_id'),
+        environment=payload.get('environment'),
+    )
+    _audit_admin(gw, 'openclaw_runtime_register', {'runtime_id': response.get('runtime', {}).get('runtime_id'), 'tenant_id': payload.get('tenant_id'), 'workspace_id': payload.get('workspace_id'), 'environment': payload.get('environment')})
+    return response
+
+
+@router.get("/admin/openclaw/runtimes/{runtime_id}")
+def admin_openclaw_runtime_detail(
+    runtime_id: str,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None),
+    workspace_id: Optional[str] = Query(default=None),
+    environment: Optional[str] = Query(default=None),
+):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.get_openclaw_runtime(gw, runtime_id=runtime_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+    _audit_admin(gw, 'openclaw_runtime_detail', {'runtime_id': runtime_id, 'ok': response.get('ok')})
+    return response
+
+
+@router.get("/admin/openclaw/dispatches")
+def admin_openclaw_dispatches(
+    request: Request,
+    runtime_id: Optional[str] = Query(default=None),
+    action: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=300),
+    tenant_id: Optional[str] = Query(default=None),
+    workspace_id: Optional[str] = Query(default=None),
+    environment: Optional[str] = Query(default=None),
+):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.list_openclaw_dispatches(gw, runtime_id=runtime_id, action=action, status=status, limit=limit, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+    _audit_admin(gw, 'openclaw_dispatches', {'count': len(response.get('items', [])), 'runtime_id': runtime_id, 'status': status})
+    return response
+
+
+@router.post("/admin/openclaw/runtimes/{runtime_id}/dispatch")
+async def admin_openclaw_dispatch(runtime_id: str, request: Request):
+    gw = _require_admin(request)
+    payload = await request.json()
+    response = _ADMIN_SERVICE.dispatch_openclaw_runtime(
+        gw,
+        runtime_id=runtime_id,
+        actor=str(payload.get('actor') or 'admin'),
+        action=str(payload.get('action') or ''),
+        payload=dict(payload.get('payload') or {}),
+        agent_id=str(payload.get('agent_id') or ''),
+        user_role=str(payload.get('user_role') or 'admin'),
+        user_key=str(payload.get('user_key') or 'admin'),
+        session_id=str(payload.get('session_id') or 'admin'),
+        tenant_id=payload.get('tenant_id'),
+        workspace_id=payload.get('workspace_id'),
+        environment=payload.get('environment'),
+        dry_run=bool(payload.get('dry_run', False)),
+    )
+    _audit_admin(gw, 'openclaw_dispatch', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'dispatch_id': response.get('dispatch', {}).get('dispatch_id')})
+    return response
 
 
 @router.get("/admin/status")
@@ -1637,6 +1739,118 @@ def admin_canvas_overlays(
     return payload
 
 
+@router.get("/admin/canvas/documents/{canvas_id}/views/operational")
+def admin_canvas_operational_views(
+    canvas_id: str,
+    request: Request,
+    tenant_id: str | None = Query(default=None),
+    workspace_id: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+):
+    gw = _get_gw(request)
+    _require_admin(request)
+    payload = _ADMIN_SERVICE.list_canvas_operational_views(
+        gw,
+        canvas_id=canvas_id,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+    )
+    _audit_admin(gw, "canvas_operational_views", {"canvas_id": canvas_id, "ok": payload.get("ok")})
+    return payload
+
+
+@router.get("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/inspector")
+def admin_canvas_node_inspector(
+    canvas_id: str,
+    node_id: str,
+    request: Request,
+    state_key: str = Query(default='default'),
+    limit: int = Query(default=50, ge=1, le=200),
+    tenant_id: str | None = Query(default=None),
+    workspace_id: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+):
+    gw = _get_gw(request)
+    _require_admin(request)
+    payload = _ADMIN_SERVICE.inspect_canvas_node(
+        gw,
+        canvas_id=canvas_id,
+        node_id=node_id,
+        state_key=state_key,
+        limit=limit,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+    )
+    _audit_admin(gw, "canvas_node_inspector", {"canvas_id": canvas_id, "node_id": node_id, "ok": payload.get("ok")})
+    return payload
+
+
+@router.get("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/timeline")
+def admin_canvas_node_timeline(
+    canvas_id: str,
+    node_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    tenant_id: str | None = Query(default=None),
+    workspace_id: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+):
+    gw = _get_gw(request)
+    _require_admin(request)
+    payload = _ADMIN_SERVICE.canvas_node_timeline(
+        gw,
+        canvas_id=canvas_id,
+        node_id=node_id,
+        limit=limit,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+    )
+    _audit_admin(gw, "canvas_node_timeline", {"canvas_id": canvas_id, "node_id": node_id, "ok": payload.get("ok")})
+    return payload
+
+
+@router.post("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/actions/{action}")
+def admin_canvas_node_action(
+    canvas_id: str,
+    node_id: str,
+    action: str,
+    payload: CanvasNodeActionRequest,
+    request: Request,
+    tenant_id: str | None = Query(default=None),
+    workspace_id: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.execute_canvas_node_action(
+            gw,
+            canvas_id=canvas_id,
+            node_id=node_id,
+            action=action,
+            actor=payload.actor,
+            reason=payload.reason,
+            payload=payload.payload,
+            user_role='admin',
+            user_key=str(payload.actor or 'admin'),
+            session_id=payload.session_id or f'canvas:{canvas_id}',
+            tenant_id=tenant_id or payload.tenant_id,
+            workspace_id=workspace_id or payload.workspace_id,
+            environment=environment or payload.environment,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        status_code = 409 if 'claimed' in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    _audit_admin(gw, "canvas_node_action", {"canvas_id": canvas_id, "node_id": node_id, "action": action, "actor": payload.actor})
+    return response
+
+
 @router.get("/admin/canvas/documents/{canvas_id}/events")
 def admin_canvas_events(
     canvas_id: str,
@@ -2209,6 +2423,54 @@ def admin_operator_approval_action(
         status_code = 409 if 'claimed' in str(exc).lower() else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     _audit_admin(gw, 'operator_console_approval_action', {'approval_id': approval_id, 'action': action, 'actor': actor})
+    return response
+
+
+@router.get("/admin/secrets/summary")
+def admin_secret_governance_summary(
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None),
+    workspace_id: Optional[str] = Query(default=None),
+    environment: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.secret_governance_summary(
+        gw,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+        limit=limit,
+    )
+    _audit_admin(gw, "secret_governance_summary", {"total_events": (response.get("summary") or {}).get("total_events", 0), "denied_events": (response.get("summary") or {}).get("denied_events", 0)})
+    return response
+
+
+@router.get("/admin/secrets/timeline")
+def admin_secret_governance_timeline(
+    request: Request,
+    q: Optional[str] = Query(default=None),
+    ref: Optional[str] = Query(default=None),
+    tool_name: Optional[str] = Query(default=None),
+    outcome: Optional[str] = Query(default=None),
+    tenant_id: Optional[str] = Query(default=None),
+    workspace_id: Optional[str] = Query(default=None),
+    environment: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.secret_governance_timeline(
+        gw,
+        q=q,
+        ref=ref,
+        tool_name=tool_name,
+        outcome=outcome,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+        limit=limit,
+    )
+    _audit_admin(gw, "secret_governance_timeline", {"ref": ref, "tool_name": tool_name, "outcome": outcome, "items": len(response.get("items") or [])})
     return response
 
 
