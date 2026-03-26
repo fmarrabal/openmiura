@@ -10,6 +10,7 @@ from openmiura.interfaces.broker.common import (
     require_csrf,
     resolve_user_key,
 )
+from openmiura.application.auth.service import AuthService
 from openmiura.interfaces.broker.schemas import BrokerPendingDecisionRequest
 
 
@@ -24,13 +25,14 @@ def build_state_router() -> APIRouter:
         effective_user_key = resolve_user_key(auth_ctx, user_key)
         if memory is None:
             return {"ok": True, "disabled": True, "items": []}
-        return {"ok": True, "transport": "http-broker", "resource_uri": f"memory://search?q={q}", "items": memory.recall(user_key=effective_user_key, query=q, top_k=top_k)}
+        scope = AuthService.scope_filters(auth_ctx, include_environment=True)
+        return {"ok": True, "transport": "http-broker", "resource_uri": f"memory://search?q={q}", "items": memory.recall(user_key=effective_user_key, query=q, top_k=top_k, **scope)}
 
     @router.get("/sessions")
     def broker_sessions(request: Request, user_key: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=200), channel: str | None = Query(default=None)):
         gw, auth_ctx = broker_auth_context(request)
         effective_user_key = resolve_user_key(auth_ctx, user_key, fallback="")
-        sessions = gw.audit.list_sessions(limit=limit, channel=channel)
+        sessions = gw.audit.list_sessions(limit=limit, channel=channel, **AuthService.scope_filters(auth_ctx, include_environment=True))
         if effective_user_key:
             sessions = [s for s in sessions if s.get("user_id") == effective_user_key]
         return {"ok": True, "items": sessions}
@@ -38,14 +40,15 @@ def build_state_router() -> APIRouter:
     @router.get("/sessions/{session_id}/messages")
     def broker_session_messages(session_id: str, request: Request, limit: int = Query(default=200, ge=1, le=500)):
         gw, auth_ctx = broker_auth_context(request)
-        sessions = {item["session_id"]: item for item in gw.audit.list_sessions(limit=500)}
+        scope = AuthService.scope_filters(auth_ctx, include_environment=True)
+        sessions = {item["session_id"]: item for item in gw.audit.list_sessions(limit=500, **scope)}
         session_meta = sessions.get(session_id)
         if session_meta is None:
             raise HTTPException(status_code=404, detail="Unknown session_id")
         token_user = auth_ctx.get("user_key")
         if token_user and session_meta.get("user_id") != token_user:
             raise HTTPException(status_code=403, detail="Cannot inspect another user's session")
-        items = gw.audit.get_session_messages(session_id, limit=limit)
+        items = gw.audit.get_session_messages(session_id, limit=limit, **scope)
         return {"ok": True, "session": session_meta, "items": items}
 
     @router.get("/confirmations")
@@ -54,7 +57,7 @@ def build_state_router() -> APIRouter:
         audit_sensitive(gw, action="confirmations_list", auth_ctx=auth_ctx, status="ok", target=str(user_key or auth_ctx.get("user_key") or ""))
         effective_user_key = resolve_user_key(auth_ctx, user_key, fallback="")
         pending = getattr(gw, "pending_confirmations", None)
-        items = pending.list_items(user_key=effective_user_key or None) if pending is not None else []
+        items = pending.list_items(user_key=effective_user_key or None, **AuthService.scope_filters(auth_ctx, include_environment=True)) if pending is not None else []
         if auth_ctx.get("mode") == "user-token" and not effective_user_key:
             items = []
         return {"ok": True, "items": items}
@@ -67,13 +70,13 @@ def build_state_router() -> APIRouter:
         runtime = getattr(gw, "tools", None)
         if pending is None or runtime is None:
             raise HTTPException(status_code=503, detail="Pending confirmations not configured")
-        item = pending.get(session_id)
+        item = pending.get(session_id, **AuthService.scope_filters(auth_ctx, include_environment=True))
         if item is None:
             raise HTTPException(status_code=404, detail="No pending confirmation")
         token_user = auth_ctx.get("user_key")
         if token_user and item.get("user_key") != token_user:
             raise HTTPException(status_code=403, detail="Cannot confirm another user's action")
-        item = pending.consume(session_id, user_key=token_user or item.get("user_key"))
+        item = pending.consume(session_id, user_key=token_user or item.get("user_key"), **AuthService.scope_filters(auth_ctx, include_environment=True))
         if item is None:
             raise HTTPException(status_code=404, detail="No pending confirmation")
         result = runtime.run_tool(
@@ -83,6 +86,9 @@ def build_state_router() -> APIRouter:
             tool_name=str(item.get("tool_name") or ""),
             args=dict(item.get("args") or {}),
             confirmed=True,
+            tenant_id=item.get("tenant_id"),
+            workspace_id=item.get("workspace_id"),
+            environment=item.get("environment"),
         )
         publish(gw, "confirmation_resolved", session_id=session_id, user_key=str(item.get("user_key") or token_user or ""), decision="confirm", result=result)
         audit_sensitive(gw, action="confirmation_confirm", auth_ctx=auth_ctx, status="ok", target=session_id, session_id=session_id, details={"tool_name": item.get("tool_name")})
@@ -96,7 +102,8 @@ def build_state_router() -> APIRouter:
         if pending is None:
             raise HTTPException(status_code=503, detail="Pending confirmations not configured")
         token_user = auth_ctx.get("user_key")
-        cancelled = pending.cancel(session_id, user_key=token_user) if token_user else pending.cancel(session_id)
+        scope = AuthService.scope_filters(auth_ctx, include_environment=True)
+        cancelled = pending.cancel(session_id, user_key=token_user, **scope) if token_user else pending.cancel(session_id, **scope)
         if not cancelled:
             raise HTTPException(status_code=404, detail="No pending confirmation")
         publish(gw, "confirmation_resolved", session_id=session_id, user_key=token_user, decision="cancel")

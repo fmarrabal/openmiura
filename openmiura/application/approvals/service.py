@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from openmiura.application.auth.service import AuthService
 from openmiura.application.workflows.service import WorkflowService
 
 
@@ -42,6 +43,79 @@ class ApprovalService:
             payload=payload,
             **scope,
         )
+
+    def _effective_auth_ctx(self, gw, auth_ctx: dict[str, Any] | None, item: dict[str, Any], actor_key: str | None = None) -> dict[str, Any]:
+        ctx = dict(auth_ctx or {})
+        actor = str(actor_key or '').strip()
+        if not ctx and actor and ':' in actor:
+            candidate_role = actor.split(':', 1)[0].strip().lower()
+            if candidate_role in {'viewer', 'user', 'auditor', 'operator', 'workspace_admin', 'tenant_admin', 'admin', 'approver'}:
+                normalized_role = 'operator' if candidate_role == 'approver' else candidate_role
+                ctx = {
+                    'role': normalized_role,
+                    'base_role': normalized_role,
+                    'permissions': AuthService.permissions_for_role(normalized_role),
+                }
+        ctx.setdefault('tenant_id', item.get('tenant_id'))
+        ctx.setdefault('workspace_id', item.get('workspace_id'))
+        ctx.setdefault('environment', item.get('environment'))
+        return AuthService.finalize_scope_access(gw, ctx) if ctx else {}
+
+    def _enforce_actor_can_handle(self, gw, item: dict[str, Any], actor_key: str, auth_ctx: dict[str, Any] | None) -> dict[str, Any]:
+        ctx = self._effective_auth_ctx(gw, auth_ctx, item, actor_key)
+        requested_role = str(item.get('requested_role') or '').strip().lower() or None
+        if requested_role and not AuthService.role_satisfies(gw, ctx, requested_role):
+            raise PermissionError(f"Approval requires role '{requested_role}'")
+        requested_by = str(item.get('requested_by') or '').strip()
+        if requested_by and requested_by == actor_key and not AuthService.is_admin(ctx):
+            raise PermissionError('Requester cannot approve or claim their own approval')
+        return ctx
+
+    def _approval_evidence(self, gw, item: dict[str, Any]) -> dict[str, Any]:
+        scope = self._workflow_scope(item)
+        approval_id = str(item.get('approval_id') or '')
+        workflow_id = str(item.get('workflow_id') or '')
+        timeline_payload = self.workflow_service.unified_timeline(
+            gw,
+            limit=200,
+            approval_id=approval_id,
+            tenant_id=scope.get('tenant_id'),
+            workspace_id=scope.get('workspace_id'),
+            environment=scope.get('environment'),
+        )
+        timeline = list(timeline_payload.get('items') or [])
+        event_names = [
+            str((entry.get('payload') or {}).get('event') or '')
+            for entry in timeline
+            if (entry.get('payload') or {}).get('event') is not None
+        ]
+        if 'approval_requested' not in event_names and 'waiting_for_approval' in event_names:
+            event_names = ['approval_requested' if name == 'waiting_for_approval' else name for name in event_names]
+        workflow = gw.audit.get_workflow(
+            workflow_id,
+            tenant_id=scope.get('tenant_id'),
+            workspace_id=scope.get('workspace_id'),
+            environment=scope.get('environment'),
+        ) if workflow_id else None
+        return {
+            'approval_id': approval_id,
+            'workflow_id': workflow_id or None,
+            'scope': scope,
+            'status': item.get('status'),
+            'requested_role': item.get('requested_role'),
+            'requested_by': item.get('requested_by'),
+            'assigned_to': item.get('assigned_to'),
+            'decided_by': item.get('decided_by'),
+            'created_at': item.get('created_at'),
+            'claimed_at': item.get('claimed_at'),
+            'decided_at': item.get('decided_at'),
+            'expires_at': item.get('expires_at'),
+            'reason': item.get('reason'),
+            'timeline_count': len(timeline),
+            'timeline_events': event_names,
+            'workflow_status': (workflow or {}).get('status') if workflow else None,
+            'workflow_waiting_for_approval': (workflow or {}).get('waiting_for_approval') if workflow else None,
+        }
 
     def _expire_pending(self, gw, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> None:
         now = time.time()
@@ -90,6 +164,24 @@ class ApprovalService:
     def get_approval(self, gw, approval_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
         return self._refresh_approval(gw, approval_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
+    def get_evidence(self, gw, approval_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
+        item = self.get_approval(gw, approval_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+        if item is None:
+            return None
+        return {
+            'ok': True,
+            'approval': item,
+            'evidence': self._approval_evidence(gw, item),
+            'timeline': self.workflow_service.unified_timeline(
+                gw,
+                limit=200,
+                approval_id=approval_id,
+                tenant_id=item.get('tenant_id'),
+                workspace_id=item.get('workspace_id'),
+                environment=item.get('environment'),
+            ).get('items', []),
+        }
+
     def list_approvals(
         self,
         gw,
@@ -118,13 +210,14 @@ class ApprovalService:
         )
         return {'ok': True, 'items': items}
 
-    def claim(self, gw, approval_id: str, *, actor: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
+    def claim(self, gw, approval_id: str, *, actor: str, auth_ctx: dict[str, Any] | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
         actor_key = self._normalize_actor(actor)
         item = self._refresh_approval(gw, approval_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
         if item is None:
             raise LookupError('Unknown approval')
         if item.get('status') != 'pending':
             return item
+        effective_ctx = self._enforce_actor_can_handle(gw, item, actor_key, auth_ctx)
         assigned_to = str(item.get('assigned_to') or '').strip()
         if assigned_to and assigned_to != actor_key:
             raise ValueError('Approval already claimed by another actor')
@@ -137,7 +230,18 @@ class ApprovalService:
             environment=item.get('environment'),
         )
         refreshed = self._refresh_approval(gw, approval_id, tenant_id=item.get('tenant_id'), workspace_id=item.get('workspace_id'), environment=item.get('environment')) or item | {'updated': updated}
-        self._log_workflow_event(gw, refreshed, actor_key, {'event': 'approval_claimed', 'approval_id': approval_id, 'step_id': refreshed.get('step_id'), 'assigned_to': actor_key})
+        self._log_workflow_event(
+            gw,
+            refreshed,
+            actor_key,
+            {
+                'event': 'approval_claimed',
+                'approval_id': approval_id,
+                'step_id': refreshed.get('step_id'),
+                'assigned_to': actor_key,
+                'actor_role': effective_ctx.get('role'),
+            },
+        )
         self._publish(
             gw,
             'approval_claimed',
@@ -147,19 +251,21 @@ class ApprovalService:
             step_id=refreshed.get('step_id'),
             assigned_to=actor_key,
             requested_role=refreshed.get('requested_role'),
+            actor_role=effective_ctx.get('role'),
             entity_kind='approval',
             entity_id=approval_id,
             **self._workflow_scope(refreshed),
         )
         return refreshed
 
-    def decide(self, gw, approval_id: str, *, actor: str, decision: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
+    def decide(self, gw, approval_id: str, *, actor: str, decision: str, reason: str = '', auth_ctx: dict[str, Any] | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
         actor_key = self._normalize_actor(actor)
         item = self._refresh_approval(gw, approval_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
         if item is None:
             raise LookupError('Unknown approval')
         if item.get('status') != 'pending':
             return item
+        effective_ctx = self._enforce_actor_can_handle(gw, item, actor_key, auth_ctx)
         assigned_to = str(item.get('assigned_to') or '').strip()
         if assigned_to and assigned_to != actor_key:
             raise ValueError('Approval already claimed by another actor')
@@ -172,7 +278,15 @@ class ApprovalService:
             gw,
             refreshed,
             actor_key,
-            {'event': 'approval_decided', 'approval_id': approval_id, 'step_id': refreshed.get('step_id'), 'decision': normalized_decision, 'reason': reason},
+            {
+                'event': 'approval_decided',
+                'approval_id': approval_id,
+                'step_id': refreshed.get('step_id'),
+                'decision': normalized_decision,
+                'reason': reason,
+                'actor_role': effective_ctx.get('role'),
+                'requested_role': refreshed.get('requested_role'),
+            },
         )
         self._publish(
             gw,
@@ -183,6 +297,7 @@ class ApprovalService:
             step_id=refreshed.get('step_id'),
             decision=normalized_decision,
             requested_role=refreshed.get('requested_role'),
+            actor_role=effective_ctx.get('role'),
             reason=reason,
             entity_kind='approval',
             entity_id=approval_id,
