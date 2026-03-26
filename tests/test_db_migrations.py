@@ -101,7 +101,7 @@ def test_downgrade_migrations_rolls_back_auth_and_memory_tiers(tmp_path: Path) -
     store.add_memory_item("user:a", "fact", "hello", b"[]", json.dumps({}))
 
     rolled_back = downgrade_migrations(store._conn, target_version=1)
-    assert rolled_back == [18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
+    assert rolled_back == [17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
 
     status = schema_status(store._conn)
     assert status["current_version"] == 1
@@ -130,5 +130,5 @@ def test_cli_db_rollback_command(tmp_path: Path) -> None:
     result = runner.invoke(cli.app, ["db", "rollback", "--config", str(cfg), "--steps", "1", "--json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["rolled_back"] == [18]
-    assert payload["current_version"] == 17
+    assert payload["rolled_back"] == [17]
+    assert payload["current_version"] == 16

@@ -1,0 +1,53 @@
+name: setup-openmiura
+
+description: Set up Python and install the local openmiura package consistently for CI and release jobs.
+
+inputs:
+  python-version:
+    description: Python version to install
+    required: false
+    default: '3.11'
+  extras:
+    description: Optional extras to install with the local package, for example dev
+    required: false
+    default: 'dev'
+  install-requirements:
+    description: Whether to install requirements.txt when present
+    required: false
+    default: 'true'
+  pip-check:
+    description: Whether to run python -m pip check at the end of installation
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+
+    - name: Install local openmiura package
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        EXTRAS="${{ inputs.extras }}"
+        if [[ -n "${EXTRAS}" ]]; then
+          python -m pip install -e ".[${EXTRAS}]"
+        else
+          python -m pip install -e .
+        fi
+        if [[ "${{ inputs.install-requirements }}" == "true" && -f requirements.txt ]]; then
+          python -m pip install -r requirements.txt
+        fi
+        python - <<'PY'
+        import importlib
+        mod = importlib.import_module('openmiura')
+        print(mod.__file__)
+        PY
+        if [[ "${{ inputs.pip-check }}" == "true" ]]; then
+          python -m pip check
+        fi

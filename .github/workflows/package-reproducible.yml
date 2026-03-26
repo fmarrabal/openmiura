@@ -11,19 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
         with:
           python-version: '3.11'
-          cache: pip
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
-          python -m pip check
+          extras: dev
+          install-requirements: 'true'
+          pip-check: 'true'
 
       - name: Build deterministic package
         shell: bash

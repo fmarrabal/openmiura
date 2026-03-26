@@ -4,6 +4,7 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
 from openmiura.core.contracts import AdminGatewayLike
@@ -53,6 +54,9 @@ class PackagingHardeningService:
     ]
     REPRO_EXCLUDE_PARTS = {'__pycache__', '.pytest_cache', 'dist', 'data', '.git'}
     ZIP_TS = (2020, 1, 1, 0, 0, 0)
+    RELEASE_MANIFEST_NAME = 'RELEASE_MANIFEST.json'
+    RELEASE_CHECKSUMS_NAME = 'SHA256SUMS.txt'
+    RELEASE_REQUIRED_KINDS = ('wheel', 'sdist', 'reproducible_bundle', 'reproducible_manifest')
 
     def _project_root(self) -> Path:
         return Path(__file__).resolve().parents[3]
@@ -83,7 +87,18 @@ class PackagingHardeningService:
             'mobile': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(mobile_dir.rglob('*')) if path.is_file()],
             'quickstarts': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(docs_dir.glob('*.md')) if path.is_file()],
             'workflows': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(workflows_dir.glob('*.yml')) if path.is_file()],
+            'release': [
+                rel
+                for rel in [
+                    'MANIFEST.in',
+                    'scripts/build_release_artifacts.py',
+                    'scripts/verify_release_artifacts.py',
+                    '.github/workflows/release.yml',
+                ]
+                if (root / rel).exists()
+            ],
         }
+        release = self.release_summary(gw)
         return {
             'ok': True,
             'phase': self.PHASE_LABEL,
@@ -91,9 +106,34 @@ class PackagingHardeningService:
                 'desktop': {'enabled': desktop_dir.exists(), 'wrapper': 'electron', 'microphone_permission': 'self', 'deep_links': True, 'notifications': True},
                 'mobile': {'enabled': mobile_dir.exists(), 'wrapper': 'capacitor', 'microphone_permission': 'self', 'deep_links': True, 'notifications': True},
                 'reproducible_ci': {'enabled': (workflows_dir / 'package-reproducible.yml').exists(), 'artifact_manifest': True, 'hash_locked': True},
+                'release_alpha': release.get('release', {}),
             },
             'files': files,
             'hardening': self.hardening_summary(gw).get('profile', {}),
+            'release_checks': release.get('checks', {}),
+        }
+
+    def release_summary(self, gw: AdminGatewayLike | None = None) -> dict[str, Any]:
+        root = self._project_root()
+        checks = {
+            'manifest_in': (root / 'MANIFEST.in').exists(),
+            'release_build_script': (root / 'scripts' / 'build_release_artifacts.py').exists(),
+            'release_verify_script': (root / 'scripts' / 'verify_release_artifacts.py').exists(),
+            'release_workflow': (root / '.github' / 'workflows' / 'release.yml').exists(),
+            'reproducible_workflow': (root / '.github' / 'workflows' / 'package-reproducible.yml').exists(),
+        }
+        return {
+            'ok': all(checks.values()),
+            'phase': self.PHASE_LABEL,
+            'release': {
+                'sdist': True,
+                'wheel': True,
+                'reproducible_bundle': True,
+                'checksums': True,
+                'manifest': True,
+                'self_hosted_base': True,
+            },
+            'checks': checks,
         }
 
     def create_package_build(
@@ -200,6 +240,121 @@ class PackagingHardeningService:
         changed = sorted(path for path in expected if path in actual and actual[path] != expected[path])
         extra = sorted(path for path in actual if path not in expected)
         return {'ok': not missing and not changed, 'manifest_path': str(path), 'root': str(root), 'missing': missing, 'changed': changed, 'extra': extra, 'expected_count': len(expected), 'actual_count': len(actual)}
+
+    def generate_release_manifest(
+        self,
+        *,
+        dist_dir: str,
+        tag: str,
+        target: str = 'desktop',
+        release_notes_name: str = 'RELEASE_NOTES.md',
+    ) -> dict[str, Any]:
+        dist = Path(dist_dir).resolve()
+        dist.mkdir(parents=True, exist_ok=True)
+        artifacts: list[dict[str, Any]] = []
+        for path in sorted(dist.iterdir()):
+            if not path.is_file():
+                continue
+            if path.name in {self.RELEASE_MANIFEST_NAME, self.RELEASE_CHECKSUMS_NAME}:
+                continue
+            sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            artifacts.append({
+                'filename': path.name,
+                'sha256': sha,
+                'size': path.stat().st_size,
+                'kind': self._classify_release_artifact(path.name),
+            })
+        checksums_path = dist / self.RELEASE_CHECKSUMS_NAME
+        checksum_lines = [f"{item['sha256']}  {item['filename']}" for item in artifacts]
+        checksums_path.write_text('\n'.join(checksum_lines) + ('\n' if checksum_lines else ''), encoding='utf-8')
+        kinds_present = sorted({str(item.get('kind') or '') for item in artifacts if str(item.get('kind') or '')})
+        missing_required = [kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present]
+        notes_path = dist / release_notes_name
+        manifest = {
+            'tag': str(tag or '').strip(),
+            'target': str(target or 'desktop').strip() or 'desktop',
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'artifacts': artifacts,
+            'checksums_path': checksums_path.name,
+            'release_notes': notes_path.name if notes_path.exists() else None,
+            'required_kinds': list(self.RELEASE_REQUIRED_KINDS),
+            'missing_required': missing_required,
+            'artifact_count': len(artifacts),
+        }
+        manifest_path = dist / self.RELEASE_MANIFEST_NAME
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+        return {
+            'ok': not missing_required,
+            'manifest_path': str(manifest_path),
+            'checksums_path': str(checksums_path),
+            'missing_required': missing_required,
+            'artifact_count': len(artifacts),
+            'artifacts': artifacts,
+        }
+
+    def verify_release_artifacts(self, *, dist_dir: str) -> dict[str, Any]:
+        dist = Path(dist_dir).resolve()
+        manifest_path = dist / self.RELEASE_MANIFEST_NAME
+        checksums_path = dist / self.RELEASE_CHECKSUMS_NAME
+        missing: list[str] = []
+        changed: list[str] = []
+        if not manifest_path.exists():
+            missing.append(self.RELEASE_MANIFEST_NAME)
+            return {'ok': False, 'dist_dir': str(dist), 'missing': missing, 'changed': changed, 'missing_required': list(self.RELEASE_REQUIRED_KINDS)}
+        if not checksums_path.exists():
+            missing.append(self.RELEASE_CHECKSUMS_NAME)
+        payload = json.loads(manifest_path.read_text(encoding='utf-8'))
+        artifacts = list(payload.get('artifacts') or [])
+        checksum_map: dict[str, str] = {}
+        if checksums_path.exists():
+            for raw in checksums_path.read_text(encoding='utf-8').splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                digest, _, filename = line.partition('  ')
+                if digest and filename:
+                    checksum_map[filename] = digest
+        kinds_present: set[str] = set()
+        for item in artifacts:
+            filename = str(item.get('filename') or '')
+            if not filename:
+                continue
+            path = dist / filename
+            if not path.exists():
+                missing.append(filename)
+                continue
+            current_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            if current_sha != str(item.get('sha256') or ''):
+                changed.append(filename)
+            elif checksum_map.get(filename) not in {None, current_sha}:
+                changed.append(filename)
+            kinds_present.add(str(item.get('kind') or ''))
+        missing_required = [kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present]
+        return {
+            'ok': not missing and not changed and not missing_required,
+            'dist_dir': str(dist),
+            'manifest_path': str(manifest_path),
+            'checksums_path': str(checksums_path),
+            'missing': sorted(set(missing)),
+            'changed': sorted(set(changed)),
+            'missing_required': missing_required,
+            'artifact_count': len(artifacts),
+        }
+
+    def _classify_release_artifact(self, filename: str) -> str:
+        name = str(filename or '').strip()
+        lower = name.lower()
+        if lower.endswith('.whl'):
+            return 'wheel'
+        if lower.endswith('.tar.gz'):
+            return 'sdist'
+        if lower.endswith('.manifest.json'):
+            return 'reproducible_manifest'
+        if lower.endswith('.zip'):
+            return 'reproducible_bundle'
+        if lower == 'release_notes.md':
+            return 'release_notes'
+        return 'other'
 
     def _manifest_for_root(self, root: Path, include: list[str] | None = None) -> dict[str, Any]:
         selected = include or list(self.DEFAULT_REPRO_INCLUDE)

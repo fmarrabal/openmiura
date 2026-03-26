@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -74,25 +74,31 @@ jobs:
           echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
           git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Resolve deterministic build timestamp
+        id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "source_date_epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
         with:
           python-version: '3.11'
-          cache: pip
+          extras: dev
+          install-requirements: 'true'
+          pip-check: 'true'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install build dependencies
+      - name: Install release-only build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
           python -m pip install build twine
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
 
       - name: Fast validation before release
         shell: bash
@@ -104,6 +110,8 @@ jobs:
 
       - name: Build Python distributions
         shell: bash
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.source_date_epoch }}
         run: |
           set -euo pipefail
           python -m build --sdist --wheel
@@ -119,13 +127,6 @@ jobs:
             --version "${{ steps.meta.outputs.version }}" \
             --output-dir dist
 
-      - name: Generate checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum * > SHA256SUMS.txt
-
       - name: Prepare release notes
         shell: bash
         run: |
@@ -140,8 +141,20 @@ jobs:
             printf '- Checksums: SHA256SUMS.txt\n'
           } > dist/RELEASE_NOTES.md
 
+      - name: Generate release manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_release_artifacts.py             --dist-dir dist             --tag "${{ steps.meta.outputs.tag }}"             --target "${{ steps.meta.outputs.target }}"             --strict
+
+      - name: Verify release artifact integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_release_artifacts.py --dist-dir dist
+
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: openmiura-release-${{ steps.meta.outputs.tag }}
           path: |

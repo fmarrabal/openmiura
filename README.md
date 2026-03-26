@@ -396,3 +396,11 @@ Before contributing, make sure to:
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+## Enterprise Alpha docs
+
+- `docs/enterprise_alpha.md`
+- `docs/alpha_release_checklist.md`
+- `docs/installation.md`
+- `docs/production.md`
+- `docs/ci_cd.md`

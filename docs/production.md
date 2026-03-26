@@ -1,5 +1,7 @@
 # Guía de producción
 
+Si vas a distribuir la primera self-hosted alpha, combina esta guía con [Self-hosted Enterprise Alpha](enterprise_alpha.md) y el [Enterprise Alpha release checklist](alpha_release_checklist.md).
+
 Esta guía resume una configuración razonable para desplegar openMiura de forma estable.
 
 ## 1. Modo recomendado

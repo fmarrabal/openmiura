@@ -1,5 +1,7 @@
 # Guía de instalación limpia
 
+Para una entrega self-hosted de la primera alpha enterprise, sigue también [Self-hosted Enterprise Alpha](enterprise_alpha.md) y el [Enterprise Alpha release checklist](alpha_release_checklist.md).
+
 Esta guía está pensada para una instalación desde cero, sin residuos previos, tanto en un portátil personal como en un servidor pequeño.
 
 ## 1. Requisitos

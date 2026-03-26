@@ -1938,311 +1938,212 @@ Migration(
     ),
 ),
 
-    Migration(
-        16,
-        "phase8_packaging_builds",
-        (
-            """
-            CREATE TABLE IF NOT EXISTS package_builds (
-                build_id TEXT PRIMARY KEY,
-                target TEXT NOT NULL,
-                label TEXT NOT NULL,
-                version TEXT NOT NULL,
-                artifact_path TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_by TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_package_builds_scope_created ON package_builds(tenant_id, workspace_id, environment, created_at DESC)",
-        ),
-        (
-            """
-            CREATE TABLE IF NOT EXISTS package_builds (
-                build_id TEXT PRIMARY KEY,
-                target TEXT NOT NULL,
-                label TEXT NOT NULL,
-                version TEXT NOT NULL,
-                artifact_path TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_by TEXT NOT NULL,
-                created_at DOUBLE PRECISION NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_package_builds_scope_created ON package_builds(tenant_id, workspace_id, environment, created_at DESC)",
-        ),
-        (
-            "DROP TABLE IF EXISTS package_builds",
-        ),
-        (
-            "DROP TABLE IF EXISTS package_builds",
-        ),
+Migration(
+    16,
+    "phase8_packaging_builds",
+    (
+        """
+        CREATE TABLE IF NOT EXISTS package_builds (
+            build_id TEXT PRIMARY KEY,
+            target TEXT NOT NULL,
+            label TEXT NOT NULL,
+            version TEXT NOT NULL,
+            artifact_path TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_package_builds_scope_created ON package_builds(tenant_id, workspace_id, environment, created_at DESC)",
     ),
+    (
+        """
+        CREATE TABLE IF NOT EXISTS package_builds (
+            build_id TEXT PRIMARY KEY,
+            target TEXT NOT NULL,
+            label TEXT NOT NULL,
+            version TEXT NOT NULL,
+            artifact_path TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at DOUBLE PRECISION NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_package_builds_scope_created ON package_builds(tenant_id, workspace_id, environment, created_at DESC)",
+    ),
+    (
+        "DROP TABLE IF EXISTS package_builds",
+    ),
+    (
+        "DROP TABLE IF EXISTS package_builds",
+    ),
+),
 
-    Migration(
-        17,
-        "phase9_operational_hardening",
-        (
-            """
-            CREATE TABLE IF NOT EXISTS voice_audio_assets (
-                asset_id TEXT PRIMARY KEY,
-                voice_session_id TEXT NOT NULL,
-                direction TEXT NOT NULL,
-                asset_kind TEXT NOT NULL,
-                mime_type TEXT NOT NULL,
-                sample_rate_hz INTEGER NOT NULL DEFAULT 0,
-                byte_count INTEGER NOT NULL DEFAULT 0,
-                sha256 TEXT NOT NULL DEFAULT '',
-                storage_ref TEXT NOT NULL DEFAULT '',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at REAL NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_session ON voice_audio_assets(voice_session_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_scope ON voice_audio_assets(tenant_id, workspace_id, environment, created_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS voice_provider_calls (
-                provider_call_id TEXT PRIMARY KEY,
-                voice_session_id TEXT NOT NULL,
-                provider_kind TEXT NOT NULL,
-                provider_name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                request_json TEXT NOT NULL DEFAULT '{}',
-                response_json TEXT NOT NULL DEFAULT '{}',
-                error_text TEXT NOT NULL DEFAULT '',
-                latency_ms REAL,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at REAL NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_session ON voice_provider_calls(voice_session_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_scope ON voice_provider_calls(tenant_id, workspace_id, environment, created_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS release_routing_decisions (
-                decision_id TEXT PRIMARY KEY,
-                release_id TEXT NOT NULL,
-                canary_id TEXT NOT NULL DEFAULT '',
-                baseline_release_id TEXT NOT NULL DEFAULT '',
-                target_environment TEXT NOT NULL DEFAULT '',
-                routing_key_hash TEXT NOT NULL,
-                bucket REAL NOT NULL,
-                selected_release_id TEXT NOT NULL,
-                selected_version TEXT NOT NULL DEFAULT '',
-                route_kind TEXT NOT NULL,
-                success INTEGER,
-                latency_ms REAL,
-                cost_estimate REAL,
-                observation_json TEXT NOT NULL DEFAULT '{}',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL,
-                completed_at REAL,
-                tenant_id TEXT,
-                workspace_id TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_release ON release_routing_decisions(release_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_scope ON release_routing_decisions(tenant_id, workspace_id, target_environment, created_at DESC)",
-        ),
-        (
-            """
-            CREATE TABLE IF NOT EXISTS voice_audio_assets (
-                asset_id TEXT PRIMARY KEY,
-                voice_session_id TEXT NOT NULL,
-                direction TEXT NOT NULL,
-                asset_kind TEXT NOT NULL,
-                mime_type TEXT NOT NULL,
-                sample_rate_hz INTEGER NOT NULL DEFAULT 0,
-                byte_count INTEGER NOT NULL DEFAULT 0,
-                sha256 TEXT NOT NULL DEFAULT '',
-                storage_ref TEXT NOT NULL DEFAULT '',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at DOUBLE PRECISION NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_session ON voice_audio_assets(voice_session_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_scope ON voice_audio_assets(tenant_id, workspace_id, environment, created_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS voice_provider_calls (
-                provider_call_id TEXT PRIMARY KEY,
-                voice_session_id TEXT NOT NULL,
-                provider_kind TEXT NOT NULL,
-                provider_name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                request_json TEXT NOT NULL DEFAULT '{}',
-                response_json TEXT NOT NULL DEFAULT '{}',
-                error_text TEXT NOT NULL DEFAULT '',
-                latency_ms DOUBLE PRECISION,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at DOUBLE PRECISION NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_session ON voice_provider_calls(voice_session_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_scope ON voice_provider_calls(tenant_id, workspace_id, environment, created_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS release_routing_decisions (
-                decision_id TEXT PRIMARY KEY,
-                release_id TEXT NOT NULL,
-                canary_id TEXT NOT NULL DEFAULT '',
-                baseline_release_id TEXT NOT NULL DEFAULT '',
-                target_environment TEXT NOT NULL DEFAULT '',
-                routing_key_hash TEXT NOT NULL,
-                bucket DOUBLE PRECISION NOT NULL,
-                selected_release_id TEXT NOT NULL,
-                selected_version TEXT NOT NULL DEFAULT '',
-                route_kind TEXT NOT NULL,
-                success INTEGER,
-                latency_ms DOUBLE PRECISION,
-                cost_estimate DOUBLE PRECISION,
-                observation_json TEXT NOT NULL DEFAULT '{}',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at DOUBLE PRECISION NOT NULL,
-                updated_at DOUBLE PRECISION NOT NULL,
-                completed_at DOUBLE PRECISION,
-                tenant_id TEXT,
-                workspace_id TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_release ON release_routing_decisions(release_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_scope ON release_routing_decisions(tenant_id, workspace_id, target_environment, created_at DESC)",
-        ),
-        (
-            "DROP TABLE IF EXISTS release_routing_decisions",
-            "DROP TABLE IF EXISTS voice_provider_calls",
-            "DROP TABLE IF EXISTS voice_audio_assets",
-        ),
-        (
-            "DROP TABLE IF EXISTS release_routing_decisions",
-            "DROP TABLE IF EXISTS voice_provider_calls",
-            "DROP TABLE IF EXISTS voice_audio_assets",
-        ),
-    ),
 
-    Migration(
-        18,
-        "openclaw_adapter_v1",
-        (
-            """
-            CREATE TABLE IF NOT EXISTS openclaw_runtimes (
-                runtime_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                base_url TEXT NOT NULL,
-                transport TEXT NOT NULL DEFAULT 'http',
-                auth_secret_ref TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'registered',
-                capabilities_json TEXT NOT NULL DEFAULT '[]',
-                allowed_agents_json TEXT NOT NULL DEFAULT '[]',
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                last_health_at REAL,
-                last_health_status TEXT NOT NULL DEFAULT '',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_runtimes_scope_updated ON openclaw_runtimes(tenant_id, workspace_id, environment, updated_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS openclaw_dispatches (
-                dispatch_id TEXT PRIMARY KEY,
-                runtime_id TEXT NOT NULL,
-                action TEXT NOT NULL,
-                agent_id TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL,
-                request_json TEXT NOT NULL DEFAULT '{}',
-                response_json TEXT NOT NULL DEFAULT '{}',
-                error_text TEXT NOT NULL DEFAULT '',
-                secret_ref TEXT NOT NULL DEFAULT '',
-                latency_ms REAL,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at REAL NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_dispatches_runtime_created ON openclaw_dispatches(runtime_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_dispatches_scope_created ON openclaw_dispatches(tenant_id, workspace_id, environment, created_at DESC)",
-        ),
-        (
-            """
-            CREATE TABLE IF NOT EXISTS openclaw_runtimes (
-                runtime_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                base_url TEXT NOT NULL,
-                transport TEXT NOT NULL DEFAULT 'http',
-                auth_secret_ref TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'registered',
-                capabilities_json TEXT NOT NULL DEFAULT '[]',
-                allowed_agents_json TEXT NOT NULL DEFAULT '[]',
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                last_health_at DOUBLE PRECISION,
-                last_health_status TEXT NOT NULL DEFAULT '',
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at DOUBLE PRECISION NOT NULL,
-                updated_at DOUBLE PRECISION NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_runtimes_scope_updated ON openclaw_runtimes(tenant_id, workspace_id, environment, updated_at DESC)",
-            """
-            CREATE TABLE IF NOT EXISTS openclaw_dispatches (
-                dispatch_id TEXT PRIMARY KEY,
-                runtime_id TEXT NOT NULL,
-                action TEXT NOT NULL,
-                agent_id TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL,
-                request_json TEXT NOT NULL DEFAULT '{}',
-                response_json TEXT NOT NULL DEFAULT '{}',
-                error_text TEXT NOT NULL DEFAULT '',
-                secret_ref TEXT NOT NULL DEFAULT '',
-                latency_ms DOUBLE PRECISION,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at DOUBLE PRECISION NOT NULL,
-                tenant_id TEXT,
-                workspace_id TEXT,
-                environment TEXT
-            )
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_dispatches_runtime_created ON openclaw_dispatches(runtime_id, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_openclaw_dispatches_scope_created ON openclaw_dispatches(tenant_id, workspace_id, environment, created_at DESC)",
-        ),
-        (
-            "DROP TABLE IF EXISTS openclaw_dispatches",
-            "DROP TABLE IF EXISTS openclaw_runtimes",
-        ),
-        (
-            "DROP TABLE IF EXISTS openclaw_dispatches",
-            "DROP TABLE IF EXISTS openclaw_runtimes",
-        ),
+Migration(
+    17,
+    "phase9_operational_hardening",
+    (
+        """
+        CREATE TABLE IF NOT EXISTS voice_audio_assets (
+            asset_id TEXT PRIMARY KEY,
+            voice_session_id TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            asset_kind TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            sample_rate_hz INTEGER NOT NULL DEFAULT 0,
+            byte_count INTEGER NOT NULL DEFAULT 0,
+            sha256 TEXT NOT NULL DEFAULT '',
+            storage_ref TEXT NOT NULL DEFAULT '',
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_session ON voice_audio_assets(voice_session_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_scope ON voice_audio_assets(tenant_id, workspace_id, environment, created_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS voice_provider_calls (
+            provider_call_id TEXT PRIMARY KEY,
+            voice_session_id TEXT NOT NULL,
+            provider_kind TEXT NOT NULL,
+            provider_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            request_json TEXT NOT NULL DEFAULT '{}',
+            response_json TEXT NOT NULL DEFAULT '{}',
+            error_text TEXT NOT NULL DEFAULT '',
+            latency_ms REAL,
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_session ON voice_provider_calls(voice_session_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_scope ON voice_provider_calls(tenant_id, workspace_id, environment, created_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS release_routing_decisions (
+            decision_id TEXT PRIMARY KEY,
+            release_id TEXT NOT NULL,
+            canary_id TEXT NOT NULL DEFAULT '',
+            baseline_release_id TEXT NOT NULL DEFAULT '',
+            target_environment TEXT NOT NULL DEFAULT '',
+            routing_key_hash TEXT NOT NULL,
+            bucket REAL NOT NULL,
+            selected_release_id TEXT NOT NULL,
+            selected_version TEXT NOT NULL DEFAULT '',
+            route_kind TEXT NOT NULL,
+            success INTEGER,
+            latency_ms REAL,
+            cost_estimate REAL,
+            observation_json TEXT NOT NULL DEFAULT '{}',
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            completed_at REAL,
+            tenant_id TEXT,
+            workspace_id TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_release ON release_routing_decisions(release_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_scope ON release_routing_decisions(tenant_id, workspace_id, target_environment, created_at DESC)",
     ),
+    (
+        """
+        CREATE TABLE IF NOT EXISTS voice_audio_assets (
+            asset_id TEXT PRIMARY KEY,
+            voice_session_id TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            asset_kind TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            sample_rate_hz INTEGER NOT NULL DEFAULT 0,
+            byte_count INTEGER NOT NULL DEFAULT 0,
+            sha256 TEXT NOT NULL DEFAULT '',
+            storage_ref TEXT NOT NULL DEFAULT '',
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at DOUBLE PRECISION NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_session ON voice_audio_assets(voice_session_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_voice_audio_assets_scope ON voice_audio_assets(tenant_id, workspace_id, environment, created_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS voice_provider_calls (
+            provider_call_id TEXT PRIMARY KEY,
+            voice_session_id TEXT NOT NULL,
+            provider_kind TEXT NOT NULL,
+            provider_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            request_json TEXT NOT NULL DEFAULT '{}',
+            response_json TEXT NOT NULL DEFAULT '{}',
+            error_text TEXT NOT NULL DEFAULT '',
+            latency_ms DOUBLE PRECISION,
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at DOUBLE PRECISION NOT NULL,
+            tenant_id TEXT,
+            workspace_id TEXT,
+            environment TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_session ON voice_provider_calls(voice_session_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_voice_provider_calls_scope ON voice_provider_calls(tenant_id, workspace_id, environment, created_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS release_routing_decisions (
+            decision_id TEXT PRIMARY KEY,
+            release_id TEXT NOT NULL,
+            canary_id TEXT NOT NULL DEFAULT '',
+            baseline_release_id TEXT NOT NULL DEFAULT '',
+            target_environment TEXT NOT NULL DEFAULT '',
+            routing_key_hash TEXT NOT NULL,
+            bucket DOUBLE PRECISION NOT NULL,
+            selected_release_id TEXT NOT NULL,
+            selected_version TEXT NOT NULL DEFAULT '',
+            route_kind TEXT NOT NULL,
+            success INTEGER,
+            latency_ms DOUBLE PRECISION,
+            cost_estimate DOUBLE PRECISION,
+            observation_json TEXT NOT NULL DEFAULT '{}',
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at DOUBLE PRECISION NOT NULL,
+            updated_at DOUBLE PRECISION NOT NULL,
+            completed_at DOUBLE PRECISION,
+            tenant_id TEXT,
+            workspace_id TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_release ON release_routing_decisions(release_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_release_routing_decisions_scope ON release_routing_decisions(tenant_id, workspace_id, target_environment, created_at DESC)",
+    ),
+    (
+        "DROP TABLE IF EXISTS release_routing_decisions",
+        "DROP TABLE IF EXISTS voice_provider_calls",
+        "DROP TABLE IF EXISTS voice_audio_assets",
+    ),
+    (
+        "DROP TABLE IF EXISTS release_routing_decisions",
+        "DROP TABLE IF EXISTS voice_provider_calls",
+        "DROP TABLE IF EXISTS voice_audio_assets",
+    ),
+),
+
+
 )
+
 
 def _safe_execute(cursor, backend: str, sql: str, params: tuple[Any, ...] | None = None) -> None:
     try:
@@ -2328,8 +2229,6 @@ def _sqlite_rebuild_memory_without_tiers(conn: DBConnection) -> None:
     )
     cur.execute("DROP TABLE memory_items__old")
     conn.commit()
-
-
 
 
 def _rollback_one(conn: DBConnection, migration: Migration) -> None:

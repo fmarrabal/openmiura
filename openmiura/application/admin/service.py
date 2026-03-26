@@ -11,7 +11,6 @@ import yaml
 from openmiura.application.costs import CostGovernanceService
 from openmiura.application.evaluations import EvaluationService
 from openmiura.application.memory import MemoryService
-from openmiura.application.openclaw import OpenClawAdapterService
 from openmiura.application.operator import OperatorConsoleService
 from openmiura.application.replay import ReplayService
 from openmiura.application.releases import ReleaseService
@@ -46,13 +45,7 @@ class AdminService:
         self.release_service = ReleaseService()
         self.voice_runtime_service = VoiceRuntimeService()
         self.pwa_foundation_service = PWAFoundationService()
-        self.openclaw_adapter_service = OpenClawAdapterService()
-        self.live_canvas_service = LiveCanvasService(
-            cost_governance_service=self.cost_governance_service,
-            operator_console_service=self.operator_console_service,
-            secret_governance_service=self.secret_governance_service,
-            openclaw_adapter_service=self.openclaw_adapter_service,
-        )
+        self.live_canvas_service = LiveCanvasService()
         self.packaging_hardening_service = PackagingHardeningService()
 
     def status_snapshot(self, gw: AdminGatewayLike) -> dict[str, Any]:
@@ -681,7 +674,6 @@ class AdminService:
         action: str,
         actor: str,
         reason: str = '',
-        auth_ctx: dict[str, Any] | None = None,
         tenant_id: str | None = None,
         workspace_id: str | None = None,
         environment: str | None = None,
@@ -692,7 +684,6 @@ class AdminService:
             action=action,
             actor=actor,
             reason=reason,
-            auth_ctx=auth_ctx,
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             environment=environment,
@@ -734,48 +725,6 @@ class AdminService:
             q=q,
             ref=ref,
             tool_name=tool_name,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            limit=limit,
-        )
-
-    def secret_governance_summary(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-        limit: int = 100,
-    ) -> dict[str, Any]:
-        return self.secret_governance_service.summary(
-            gw,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            limit=limit,
-        )
-
-    def secret_governance_timeline(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        q: str | None = None,
-        ref: str | None = None,
-        tool_name: str | None = None,
-        outcome: str | None = None,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-        limit: int = 100,
-    ) -> dict[str, Any]:
-        return self.secret_governance_service.timeline(
-            gw,
-            q=q,
-            ref=ref,
-            tool_name=tool_name,
-            outcome=outcome,
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             environment=environment,
@@ -1888,132 +1837,6 @@ class AdminService:
         return default
 
 
-    def list_openclaw_runtimes(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        limit: int = 100,
-        status: str | None = None,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.openclaw_adapter_service.list_runtimes(
-            gw,
-            limit=limit,
-            status=status,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def register_openclaw_runtime(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        actor: str,
-        name: str,
-        base_url: str,
-        transport: str = 'http',
-        auth_secret_ref: str = '',
-        capabilities: list[str] | None = None,
-        allowed_agents: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        runtime_id: str | None = None,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.openclaw_adapter_service.register_runtime(
-            gw,
-            actor=actor,
-            name=name,
-            base_url=base_url,
-            transport=transport,
-            auth_secret_ref=auth_secret_ref,
-            capabilities=capabilities,
-            allowed_agents=allowed_agents,
-            metadata=metadata,
-            runtime_id=runtime_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def get_openclaw_runtime(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        runtime_id: str,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.openclaw_adapter_service.get_runtime(
-            gw,
-            runtime_id=runtime_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def list_openclaw_dispatches(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        runtime_id: str | None = None,
-        action: str | None = None,
-        status: str | None = None,
-        limit: int = 100,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.openclaw_adapter_service.list_dispatches(
-            gw,
-            runtime_id=runtime_id,
-            action=action,
-            status=status,
-            limit=limit,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def dispatch_openclaw_runtime(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        runtime_id: str,
-        actor: str,
-        action: str,
-        payload: dict[str, Any] | None = None,
-        agent_id: str = '',
-        user_role: str = 'operator',
-        user_key: str = '',
-        session_id: str = 'system',
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-        dry_run: bool = False,
-    ) -> dict[str, Any]:
-        return self.openclaw_adapter_service.dispatch(
-            gw,
-            runtime_id=runtime_id,
-            actor=actor,
-            action=action,
-            payload=payload,
-            agent_id=agent_id,
-            user_role=user_role,
-            user_key=user_key,
-            session_id=session_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            dry_run=dry_run,
-        )
-
-
     def list_voice_sessions(
         self,
         gw: AdminGatewayLike,
@@ -2767,100 +2590,6 @@ class AdminService:
             state_key=state_key,
             limit=limit,
             toggles=toggles,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def list_canvas_operational_views(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        canvas_id: str,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.live_canvas_service.list_operational_views(
-            gw,
-            canvas_id=canvas_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def inspect_canvas_node(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        canvas_id: str,
-        node_id: str,
-        state_key: str = 'default',
-        limit: int = 50,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.live_canvas_service.get_node_inspector(
-            gw,
-            canvas_id=canvas_id,
-            node_id=node_id,
-            state_key=state_key,
-            limit=limit,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def execute_canvas_node_action(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        canvas_id: str,
-        node_id: str,
-        action: str,
-        actor: str = 'admin',
-        reason: str = '',
-        payload: dict[str, Any] | None = None,
-        user_role: str = 'operator',
-        user_key: str = '',
-        session_id: str = 'canvas',
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.live_canvas_service.execute_node_action(
-            gw,
-            canvas_id=canvas_id,
-            node_id=node_id,
-            action=action,
-            actor=actor,
-            reason=reason,
-            payload=payload or {},
-            user_role=user_role,
-            user_key=user_key,
-            session_id=session_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-
-    def canvas_node_timeline(
-        self,
-        gw: AdminGatewayLike,
-        *,
-        canvas_id: str,
-        node_id: str,
-        limit: int = 50,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any]:
-        return self.live_canvas_service.get_node_timeline(
-            gw,
-            canvas_id=canvas_id,
-            node_id=node_id,
-            limit=limit,
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             environment=environment,

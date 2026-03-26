@@ -6,6 +6,8 @@
 - [Registry privado de extensiones](extensions_registry.md)
 - [Guía de instalación limpia](installation.md)
 - [Guía de producción](production.md)
+- [Self-hosted Enterprise Alpha](enterprise_alpha.md)
+- [Enterprise Alpha release checklist](alpha_release_checklist.md)
 - [Guía de backup y restore](backup_restore.md)
 - [Guía de migraciones](migrations.md)
 - [Guía de seguridad](security.md)

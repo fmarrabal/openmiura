@@ -299,15 +299,6 @@ def build_workflow_router() -> APIRouter:
         gw, auth_ctx = require_permission(request, 'approvals.read')
         return workflow_service.unified_timeline(gw, limit=limit, approval_id=approval_id, **_scope_filters(auth_ctx))
 
-    @router.get('/approvals/{approval_id}/evidence')
-    def broker_approval_evidence(approval_id: str, request: Request):
-        gw, auth_ctx = require_permission(request, 'approvals.read')
-        payload = approval_service.get_evidence(gw, approval_id, **_scope_filters(auth_ctx))
-        if payload is None:
-            raise HTTPException(status_code=404, detail='Unknown approval')
-        audit_sensitive(gw, action='approval_evidence', auth_ctx=auth_ctx, status='ok', target=approval_id, details={'timeline_count': len(payload.get('timeline') or [])})
-        return payload
-
     @router.post('/approvals/{approval_id}/claim')
     def broker_approval_claim(approval_id: str, request: Request):
         gw, auth_ctx = require_permission(request, 'approvals.write')
@@ -317,17 +308,11 @@ def build_workflow_router() -> APIRouter:
                 gw,
                 approval_id,
                 actor=str(auth_ctx.get('user_key') or auth_ctx.get('username') or 'system'),
-                auth_ctx=auth_ctx,
                 **_scope_filters(auth_ctx),
             )
         except LookupError as exc:
-            audit_sensitive(gw, action='approval_claim', auth_ctx=auth_ctx, status='error', target=approval_id, details={'error': str(exc)})
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except PermissionError as exc:
-            audit_sensitive(gw, action='approval_claim', auth_ctx=auth_ctx, status='error', target=approval_id, details={'error': str(exc)})
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ValueError as exc:
-            audit_sensitive(gw, action='approval_claim', auth_ctx=auth_ctx, status='error', target=approval_id, details={'error': str(exc)})
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         audit_sensitive(gw, action='approval_claim', auth_ctx=auth_ctx, status='ok', target=approval_id)
         return {'ok': True, 'approval': item}
@@ -343,17 +328,11 @@ def build_workflow_router() -> APIRouter:
                 actor=str(auth_ctx.get('user_key') or auth_ctx.get('username') or 'system'),
                 decision=payload.decision,
                 reason=payload.reason,
-                auth_ctx=auth_ctx,
                 **_scope_filters(auth_ctx),
             )
         except LookupError as exc:
-            audit_sensitive(gw, action='approval_decision', auth_ctx=auth_ctx, status='error', target=approval_id, details={'decision': payload.decision, 'error': str(exc)})
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except PermissionError as exc:
-            audit_sensitive(gw, action='approval_decision', auth_ctx=auth_ctx, status='error', target=approval_id, details={'decision': payload.decision, 'error': str(exc)})
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ValueError as exc:
-            audit_sensitive(gw, action='approval_decision', auth_ctx=auth_ctx, status='error', target=approval_id, details={'decision': payload.decision, 'error': str(exc)})
             status_code = 409 if 'already claimed' in str(exc).lower() else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
         audit_sensitive(gw, action='approval_decision', auth_ctx=auth_ctx, status='ok', target=approval_id, details={'decision': payload.decision})

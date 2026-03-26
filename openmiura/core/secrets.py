@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -153,13 +152,21 @@ class SecretBroker:
         environment: str | None = None,
         domain: str | None = None,
     ) -> str:
-        started_at = time.time()
-        try:
-            if not self.is_enabled():
-                raise SecretAccessDenied('Secret broker is disabled')
-            spec = self._get_ref(ref)
-            self._authorize(
-                spec,
+        if not self.is_enabled():
+            raise SecretAccessDenied('Secret broker is disabled')
+        spec = self._get_ref(ref)
+        self._authorize(
+            spec,
+            tool_name=tool_name,
+            user_role=user_role,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            domain=domain,
+        )
+        if self.policy is not None:
+            decision = self.policy.check_secret_access(
+                ref,
                 tool_name=tool_name,
                 user_role=user_role,
                 tenant_id=tenant_id,
@@ -167,50 +174,23 @@ class SecretBroker:
                 environment=environment,
                 domain=domain,
             )
-            if self.policy is not None:
-                decision = self.policy.check_secret_access(
-                    ref,
-                    tool_name=tool_name,
-                    user_role=user_role,
-                    tenant_id=tenant_id,
-                    workspace_id=workspace_id,
-                    environment=environment,
-                    domain=domain,
-                )
-                if not bool(getattr(decision, 'allowed', True)):
-                    raise SecretAccessDenied(getattr(decision, 'reason', '') or f"Secret ref '{ref}' denied by policy")
-            value = str(spec.value or '')
-            if not value:
-                raise SecretNotConfigured(f"Secret ref '{ref}' is not configured")
-            self._audit_resolution(
-                ref=ref,
-                tool_name=tool_name,
-                user_role=user_role,
-                user_key=user_key,
-                session_id=session_id,
-                tenant_id=tenant_id,
-                workspace_id=workspace_id,
-                environment=environment,
-                domain=domain,
-                duration_ms=(time.time() - started_at) * 1000.0,
-            )
-            return value
-        except SecretBrokerError as exc:
-            self._audit_denied(
-                ref=ref,
-                tool_name=tool_name,
-                user_role=user_role,
-                user_key=user_key,
-                session_id=session_id,
-                tenant_id=tenant_id,
-                workspace_id=workspace_id,
-                environment=environment,
-                domain=domain,
-                reason=str(exc),
-                duration_ms=(time.time() - started_at) * 1000.0,
-                configured=False if isinstance(exc, SecretNotConfigured) else None,
-            )
-            raise
+            if not bool(getattr(decision, 'allowed', True)):
+                raise SecretAccessDenied(getattr(decision, 'reason', '') or f"Secret ref '{ref}' denied by policy")
+        value = str(spec.value or '')
+        if not value:
+            raise SecretNotConfigured(f"Secret ref '{ref}' is not configured")
+        self._audit_resolution(
+            ref=ref,
+            tool_name=tool_name,
+            user_role=user_role,
+            user_key=user_key,
+            session_id=session_id,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            domain=domain,
+        )
+        return value
 
     def redact_text(self, text: str | None) -> str:
         raw = str(text or '')
@@ -309,99 +289,22 @@ class SecretBroker:
         workspace_id: str | None,
         environment: str | None,
         domain: str | None,
-        duration_ms: float | None = None,
-    ) -> None:
-        self._audit_event(
-            event='secret_resolved',
-            ref=ref,
-            tool_name=tool_name,
-            user_role=user_role,
-            user_key=user_key,
-            session_id=session_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            domain=domain,
-            configured=True,
-            allowed=True,
-            reason=None,
-            duration_ms=duration_ms,
-        )
-
-    def _audit_denied(
-        self,
-        *,
-        ref: str,
-        tool_name: str,
-        user_role: str,
-        user_key: str,
-        session_id: str,
-        tenant_id: str | None,
-        workspace_id: str | None,
-        environment: str | None,
-        domain: str | None,
-        reason: str,
-        duration_ms: float | None = None,
-        configured: bool | None = None,
-    ) -> None:
-        self._audit_event(
-            event='secret_access_denied',
-            ref=ref,
-            tool_name=tool_name,
-            user_role=user_role,
-            user_key=user_key,
-            session_id=session_id,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            domain=domain,
-            configured=configured,
-            allowed=False,
-            reason=reason,
-            duration_ms=duration_ms,
-        )
-
-    def _audit_event(
-        self,
-        *,
-        event: str,
-        ref: str,
-        tool_name: str,
-        user_role: str,
-        user_key: str,
-        session_id: str,
-        tenant_id: str | None,
-        workspace_id: str | None,
-        environment: str | None,
-        domain: str | None,
-        configured: bool | None,
-        allowed: bool,
-        reason: str | None,
-        duration_ms: float | None,
     ) -> None:
         if self.audit is None:
             return
-        payload = {
-            'event': event,
-            'ref': str(ref or '').strip(),
-            'tool_name': str(tool_name or '').strip(),
-            'user_role': str(user_role or 'user'),
-            'domain': self._normalize_domain(domain) or None,
-            'allowed': bool(allowed),
-        }
-        if configured is not None:
-            payload['configured'] = bool(configured)
-        if reason:
-            payload['reason'] = str(reason)
-        if duration_ms is not None:
-            payload['duration_ms'] = round(float(duration_ms), 3)
         try:
             self.audit.log_event(
                 direction='system',
                 channel='security',
                 user_id=str(user_key or 'system'),
                 session_id=str(session_id or 'system'),
-                payload=payload,
+                payload={
+                    'event': 'secret_resolved',
+                    'ref': ref,
+                    'tool_name': tool_name,
+                    'user_role': str(user_role or 'user'),
+                    'domain': self._normalize_domain(domain) or None,
+                },
                 tenant_id=tenant_id,
                 workspace_id=workspace_id,
                 environment=environment,

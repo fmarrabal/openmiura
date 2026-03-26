@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .db import DBConnection, CompatRow
 from .migrations import apply_migrations
-from .tenancy.scope import assert_scope_match, normalize_scope
 
 
 class AuditStore:
@@ -75,43 +74,6 @@ class AuditStore:
             return {"tenant_id": None, "workspace_id": None, "environment": None}
         return self._row_scope(row)
 
-    def get_session_scope(self, session_id: str) -> dict[str, Any] | None:
-        if not session_id:
-            return None
-        cur = self._conn.cursor()
-        row = cur.execute("SELECT tenant_id, workspace_id, environment FROM sessions WHERE session_id=?", (session_id,)).fetchone()
-        if row is None:
-            return None
-        return self._row_scope(row)
-
-    def get_session_meta(self, session_id: str) -> dict[str, Any] | None:
-        if not session_id:
-            return None
-        cur = self._conn.cursor()
-        row = cur.execute(
-            "SELECT session_id, channel, user_id, created_at, updated_at, tenant_id, workspace_id, environment FROM sessions WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        return {
-            "session_id": row["session_id"],
-            "channel": row["channel"],
-            "user_id": row["user_id"],
-            "created_at": float(row["created_at"]),
-            "updated_at": float(row["updated_at"]),
-            "tenant_id": row["tenant_id"],
-            "workspace_id": row["workspace_id"],
-            "environment": row["environment"],
-        }
-
-    def assert_session_scope(self, session_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
-        scope = self.get_session_scope(session_id)
-        if scope is None:
-            raise ValueError(f"Unknown session_id: {session_id}")
-        assert_scope_match(scope, self._scope_payload(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment), subject="session")
-        return scope
-
     # sessions
 
     def get_or_create_session(
@@ -128,17 +90,8 @@ class AuditStore:
         if session_id is None or session_id.strip() == "":
             session_id = str(uuid.uuid4())
 
-        tenant_id, workspace_id, environment = normalize_scope(
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-        requested_scope = self._scope_payload(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
         cur = self._conn.cursor()
-        row = cur.execute(
-            "SELECT session_id, channel, user_id, tenant_id, workspace_id, environment FROM sessions WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
+        row = cur.execute("SELECT session_id FROM sessions WHERE session_id=?", (session_id,)).fetchone()
 
         if row is None:
             cur.execute(
@@ -146,19 +99,10 @@ class AuditStore:
                 (session_id, channel, user_id, now, now, tenant_id, workspace_id, environment),
             )
         else:
-            existing_scope = self._row_scope(row)
-            existing_has_scope = any(existing_scope.get(key) is not None for key in ("tenant_id", "workspace_id", "environment"))
-            requested_has_scope = any(requested_scope.get(key) is not None for key in ("tenant_id", "workspace_id", "environment"))
-            if requested_has_scope and existing_has_scope:
-                assert_scope_match(existing_scope, requested_scope, subject="session")
-            elif requested_has_scope and not existing_has_scope:
-                cur.execute(
-                    "UPDATE sessions SET updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE session_id=?",
-                    (now, tenant_id, workspace_id, environment, session_id),
-                )
-                self._conn.commit()
-                return session_id
-            cur.execute("UPDATE sessions SET updated_at=? WHERE session_id=?", (now, session_id))
+            cur.execute(
+                "UPDATE sessions SET updated_at=?, tenant_id=COALESCE(tenant_id, ?), workspace_id=COALESCE(workspace_id, ?), environment=COALESCE(environment, ?) WHERE session_id=?",
+                (now, tenant_id, workspace_id, environment, session_id),
+            )
         self._conn.commit()
         return session_id
 
@@ -367,22 +311,7 @@ class AuditStore:
         rows.reverse()
         return [(r[0], r[1]) for r in rows]
 
-    def get_session_messages(
-        self,
-        session_id: str,
-        *,
-        limit: int = 200,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> list[dict[str, Any]]:
-        if tenant_id is not None or workspace_id is not None or environment is not None:
-            self.assert_session_scope(
-                session_id,
-                tenant_id=tenant_id,
-                workspace_id=workspace_id,
-                environment=environment,
-            )
+    def get_session_messages(self, session_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
         cur = self._conn.cursor()
         rows = cur.execute(
             "SELECT id, ts, role, content FROM messages WHERE session_id=? ORDER BY id ASC LIMIT ?",
@@ -617,27 +546,21 @@ class AuditStore:
                 global_user_key=excluded.global_user_key,
                 linked_at=excluded.linked_at,
                 linked_by=excluded.linked_by,
-                tenant_id=excluded.tenant_id,
-                workspace_id=excluded.workspace_id
+                tenant_id=COALESCE(identity_map.tenant_id, excluded.tenant_id),
+                workspace_id=COALESCE(identity_map.workspace_id, excluded.workspace_id)
             """,
             (channel_user_key, global_user_key, time.time(), linked_by, tenant_id, workspace_id),
         )
         self._conn.commit()
 
-    def get_identity(self, channel_user_key: str, *, tenant_id: str | None = None, workspace_id: str | None = None) -> str | None:
+    def get_identity(self, channel_user_key: str) -> str | None:
         cur = self._conn.cursor()
-        clauses = ["channel_user_key=?"]
-        params: list[Any] = [channel_user_key]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id)
-        row = cur.execute("SELECT global_user_key FROM identity_map WHERE " + " AND ".join(clauses), tuple(params)).fetchone()
+        row = cur.execute("SELECT global_user_key FROM identity_map WHERE channel_user_key=?", (channel_user_key,)).fetchone()
         return row[0] if row else None
 
-    def delete_identity(self, channel_user_key: str, *, tenant_id: str | None = None, workspace_id: str | None = None) -> int:
+    def delete_identity(self, channel_user_key: str) -> int:
         cur = self._conn.cursor()
-        clauses = ["channel_user_key=?"]
-        params: list[Any] = [channel_user_key]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id)
-        cur.execute("DELETE FROM identity_map WHERE " + " AND ".join(clauses), tuple(params))
+        cur.execute("DELETE FROM identity_map WHERE channel_user_key=?", (channel_user_key,))
         deleted = cur.rowcount
         self._conn.commit()
         return int(deleted)
@@ -1105,31 +1028,19 @@ class AuditStore:
             "release_routing_decisions": self.count_release_routing_decisions(tenant_id=tenant_id, workspace_id=workspace_id, target_environment=environment),
         }
 
-    def prune_memory(
-        self,
-        user_key: str,
-        keep_last: int,
-        *,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> None:
+    def prune_memory(self, user_key: str, keep_last: int) -> None:
         cur = self._conn.cursor()
-        clauses = ["user_key=?"]
-        params: list[Any] = [user_key]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        where = " AND ".join(clauses)
         cur.execute(
-            f"""
+            """
             DELETE FROM memory_items
             WHERE id IN (
                 SELECT id FROM memory_items
-                WHERE {where}
+                WHERE user_key=?
                 ORDER BY created_at DESC
                 LIMIT -1 OFFSET ?
             )
             """,
-            tuple(params + [int(keep_last)]),
+            (user_key, int(keep_last)),
         )
         self._conn.commit()
 
@@ -4751,172 +4662,3 @@ class AuditStore:
         sql += ' ORDER BY created_at DESC LIMIT ?'
         params.append(int(limit))
         return [self._release_routing_decision_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
-
-    def _openclaw_runtime_row_to_dict(self, row: Any) -> dict[str, Any]:
-        if row is None:
-            return {}
-        try:
-            capabilities = json.loads(row['capabilities_json'] or '[]')
-        except Exception:
-            capabilities = []
-        try:
-            allowed_agents = json.loads(row['allowed_agents_json'] or '[]')
-        except Exception:
-            allowed_agents = []
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'runtime_id': row['runtime_id'],
-            'name': row['name'],
-            'base_url': row['base_url'],
-            'transport': row['transport'],
-            'auth_secret_ref': row['auth_secret_ref'],
-            'status': row['status'],
-            'capabilities': capabilities,
-            'allowed_agents': allowed_agents,
-            'metadata': metadata,
-            'last_health_at': row['last_health_at'],
-            'last_health_status': row['last_health_status'],
-            'created_by': row['created_by'],
-            'created_at': row['created_at'],
-            'updated_at': row['updated_at'],
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
-
-    def upsert_openclaw_runtime(self, *, runtime_id: str | None = None, name: str, base_url: str, transport: str = 'http', auth_secret_ref: str = '', status: str = 'registered', capabilities: list[str] | None = None, allowed_agents: list[str] | None = None, metadata: dict[str, Any] | None = None, created_by: str = '', tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
-        cur = self._conn.cursor()
-        runtime_key = str(runtime_id or uuid.uuid4())
-        now = time.time()
-        existing = cur.execute('SELECT runtime_id FROM openclaw_runtimes WHERE runtime_id=?', (runtime_key,)).fetchone()
-        if existing is None:
-            cur.execute('INSERT INTO openclaw_runtimes(runtime_id, name, base_url, transport, auth_secret_ref, status, capabilities_json, allowed_agents_json, metadata_json, last_health_at, last_health_status, created_by, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (runtime_key, name, base_url, transport, auth_secret_ref or '', status or 'registered', json.dumps(list(capabilities or []), ensure_ascii=False), json.dumps(list(allowed_agents or []), ensure_ascii=False), json.dumps(metadata or {}, ensure_ascii=False), None, '', created_by or '', now, now, tenant_id, workspace_id, environment))
-        else:
-            cur.execute('UPDATE openclaw_runtimes SET name=?, base_url=?, transport=?, auth_secret_ref=?, status=?, capabilities_json=?, allowed_agents_json=?, metadata_json=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE runtime_id=?', (name, base_url, transport, auth_secret_ref or '', status or 'registered', json.dumps(list(capabilities or []), ensure_ascii=False), json.dumps(list(allowed_agents or []), ensure_ascii=False), json.dumps(metadata or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment, runtime_key))
-        self._conn.commit()
-        row = cur.execute('SELECT runtime_id, name, base_url, transport, auth_secret_ref, status, capabilities_json, allowed_agents_json, metadata_json, last_health_at, last_health_status, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM openclaw_runtimes WHERE runtime_id=?', (runtime_key,)).fetchone()
-        return self._openclaw_runtime_row_to_dict(row)
-
-    def get_openclaw_runtime(self, runtime_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
-        cur = self._conn.cursor()
-        clauses = ['runtime_id=?']
-        params: list[Any] = [runtime_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        row = cur.execute('SELECT runtime_id, name, base_url, transport, auth_secret_ref, status, capabilities_json, allowed_agents_json, metadata_json, last_health_at, last_health_status, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM openclaw_runtimes WHERE ' + ' AND '.join(clauses) + ' LIMIT 1', tuple(params)).fetchone()
-        return self._openclaw_runtime_row_to_dict(row) if row is not None else None
-
-    def list_openclaw_runtimes(self, *, limit: int = 100, status: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        if status is not None:
-            clauses.append('status=?')
-            params.append(status)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql = 'SELECT runtime_id, name, base_url, transport, auth_secret_ref, status, capabilities_json, allowed_agents_json, metadata_json, last_health_at, last_health_status, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM openclaw_runtimes'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY updated_at DESC LIMIT ?'
-        params.append(int(limit))
-        return [self._openclaw_runtime_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
-
-    def update_openclaw_runtime_health(
-        self,
-        runtime_id: str,
-        *,
-        health_status: str,
-        health_at: float | None = None,
-        tenant_id: str | None = None,
-        workspace_id: str | None = None,
-        environment: str | None = None,
-    ) -> dict[str, Any] | None:
-        cur = self._conn.cursor()
-        clauses = ['runtime_id=?']
-        params: list[Any] = [runtime_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        current = cur.execute('SELECT runtime_id FROM openclaw_runtimes WHERE ' + ' AND '.join(clauses) + ' LIMIT 1', tuple(params)).fetchone()
-        if current is None:
-            return None
-        now = float(health_at if health_at is not None else time.time())
-        cur.execute(
-            'UPDATE openclaw_runtimes SET last_health_at=?, last_health_status=?, updated_at=? WHERE runtime_id=?',
-            (now, str(health_status or ''), now, runtime_id),
-        )
-        self._conn.commit()
-        row = cur.execute('SELECT runtime_id, name, base_url, transport, auth_secret_ref, status, capabilities_json, allowed_agents_json, metadata_json, last_health_at, last_health_status, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM openclaw_runtimes WHERE runtime_id=?', (runtime_id,)).fetchone()
-        return self._openclaw_runtime_row_to_dict(row) if row is not None else None
-
-    def _openclaw_dispatch_row_to_dict(self, row: Any) -> dict[str, Any]:
-        if row is None:
-            return {}
-        try:
-            request_payload = json.loads(row['request_json'] or '{}')
-        except Exception:
-            request_payload = {}
-        try:
-            response_payload = json.loads(row['response_json'] or '{}')
-        except Exception:
-            response_payload = {}
-        return {
-            'dispatch_id': row['dispatch_id'],
-            'runtime_id': row['runtime_id'],
-            'action': row['action'],
-            'agent_id': row['agent_id'],
-            'status': row['status'],
-            'request': request_payload,
-            'response': response_payload,
-            'error_text': row['error_text'],
-            'secret_ref': row['secret_ref'],
-            'latency_ms': row['latency_ms'],
-            'created_by': row['created_by'],
-            'created_at': row['created_at'],
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
-
-    def create_openclaw_dispatch(self, *, runtime_id: str, action: str, agent_id: str = '', status: str = 'pending', request_payload: dict[str, Any] | None = None, response_payload: dict[str, Any] | None = None, secret_ref: str = '', created_by: str = '', tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
-        dispatch_id = str(uuid.uuid4())
-        now = time.time()
-        cur = self._conn.cursor()
-        cur.execute('INSERT INTO openclaw_dispatches(dispatch_id, runtime_id, action, agent_id, status, request_json, response_json, error_text, secret_ref, latency_ms, created_by, created_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (dispatch_id, runtime_id, action, agent_id or '', status, json.dumps(request_payload or {}, ensure_ascii=False), json.dumps(response_payload or {}, ensure_ascii=False), '', secret_ref or '', None, created_by or '', now, tenant_id, workspace_id, environment))
-        self._conn.commit()
-        row = cur.execute('SELECT dispatch_id, runtime_id, action, agent_id, status, request_json, response_json, error_text, secret_ref, latency_ms, created_by, created_at, tenant_id, workspace_id, environment FROM openclaw_dispatches WHERE dispatch_id=?', (dispatch_id,)).fetchone()
-        return self._openclaw_dispatch_row_to_dict(row)
-
-    def update_openclaw_dispatch(self, dispatch_id: str, *, status: str, response_payload: dict[str, Any] | None = None, error_text: str = '', latency_ms: float | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
-        cur = self._conn.cursor()
-        clauses = ['dispatch_id=?']
-        params: list[Any] = [dispatch_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        current = cur.execute('SELECT dispatch_id FROM openclaw_dispatches WHERE ' + ' AND '.join(clauses) + ' LIMIT 1', tuple(params)).fetchone()
-        if current is None:
-            return None
-        cur.execute('UPDATE openclaw_dispatches SET status=?, response_json=?, error_text=?, latency_ms=? WHERE dispatch_id=?', (status, json.dumps(response_payload or {}, ensure_ascii=False), error_text or '', latency_ms, dispatch_id))
-        self._conn.commit()
-        row = cur.execute('SELECT dispatch_id, runtime_id, action, agent_id, status, request_json, response_json, error_text, secret_ref, latency_ms, created_by, created_at, tenant_id, workspace_id, environment FROM openclaw_dispatches WHERE dispatch_id=?', (dispatch_id,)).fetchone()
-        return self._openclaw_dispatch_row_to_dict(row) if row is not None else None
-
-    def list_openclaw_dispatches(self, *, runtime_id: str | None = None, action: str | None = None, status: str | None = None, limit: int = 100, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        if runtime_id is not None:
-            clauses.append('runtime_id=?')
-            params.append(runtime_id)
-        if action is not None:
-            clauses.append('action=?')
-            params.append(action)
-        if status is not None:
-            clauses.append('status=?')
-            params.append(status)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql = 'SELECT dispatch_id, runtime_id, action, agent_id, status, request_json, response_json, error_text, secret_ref, latency_ms, created_by, created_at, tenant_id, workspace_id, environment FROM openclaw_dispatches'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY created_at DESC LIMIT ?'
-        params.append(int(limit))
-        return [self._openclaw_dispatch_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
