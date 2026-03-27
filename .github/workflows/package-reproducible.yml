@@ -11,29 +11,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
         with:
           python-version: '3.11'
-          cache: pip
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
-          python -m pip check
+          extras: dev
+          install-requirements: 'true'
+          pip-check: 'true'
 
       - name: Build deterministic package
         shell: bash
+        env:
+          SOURCE_DATE_EPOCH: '1577836800'
         run: |
           set -euo pipefail
-          python scripts/reproducible_package.py \
-            --target desktop \
-            --label "CI reproducible build" \
-            --version "${GITHUB_SHA::12}" \
-            --output-dir dist
+          python scripts/reproducible_package.py             --target desktop             --label "CI reproducible build"             --version "${GITHUB_SHA::12}"             --output-dir dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

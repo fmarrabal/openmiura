@@ -142,6 +142,8 @@ That means turning agent execution into something:
 - [24-month investor strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
 - [Commercial one-pager](docs/openMiura_one_pager_commercial.md)
 - [Use cases](docs/use_cases.md)
+- [Self-hosted Enterprise Alpha](docs/enterprise_alpha.md)
+- [Enterprise Alpha release checklist](docs/alpha_release_checklist.md)
 
 ---
 

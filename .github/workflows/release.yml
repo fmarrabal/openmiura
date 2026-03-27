@@ -74,25 +74,24 @@ jobs:
           echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
           git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
         with:
           python-version: '3.11'
-          cache: pip
+          extras: dev
+          install-requirements: 'true'
+          pip-check: 'true'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install build dependencies
+      - name: Install release-only build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
           python -m pip install build twine
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
 
       - name: Fast validation before release
         shell: bash
@@ -104,6 +103,8 @@ jobs:
 
       - name: Build Python distributions
         shell: bash
+        env:
+          SOURCE_DATE_EPOCH: '1577836800'
         run: |
           set -euo pipefail
           python -m build --sdist --wheel
@@ -111,6 +112,8 @@ jobs:
 
       - name: Build reproducible package
         shell: bash
+        env:
+          SOURCE_DATE_EPOCH: '1577836800'
         run: |
           set -euo pipefail
           python scripts/reproducible_package.py \
@@ -118,13 +121,6 @@ jobs:
             --label "GitHub Release ${{ steps.meta.outputs.tag }}" \
             --version "${{ steps.meta.outputs.version }}" \
             --output-dir dist
-
-      - name: Generate checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum * > SHA256SUMS.txt
 
       - name: Prepare release notes
         shell: bash
@@ -135,10 +131,27 @@ jobs:
               printf '%s\n\n' "${{ inputs.notes || '' }}"
             fi
             printf 'Release artifact summary for `%s`.\n\n' "${{ steps.meta.outputs.tag }}"
-            printf '- Python distributions: sdist + wheel\n'
-            printf '- Reproducible package: %s\n' "${{ steps.meta.outputs.target }}"
-            printf '- Checksums: SHA256SUMS.txt\n'
+            printf '%s\n' '- Python distributions: sdist + wheel'
+            printf '%s\n' "- Reproducible package: ${{ steps.meta.outputs.target }}"
+            printf '%s\n' '- Checksums: SHA256SUMS.txt'
+            printf '%s\n' '- Manifest: RELEASE_MANIFEST.json'
           } > dist/RELEASE_NOTES.md
+
+      - name: Build release manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_release_artifacts.py \
+            --dist-dir dist \
+            --tag "${{ steps.meta.outputs.tag }}" \
+            --target "${{ steps.meta.outputs.target }}" \
+            --strict
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_release_artifacts.py --dist-dir dist
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7

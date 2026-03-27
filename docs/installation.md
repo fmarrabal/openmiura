@@ -138,3 +138,9 @@ Antes de generar un artefacto público, asegúrate de que no se empaquetan:
 - una conversación de prueba
 - una tool sencilla como `time_now`
 - una búsqueda de memoria
+
+
+## Referencias alpha
+
+- [Self-hosted Enterprise Alpha](enterprise_alpha.md)
+- [Enterprise Alpha release checklist](alpha_release_checklist.md)
