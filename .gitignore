@@ -89,7 +89,7 @@ voice_outputs/
 # Reproducible/package outputs
 *.manifest.json
 artifacts/
-releases/
+/releases/
 package-output/
 
 # Node / frontend transient files

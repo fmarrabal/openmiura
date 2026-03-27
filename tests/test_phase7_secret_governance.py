@@ -49,7 +49,7 @@ secrets:
   redact_logs: true
   refs:
     github_pat:
-      value: "ghp_abcdefghijklmnopqrstuvwxyz123456"
+      value: "synthetic_github_token_for_tests_only"
       description: "GitHub PAT"
       allowed_tools: ["web_fetch"]
       allowed_roles: ["admin"]

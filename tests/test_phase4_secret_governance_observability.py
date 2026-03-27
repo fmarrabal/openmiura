@@ -53,7 +53,7 @@ secrets:
   redact_logs: true
   refs:
     github_pat:
-      value: "ghp_abcdefghijklmnopqrstuvwxyz123456"
+      value: "synthetic_github_token_for_tests_only"
       description: "GitHub PAT"
       allowed_tools: ["web_fetch"]
       allowed_roles: ["admin"]
@@ -79,7 +79,7 @@ def test_secret_broker_audits_denied_resolution_attempts(audit_store: AuditStore
             refs={
                 'github_pat': SecretRefSettings(
                     ref='github_pat',
-                    value='ghp_super_secret',
+                    value='synthetic_test_token',
                     allowed_tools=['web_fetch'],
                     allowed_roles=['admin'],
                     allowed_tenants=['acme'],

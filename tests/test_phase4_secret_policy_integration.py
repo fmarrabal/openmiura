@@ -25,7 +25,7 @@ def test_secret_broker_applies_formal_policy_engine(tmp_path):
             refs={
                 "github_pat": SecretRefSettings(
                     ref="github_pat",
-                    value="ghp_secret",
+                    value="test_secret_value",
                     allowed_tools=["web_fetch", "terminal_exec"],
                     allowed_roles=["admin"],
                 )
@@ -37,4 +37,4 @@ def test_secret_broker_applies_formal_policy_engine(tmp_path):
     with pytest.raises(SecretAccessDenied, match="terminal cannot use github token"):
         broker.resolve("github_pat", tool_name="terminal_exec", user_role="admin")
 
-    assert broker.resolve("github_pat", tool_name="web_fetch", user_role="admin") == "ghp_secret"
+    assert broker.resolve("github_pat", tool_name="web_fetch", user_role="admin") == "test_secret_value"
