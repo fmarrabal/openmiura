@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from openmiura.core.schema import InboundMessage
+from openmiura.core.tenancy.scope import build_scoped_session_id
 from openmiura.interfaces.broker.common import (
     audit_sensitive,
     broker_auth_context,
@@ -43,14 +44,24 @@ def build_chat_router() -> APIRouter:
         enforce_rate_limit(request, auth_ctx, bucket="chat_stream", limit_per_minute=int(getattr(gw.settings.broker, "rate_limit_per_minute", 120) or 120))
         effective_user = resolve_user_key(auth_ctx, payload.user_id)
         effective_agent = payload.agent_id or "default"
-        session_id = payload.session_id or f"broker:{effective_user}:{effective_agent}"
+        scope = {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")}
+        tenancy_enabled = bool(getattr(getattr(gw.settings, "tenancy", None), "enabled", False))
+        session_id = payload.session_id or (
+            build_scoped_session_id(prefix="broker", user_key=effective_user, agent_id=effective_agent, **scope)
+            if tenancy_enabled else f"broker:{effective_user}:{effective_agent}"
+        )
+        if payload.session_id and gw.audit.get_session_scope(session_id) is not None:
+            try:
+                gw.audit.assert_session_scope(session_id, **scope)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
         if payload.agent_id:
             try:
                 gw.router.select_agent(session_id, payload.agent_id)
             except Exception:
                 pass
         metadata = dict(payload.metadata or {})
-        metadata.setdefault("_scope", {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")})
+        metadata.setdefault("_scope", scope)
         inbound = InboundMessage(
             channel="broker",
             user_id=effective_user,
@@ -125,7 +136,17 @@ def build_chat_router() -> APIRouter:
             workdir = _resolve_in_sandbox(ctx, payload.cwd)
             if not workdir.exists() or not workdir.is_dir():
                 raise HTTPException(status_code=404, detail="Working directory not found")
-        session_id = payload.session_id or f"broker:{user_key}:{payload.agent_id}:terminal"
+        scope = {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")}
+        tenancy_enabled = bool(getattr(getattr(gw.settings, "tenancy", None), "enabled", False))
+        session_id = payload.session_id or (
+            build_scoped_session_id(prefix="broker-terminal", user_key=user_key, agent_id=payload.agent_id, **scope)
+            if tenancy_enabled else f"broker:{user_key}:{payload.agent_id}:terminal"
+        )
+        if payload.session_id and gw.audit.get_session_scope(session_id) is not None:
+            try:
+                gw.audit.assert_session_scope(session_id, **scope)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
         command = payload.command.strip()
 
         def _event(data: dict[str, Any]) -> bytes:
@@ -168,6 +189,9 @@ def build_chat_router() -> APIRouter:
                     result_excerpt=f"streamed terminal output (exit={exit_code})",
                     error="" if exit_code == 0 else f"exit_code={exit_code}",
                     duration_ms=(time.time() - t0) * 1000.0,
+                    tenant_id=scope.get("tenant_id"),
+                    workspace_id=scope.get("workspace_id"),
+                    environment=scope.get("environment"),
                 )
                 publish(gw, "terminal_end", session_id=session_id, user_key=user_key, agent_id=payload.agent_id, command=command, exit_code=exit_code)
                 audit_sensitive(gw, action="terminal_stream_end", auth_ctx=auth_ctx, status="ok" if exit_code == 0 else "error", target=command, session_id=session_id, details={"exit_code": exit_code})
@@ -184,7 +208,17 @@ def build_chat_router() -> APIRouter:
         require_csrf(request, auth_ctx)
         enforce_rate_limit(request, auth_ctx, bucket="chat", limit_per_minute=int(getattr(gw.settings.broker, "rate_limit_per_minute", 120) or 120))
         effective_user = str(payload.user_id or auth_ctx.get("user_key") or "broker:local")
-        session_id = payload.session_id or f"broker:{effective_user}"
+        scope = {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")}
+        tenancy_enabled = bool(getattr(getattr(gw.settings, "tenancy", None), "enabled", False))
+        session_id = payload.session_id or (
+            build_scoped_session_id(prefix="broker", user_key=effective_user, agent_id=payload.agent_id or "default", **scope)
+            if tenancy_enabled else f"broker:{effective_user}"
+        )
+        if payload.session_id and gw.audit.get_session_scope(session_id) is not None:
+            try:
+                gw.audit.assert_session_scope(session_id, **scope)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
         if payload.agent_id:
             try:
                 gw.router.select_agent(session_id, payload.agent_id)
@@ -197,7 +231,7 @@ def build_chat_router() -> APIRouter:
                 user_id=effective_user,
                 text=payload.message,
                 session_id=session_id,
-                metadata={**dict(payload.metadata or {}), "_scope": {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")}},
+                metadata={**dict(payload.metadata or {}), "_scope": scope},
             ),
         )
         return BrokerChatResponse(

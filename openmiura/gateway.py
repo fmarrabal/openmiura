@@ -25,6 +25,7 @@ from openmiura.tools.terminal_exec import TerminalExecTool
 from openmiura.tools.runtime import ToolRegistry, ToolRuntime
 from openmiura.tools.time_now import TimeNowTool
 from openmiura.tools.web_fetch import WebFetchTool
+from openmiura.core.tenancy.scope import build_scoped_session_id
 
 
 @dataclass
@@ -61,14 +62,14 @@ class Gateway:
             except Exception:
                 pass
 
-    def get_pending_tool_confirmation(self, session_id: str):
-        return self.pending_confirmations.get(session_id)
+    def get_pending_tool_confirmation(self, session_id: str, **scope):
+        return self.pending_confirmations.get(session_id, **scope)
 
-    def pop_pending_tool_confirmation(self, session_id: str):
-        return self.pending_confirmations.pop(session_id)
+    def pop_pending_tool_confirmation(self, session_id: str, **scope):
+        return self.pending_confirmations.pop(session_id, **scope)
 
-    def consume_pending_tool_confirmation(self, session_id: str, *, user_key: str | None = None):
-        item = self.pending_confirmations.consume(session_id, user_key=user_key)
+    def consume_pending_tool_confirmation(self, session_id: str, *, user_key: str | None = None, **scope):
+        item = self.pending_confirmations.consume(session_id, user_key=user_key, **scope)
         if item is not None and self.realtime_bus is not None:
             try:
                 self.realtime_bus.publish("confirmation_resolved", session_id=session_id, user_key=item.get("user_key"), decision="confirm")
@@ -76,8 +77,8 @@ class Gateway:
                 pass
         return item
 
-    def cancel_pending_tool_confirmation(self, session_id: str, *, user_key: str | None = None) -> bool:
-        ok = self.pending_confirmations.cancel(session_id, user_key=user_key)
+    def cancel_pending_tool_confirmation(self, session_id: str, *, user_key: str | None = None, **scope) -> bool:
+        ok = self.pending_confirmations.cancel(session_id, user_key=user_key, **scope)
         if ok and self.realtime_bus is not None:
             try:
                 self.realtime_bus.publish("confirmation_resolved", session_id=session_id, user_key=user_key, decision="cancel")
@@ -85,11 +86,11 @@ class Gateway:
                 pass
         return ok
 
-    def clear_pending_tool_confirmation(self, session_id: str) -> bool:
-        return self.pending_confirmations.clear(session_id)
+    def clear_pending_tool_confirmation(self, session_id: str, **scope) -> bool:
+        return self.pending_confirmations.clear(session_id, **scope)
 
-    def reset_pending_tool_confirmations(self, session_id: str) -> bool:
-        return self.pending_confirmations.reset_session(session_id)
+    def reset_pending_tool_confirmations(self, session_id: str, **scope) -> bool:
+        return self.pending_confirmations.reset_session(session_id, **scope)
 
     def invalidate_pending_confirmation_for_agent_change(self, session_id: str, next_agent_id: str | None) -> bool:
         current_agent = getattr(getattr(self.router, "_session_agent", {}), "get", lambda *_: None)(session_id)
@@ -234,24 +235,70 @@ class Gateway:
         )
         return {"agents": agents, "policies": policies}
 
-    def effective_user_key(self, channel_user_key: str) -> str:
+    def effective_user_key(
+        self,
+        channel_user_key: str,
+        *,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> str:
         if self.identity is not None:
-            return self.identity.resolve(channel_user_key) or channel_user_key
-        global_key = self.audit.get_identity(channel_user_key)
+            return self.identity.resolve(
+                channel_user_key,
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+            ) or channel_user_key
+        global_key = self.audit.get_identity(channel_user_key, tenant_id=tenant_id, workspace_id=workspace_id)
         return global_key or channel_user_key
 
-    def has_identity_link(self, channel_user_key: str) -> bool:
-        return self.effective_user_key(channel_user_key) != channel_user_key
+    def has_identity_link(
+        self,
+        channel_user_key: str,
+        *,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> bool:
+        return self.effective_user_key(
+            channel_user_key,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        ) != channel_user_key
 
-    def link_hint(self, channel_user_key: str) -> str:
-        if self.has_identity_link(channel_user_key):
+    def link_hint(
+        self,
+        channel_user_key: str,
+        *,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> str:
+        if self.has_identity_link(
+            channel_user_key,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        ):
             return ""
         return "\n\n💡 Puedes vincular tu cuenta con /link <tu_nombre>."
 
-    def derive_session_id(self, msg: InboundMessage, user_key: str) -> str:
+    def derive_session_id(
+        self,
+        msg: InboundMessage,
+        user_key: str,
+        *,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> str:
         if msg.session_id is not None and str(msg.session_id).strip():
             return str(msg.session_id).strip()
         ch = (msg.channel or "http").strip().lower()
+        tenancy_cfg = getattr(self.settings, "tenancy", None)
+        tenancy_enabled = bool(tenancy_cfg and getattr(tenancy_cfg, "enabled", False))
         if ch == "telegram":
             md = msg.metadata or {}
             chat_id = md.get("chat_id")
@@ -262,8 +309,24 @@ class Gateway:
             if chat_id_int is None:
                 _, from_id = telegram_ids_from_msg(msg)
                 chat_id_int = from_id
+            if tenancy_enabled:
+                return build_scoped_session_id(
+                    prefix="tg",
+                    user_key=f"{chat_id_int}:{user_key}",
+                    tenant_id=tenant_id,
+                    workspace_id=workspace_id,
+                    environment=environment,
+                )
             return f"tg-{chat_id_int}-{user_key}"
         prefix = str((self.settings.runtime.default_session_prefix or {}).get(ch, ch))
+        if tenancy_enabled:
+            return build_scoped_session_id(
+                prefix=prefix,
+                user_key=user_key,
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+            )
         return f"{prefix}-{user_key}"
 
     def is_telegram_allowed(self, chat_id: int | None, from_id: int | None) -> bool:

@@ -92,6 +92,142 @@ def build_admin_router() -> APIRouter:
         return {"ok": True, "items": items}
 
 
+    @router.get("/admin/openclaw/runtimes")
+    def broker_admin_openclaw_runtimes(
+        request: Request,
+        limit: int = Query(default=100, ge=1, le=300),
+        status: str | None = Query(default=None),
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        target_scope = {
+            "tenant_id": tenant_id or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or auth_ctx.get("workspace_id"),
+            "environment": environment or auth_ctx.get("environment"),
+        }
+        try:
+            AuthService.validate_target_scope(auth_ctx, **target_scope)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        response = AdminService().list_openclaw_runtimes(gw, limit=limit, status=status, **target_scope)
+        audit_sensitive(gw, action="admin_openclaw_runtimes", auth_ctx=auth_ctx, status="ok", details={"count": len(response.get("items", [])), "status": status})
+        return response
+
+    @router.post("/admin/openclaw/runtimes")
+    async def broker_admin_openclaw_register_runtime(request: Request):
+        gw, auth_ctx = require_permission(request, "admin.write")
+        require_csrf(request, auth_ctx)
+        payload = await request.json()
+        target_scope = {
+            "tenant_id": payload.get("tenant_id") or auth_ctx.get("tenant_id"),
+            "workspace_id": payload.get("workspace_id") or auth_ctx.get("workspace_id"),
+            "environment": payload.get("environment") or auth_ctx.get("environment"),
+        }
+        try:
+            AuthService.validate_target_scope(auth_ctx, **target_scope)
+            response = AdminService().register_openclaw_runtime(
+                gw,
+                actor=str(payload.get("actor") or auth_ctx.get("username") or "broker-admin"),
+                name=str(payload.get("name") or ""),
+                base_url=str(payload.get("base_url") or ""),
+                transport=str(payload.get("transport") or "http"),
+                auth_secret_ref=str(payload.get("auth_secret_ref") or ""),
+                capabilities=list(payload.get("capabilities") or []),
+                allowed_agents=list(payload.get("allowed_agents") or []),
+                metadata=dict(payload.get("metadata") or {}),
+                runtime_id=payload.get("runtime_id"),
+                **target_scope,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        audit_sensitive(gw, action="admin_openclaw_runtime_register", auth_ctx=auth_ctx, status="ok", details={"runtime_id": response.get("runtime", {}).get("runtime_id")})
+        return response
+
+    @router.get("/admin/openclaw/runtimes/{runtime_id}")
+    def broker_admin_openclaw_runtime_detail(
+        runtime_id: str,
+        request: Request,
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        target_scope = {
+            "tenant_id": tenant_id or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or auth_ctx.get("workspace_id"),
+            "environment": environment or auth_ctx.get("environment"),
+        }
+        try:
+            AuthService.validate_target_scope(auth_ctx, **target_scope)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        response = AdminService().get_openclaw_runtime(gw, runtime_id=runtime_id, **target_scope)
+        audit_sensitive(gw, action="admin_openclaw_runtime_detail", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "missing", target=runtime_id)
+        return response
+
+    @router.get("/admin/openclaw/dispatches")
+    def broker_admin_openclaw_dispatches(
+        request: Request,
+        runtime_id: str | None = Query(default=None),
+        action: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        limit: int = Query(default=100, ge=1, le=300),
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        target_scope = {
+            "tenant_id": tenant_id or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or auth_ctx.get("workspace_id"),
+            "environment": environment or auth_ctx.get("environment"),
+        }
+        try:
+            AuthService.validate_target_scope(auth_ctx, **target_scope)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        response = AdminService().list_openclaw_dispatches(gw, runtime_id=runtime_id, action=action, status=status, limit=limit, **target_scope)
+        audit_sensitive(gw, action="admin_openclaw_dispatches", auth_ctx=auth_ctx, status="ok", details={"count": len(response.get("items", [])), "runtime_id": runtime_id, "dispatch_status": status})
+        return response
+
+    @router.post("/admin/openclaw/runtimes/{runtime_id}/dispatch")
+    async def broker_admin_openclaw_dispatch(runtime_id: str, request: Request):
+        gw, auth_ctx = require_permission(request, "admin.write")
+        require_csrf(request, auth_ctx)
+        payload = await request.json()
+        target_scope = {
+            "tenant_id": payload.get("tenant_id") or auth_ctx.get("tenant_id"),
+            "workspace_id": payload.get("workspace_id") or auth_ctx.get("workspace_id"),
+            "environment": payload.get("environment") or auth_ctx.get("environment"),
+        }
+        try:
+            AuthService.validate_target_scope(auth_ctx, **target_scope)
+            response = AdminService().dispatch_openclaw_runtime(
+                gw,
+                runtime_id=runtime_id,
+                actor=str(payload.get("actor") or auth_ctx.get("username") or "broker-admin"),
+                action=str(payload.get("action") or ""),
+                payload=dict(payload.get("payload") or {}),
+                agent_id=str(payload.get("agent_id") or ""),
+                user_role=str(auth_ctx.get("role") or "operator"),
+                user_key=str(auth_ctx.get("user_key") or auth_ctx.get("username") or ""),
+                session_id=str(payload.get("session_id") or "admin"),
+                dry_run=bool(payload.get("dry_run", False)),
+                **target_scope,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = response.get("error") or response.get("dispatch", {}).get("error_text") or ""
+        audit_sensitive(gw, action="admin_openclaw_dispatch", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "error", target=runtime_id, details={"action": payload.get("action"), "dispatch_id": response.get("dispatch", {}).get("dispatch_id"), "error": detail})
+        return response
+
+
     @router.get("/admin/tenancy")
     def broker_admin_tenancy(request: Request):
         gw, auth_ctx = require_permission(request, "admin.read")
@@ -1041,6 +1177,116 @@ def build_admin_router() -> APIRouter:
         audit_sensitive(gw, action="admin_canvas_overlays", auth_ctx=auth_ctx, status="ok", target=canvas_id, details={"selected_node_id": selected_node_id, "state_key": state_key})
         return response
 
+    @router.get("/admin/canvas/documents/{canvas_id}/views/operational")
+    def broker_admin_canvas_operational_views(
+        canvas_id: str,
+        request: Request,
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        response = AdminService().list_canvas_operational_views(
+            gw,
+            canvas_id=canvas_id,
+            tenant_id=tenant_id or auth_ctx.get("tenant_id"),
+            workspace_id=workspace_id or auth_ctx.get("workspace_id"),
+            environment=environment or auth_ctx.get("environment"),
+        )
+        audit_sensitive(gw, action="admin_canvas_operational_views", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "missing", target=canvas_id)
+        return response
+
+    @router.get("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/inspector")
+    def broker_admin_canvas_node_inspector(
+        canvas_id: str,
+        node_id: str,
+        request: Request,
+        state_key: str = Query(default='default'),
+        limit: int = Query(default=50, ge=1, le=200),
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        response = AdminService().inspect_canvas_node(
+            gw,
+            canvas_id=canvas_id,
+            node_id=node_id,
+            state_key=state_key,
+            limit=limit,
+            tenant_id=tenant_id or auth_ctx.get("tenant_id"),
+            workspace_id=workspace_id or auth_ctx.get("workspace_id"),
+            environment=environment or auth_ctx.get("environment"),
+        )
+        audit_sensitive(gw, action="admin_canvas_node_inspector", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "missing", target=node_id, details={"canvas_id": canvas_id})
+        return response
+
+    @router.get("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/timeline")
+    def broker_admin_canvas_node_timeline(
+        canvas_id: str,
+        node_id: str,
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=200),
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        response = AdminService().canvas_node_timeline(
+            gw,
+            canvas_id=canvas_id,
+            node_id=node_id,
+            limit=limit,
+            tenant_id=tenant_id or auth_ctx.get("tenant_id"),
+            workspace_id=workspace_id or auth_ctx.get("workspace_id"),
+            environment=environment or auth_ctx.get("environment"),
+        )
+        audit_sensitive(gw, action="admin_canvas_node_timeline", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "missing", target=node_id, details={"canvas_id": canvas_id})
+        return response
+
+    @router.post("/admin/canvas/documents/{canvas_id}/nodes/{node_id}/actions/{action}")
+    async def broker_admin_canvas_node_action(
+        canvas_id: str,
+        node_id: str,
+        action: str,
+        request: Request,
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.write")
+        require_csrf(request, auth_ctx)
+        payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
+        target_scope = {
+            "tenant_id": tenant_id or payload.get("tenant_id") or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or payload.get("workspace_id") or auth_ctx.get("workspace_id"),
+            "environment": environment or payload.get("environment") or auth_ctx.get("environment"),
+        }
+        actor = str(payload.get('actor') or auth_ctx.get('user_key') or auth_ctx.get('username') or 'system')
+        try:
+            response = AdminService().execute_canvas_node_action(
+                gw,
+                canvas_id=canvas_id,
+                node_id=node_id,
+                action=action,
+                actor=actor,
+                reason=str(payload.get('reason') or ''),
+                payload=dict(payload.get('payload') or {}),
+                user_role=str(auth_ctx.get('role') or 'operator'),
+                user_key=str(auth_ctx.get('user_key') or actor),
+                session_id=str(payload.get('session_id') or f'canvas:{canvas_id}'),
+                **target_scope,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            status_code = 409 if 'claimed' in str(exc).lower() else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        audit_sensitive(gw, action='admin_canvas_node_action', auth_ctx=auth_ctx, status='ok' if response.get('ok') else 'error', target=node_id, details={'canvas_id': canvas_id, 'action': action, 'actor': actor})
+        return response
+
     @router.get("/admin/canvas/documents/{canvas_id}/events")
     def broker_admin_canvas_events(
         canvas_id: str,
@@ -1562,13 +1808,53 @@ def build_admin_router() -> APIRouter:
         }
         actor = str(payload.get('actor') or auth_ctx.get('user_key') or auth_ctx.get('username') or 'system')
         try:
-            response = AdminService().operator_console_approval_action(gw, approval_id=approval_id, action=action, actor=actor, reason=str(payload.get('reason') or ''), **target_scope)
+            response = AdminService().operator_console_approval_action(gw, approval_id=approval_id, action=action, actor=actor, reason=str(payload.get('reason') or ''), auth_ctx=auth_ctx, **target_scope)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             status_code = 409 if 'claimed' in str(exc).lower() else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
         audit_sensitive(gw, action='admin_operator_console_approval_action', auth_ctx=auth_ctx, status='ok' if response.get('ok') else 'error', target=approval_id, details={'action': action, 'actor': actor})
+        return response
+
+    @router.get("/admin/secrets/summary")
+    def broker_admin_secret_governance_summary(
+        request: Request,
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+        limit: int = Query(default=100, ge=1, le=500),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        target_scope = {
+            "tenant_id": tenant_id or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or auth_ctx.get("workspace_id"),
+            "environment": environment or auth_ctx.get("environment"),
+        }
+        response = AdminService().secret_governance_summary(gw, limit=limit, **target_scope)
+        audit_sensitive(gw, action="admin_secret_governance_summary", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "error", details={"total_events": (response.get("summary") or {}).get("total_events", 0), "denied_events": (response.get("summary") or {}).get("denied_events", 0)})
+        return response
+
+    @router.get("/admin/secrets/timeline")
+    def broker_admin_secret_governance_timeline(
+        request: Request,
+        q: str | None = Query(default=None),
+        ref: str | None = Query(default=None),
+        tool_name: str | None = Query(default=None),
+        outcome: str | None = Query(default=None),
+        tenant_id: str | None = Query(default=None),
+        workspace_id: str | None = Query(default=None),
+        environment: str | None = Query(default=None),
+        limit: int = Query(default=100, ge=1, le=500),
+    ):
+        gw, auth_ctx = require_permission(request, "admin.read")
+        target_scope = {
+            "tenant_id": tenant_id or auth_ctx.get("tenant_id"),
+            "workspace_id": workspace_id or auth_ctx.get("workspace_id"),
+            "environment": environment or auth_ctx.get("environment"),
+        }
+        response = AdminService().secret_governance_timeline(gw, q=q, ref=ref, tool_name=tool_name, outcome=outcome, limit=limit, **target_scope)
+        audit_sensitive(gw, action="admin_secret_governance_timeline", auth_ctx=auth_ctx, status="ok" if response.get("ok") else "error", details={"items": len(response.get("items") or []), "ref": ref, "tool_name": tool_name, "outcome": outcome})
         return response
 
     @router.get("/admin/secrets/catalog")

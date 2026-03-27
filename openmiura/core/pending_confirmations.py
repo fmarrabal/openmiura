@@ -5,6 +5,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from openmiura.core.tenancy.scope import normalize_scope, scope_matches
+
 
 @dataclass(slots=True)
 class PendingToolConfirmation:
@@ -17,6 +19,9 @@ class PendingToolConfirmation:
     args: dict[str, Any]
     created_at: float
     expires_at: float
+    tenant_id: str | None = None
+    workspace_id: str | None = None
+    environment: str | None = None
 
     def is_expired(self, now: float | None = None) -> bool:
         current = time.time() if now is None else float(now)
@@ -33,6 +38,9 @@ class PendingToolConfirmation:
             "args": dict(self.args or {}),
             "created_at": float(self.created_at),
             "expires_at": float(self.expires_at),
+            "tenant_id": self.tenant_id,
+            "workspace_id": self.workspace_id,
+            "environment": self.environment,
         }
 
 
@@ -59,6 +67,23 @@ class PendingToolConfirmationStore:
             return None
         return item
 
+    def _matches_scope(
+        self,
+        item: PendingToolConfirmation | None,
+        *,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> bool:
+        if item is None:
+            return False
+        expected = {
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+            "environment": environment,
+        }
+        return scope_matches(item.to_payload(), expected)
+
     def set(
         self,
         session_id: str,
@@ -71,6 +96,9 @@ class PendingToolConfirmationStore:
         args: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None,
         ttl_s: int | None = None,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
     ) -> dict[str, Any]:
         data = dict(payload or {})
         if user_key is None:
@@ -83,6 +111,11 @@ class PendingToolConfirmationStore:
             channel = data.get("channel")
         if channel_user_id is None:
             channel_user_id = data.get("channel_user_id")
+        tenant_id, workspace_id, environment = normalize_scope(
+            tenant_id=tenant_id if tenant_id is not None else data.get("tenant_id"),
+            workspace_id=workspace_id if workspace_id is not None else data.get("workspace_id"),
+            environment=environment if environment is not None else data.get("environment"),
+        )
 
         ttl = self.default_ttl_s if ttl_s is None else max(1, int(ttl_s))
         now = time.time()
@@ -96,27 +129,36 @@ class PendingToolConfirmationStore:
             args=dict(args or {}),
             created_at=now,
             expires_at=now + ttl,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
         )
         with self._lock:
             self._items[session_id] = item
         return item.to_payload()
 
-    def get(self, session_id: str) -> dict[str, Any] | None:
+    def get(self, session_id: str, **scope) -> dict[str, Any] | None:
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return None
             return None if item is None else item.to_payload()
 
-    def pop(self, session_id: str) -> dict[str, Any] | None:
+    def pop(self, session_id: str, **scope) -> dict[str, Any] | None:
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return None
             if item is None:
                 return None
             self._items.pop(session_id, None)
             return item.to_payload()
 
-    def consume(self, session_id: str, *, user_key: str | None = None) -> dict[str, Any] | None:
+    def consume(self, session_id: str, *, user_key: str | None = None, **scope) -> dict[str, Any] | None:
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return None
             if item is None:
                 return None
             if user_key is not None and item.user_key != user_key:
@@ -124,13 +166,18 @@ class PendingToolConfirmationStore:
             self._items.pop(session_id, None)
             return item.to_payload()
 
-    def clear(self, session_id: str) -> bool:
-        with self._lock:
-            return self._items.pop(session_id, None) is not None
-
-    def cancel(self, session_id: str, *, user_key: str | None = None) -> bool:
+    def clear(self, session_id: str, **scope) -> bool:
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return False
+            return self._items.pop(session_id, None) is not None
+
+    def cancel(self, session_id: str, *, user_key: str | None = None, **scope) -> bool:
+        with self._lock:
+            item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return False
             if item is None:
                 return False
             if user_key is not None and item.user_key != user_key:
@@ -138,24 +185,28 @@ class PendingToolConfirmationStore:
             self._items.pop(session_id, None)
             return True
 
-    def reset_session(self, session_id: str) -> bool:
-        return self.clear(session_id)
+    def reset_session(self, session_id: str, **scope) -> bool:
+        return self.clear(session_id, **scope)
 
-    def invalidate_agent(self, session_id: str, agent_id: str | None) -> int:
+    def invalidate_agent(self, session_id: str, agent_id: str | None, **scope) -> int:
         if not agent_id:
             return 0
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return 0
             if item is None or item.agent_id != agent_id:
                 return 0
             self._items.pop(session_id, None)
             return 1
 
-    def invalidate_if_agent_changes(self, session_id: str, next_agent_id: str | None) -> bool:
+    def invalidate_if_agent_changes(self, session_id: str, next_agent_id: str | None, **scope) -> bool:
         if not next_agent_id:
             return False
         with self._lock:
             item = self._purge_if_expired_locked(session_id)
+            if not self._matches_scope(item, **scope):
+                return False
             if item is None:
                 return False
             if str(item.agent_id).strip() == str(next_agent_id).strip():
@@ -171,12 +222,18 @@ class PendingToolConfirmationStore:
                 self._items.pop(sid, None)
             return len(expired_sessions)
 
-    def list_items(self, *, user_key: str | None = None) -> list[dict[str, Any]]:
+    def list_items(self, *, user_key: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
             self.cleanup_expired()
             items = [item.to_payload() for item in self._items.values()]
         if user_key is not None:
             items = [item for item in items if item.get("user_key") == user_key]
+        items = [
+            item for item in items if scope_matches(
+                item,
+                {"tenant_id": tenant_id, "workspace_id": workspace_id, "environment": environment},
+            )
+        ]
         items.sort(key=lambda item: float(item.get("created_at") or 0.0), reverse=True)
         return items
 

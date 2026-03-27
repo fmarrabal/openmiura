@@ -186,6 +186,71 @@ class AuthService:
         return out
 
     @classmethod
+    def can_manage_auth(cls, auth_ctx: dict[str, Any] | AuthContext) -> bool:
+        return cls.has_permission(auth_ctx, "auth.manage") or cls.is_admin(auth_ctx)
+
+    @classmethod
+    def role_satisfies(
+        cls,
+        gw,
+        auth_ctx: dict[str, Any] | AuthContext,
+        required_role: str | None,
+    ) -> bool:
+        required = str(required_role or "").strip().lower()
+        if required == "approver":
+            required = "operator"
+        if not required:
+            return True
+        ctx = auth_ctx.as_dict() if isinstance(auth_ctx, AuthContext) else dict(auth_ctx)
+        ctx = cls.finalize_scope_access(gw, ctx)
+        if cls.is_admin(ctx):
+            return True
+        actor_role = str(ctx.get("role") or "user").strip().lower() or "user"
+        if actor_role == required:
+            return True
+        lineage = cls._role_lineage(gw, ctx, actor_role)
+        return required in lineage
+
+    @classmethod
+    def validate_role_assignment(
+        cls,
+        gw,
+        auth_ctx: dict[str, Any] | AuthContext,
+        *,
+        role: str,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> dict[str, Any]:
+        target_role = str(role or "user").strip().lower() or "user"
+        ctx = auth_ctx.as_dict() if isinstance(auth_ctx, AuthContext) else dict(auth_ctx)
+        if tenant_id is not None:
+            ctx["tenant_id"] = tenant_id
+        if workspace_id is not None:
+            ctx["workspace_id"] = workspace_id
+        if environment is not None:
+            ctx["environment"] = environment
+        ctx = cls.finalize_scope_access(gw, ctx)
+        actor_role = str(ctx.get("role") or "user").strip().lower() or "user"
+        scope_access = str(ctx.get("scope_access") or "scoped")
+
+        if cls.is_admin(ctx):
+            return ctx
+        if not cls.can_manage_auth(ctx):
+            raise PermissionError("Missing permission: auth.manage")
+        if target_role == "admin":
+            raise PermissionError("Cannot assign admin role")
+        if target_role == "tenant_admin" and scope_access != "tenant":
+            raise PermissionError("Cannot assign tenant_admin role")
+        if target_role == "workspace_admin" and actor_role not in {"workspace_admin", "tenant_admin"}:
+            raise PermissionError("Cannot assign workspace_admin role")
+        if target_role == "operator" and actor_role not in {"workspace_admin", "tenant_admin", "admin"}:
+            raise PermissionError("Cannot assign operator role")
+        if target_role not in ROLE_PERMISSIONS:
+            raise PermissionError(f"Unknown role: {target_role}")
+        return ctx
+
+    @classmethod
     def validate_target_scope(
         cls,
         auth_ctx: dict[str, Any] | AuthContext,
