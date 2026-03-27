@@ -66,7 +66,7 @@ Additional phase 8/9 coverage re-run after the fix: ✅
 ## Secret scan note
 
 A lightweight regex scan found only an intentional fake fixture in tests:
-- `tests/test_phase7_secret_governance.py` with a synthetic `ghp_...` token pattern
+- `tests/test_phase7_secret_governance.py` with a synthetic GitHub token-like test value token pattern
 
 No production secret-like value was found in repository files selected for publication.
 

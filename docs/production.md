@@ -97,3 +97,9 @@ docker compose --profile observability up --build -d
 - reverse proxy con TLS probado
 - rate limiting verificado
 - expiración/rotación de sesiones y tokens configurada
+
+
+## Referencias alpha
+
+- [Self-hosted Enterprise Alpha](enterprise_alpha.md)
+- [Enterprise Alpha release checklist](alpha_release_checklist.md)

@@ -21,3 +21,6 @@
 - [CI/CD](ci_cd.md)
 - [Ejemplos de configuración de canales](channel-config-examples.md)
 - [Runbooks de alertas](runbooks/alerts.md)
+
+- [Self-hosted Enterprise Alpha](enterprise_alpha.md)
+- [Checklist de release alpha](alpha_release_checklist.md)

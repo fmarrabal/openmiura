@@ -91,14 +91,14 @@ secrets:
 ''',
         encoding='utf-8',
     )
-    monkeypatch.setenv('OPENMIURA_GITHUB_PAT', 'ghp_super_secret')
+    monkeypatch.setenv('OPENMIURA_GITHUB_PAT', 'synthetic_test_token')
 
     settings = load_settings(str(cfg))
 
     assert settings.secrets is not None
     assert settings.secrets.enabled is True
     ref = settings.secrets.refs['github_pat']
-    assert ref.value == 'ghp_super_secret'
+    assert ref.value == 'synthetic_test_token'
     assert ref.allowed_tools == ['web_fetch']
     assert ref.allowed_roles == ['admin']
     assert ref.allowed_tenants == ['acme']
@@ -112,7 +112,7 @@ def test_secret_broker_enforces_scope_and_audits(audit_store: AuditStore) -> Non
             refs={
                 'github_pat': SecretRefSettings(
                     ref='github_pat',
-                    value='ghp_super_secret',
+                    value='synthetic_test_token',
                     allowed_tools=['web_fetch'],
                     allowed_roles=['admin'],
                     allowed_tenants=['acme'],
@@ -136,7 +136,7 @@ def test_secret_broker_enforces_scope_and_audits(audit_store: AuditStore) -> Non
         environment='prod',
         domain='https://api.github.com/repos/openai/openai-python',
     )
-    assert value == 'ghp_super_secret'
+    assert value == 'synthetic_test_token'
 
     events = audit_store.get_recent_events(limit=5, channel='security')
     assert events
