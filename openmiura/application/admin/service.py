@@ -821,6 +821,7 @@ class AdminService:
         domain: str | None = None,
         extra: dict[str, Any] | None = None,
         tool_name: str | None = None,
+    outcome: str | None = None,
     ) -> dict[str, Any]:
         policy = getattr(gw, "policy", None)
         if policy is None or not hasattr(policy, "explain_request"):
