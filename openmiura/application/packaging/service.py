@@ -95,7 +95,6 @@ class PackagingHardeningService:
         workflows_dir = root / '.github' / 'workflows'
 
         files = {
-<<<<<<< HEAD
             'desktop': [
                 str(path.relative_to(root)).replace('\\', '/')
                 for path in sorted(desktop_dir.rglob('*'))
@@ -116,12 +115,6 @@ class PackagingHardeningService:
                 for path in sorted(workflows_dir.glob('*.yml'))
                 if path.is_file()
             ],
-=======
-            'desktop': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(desktop_dir.rglob('*')) if path.is_file()],
-            'mobile': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(mobile_dir.rglob('*')) if path.is_file()],
-            'quickstarts': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(docs_dir.glob('*.md')) if path.is_file()],
-            'workflows': [str(path.relative_to(root)).replace('\\', '/') for path in sorted(workflows_dir.glob('*.yml')) if path.is_file()],
->>>>>>> origin/main
             'release': [
                 rel
                 for rel in [
@@ -134,18 +127,13 @@ class PackagingHardeningService:
                 if (root / rel).exists()
             ],
         }
-<<<<<<< HEAD
 
         release = self.release_summary(gw)
 
-=======
-        release = self.release_summary(gw)
->>>>>>> origin/main
         return {
             'ok': True,
             'phase': self.PHASE_LABEL,
             'targets': {
-<<<<<<< HEAD
                 'desktop': {
                     'enabled': desktop_dir.exists(),
                     'wrapper': 'electron',
@@ -165,11 +153,6 @@ class PackagingHardeningService:
                     'artifact_manifest': True,
                     'hash_locked': True,
                 },
-=======
-                'desktop': {'enabled': desktop_dir.exists(), 'wrapper': 'electron', 'microphone_permission': 'self', 'deep_links': True, 'notifications': True},
-                'mobile': {'enabled': mobile_dir.exists(), 'wrapper': 'capacitor', 'microphone_permission': 'self', 'deep_links': True, 'notifications': True},
-                'reproducible_ci': {'enabled': (workflows_dir / 'package-reproducible.yml').exists(), 'artifact_manifest': True, 'hash_locked': True},
->>>>>>> origin/main
                 'release_alpha': release.get('release', {}),
             },
             'files': files,
@@ -179,16 +162,11 @@ class PackagingHardeningService:
 
     def release_summary(self, gw: AdminGatewayLike | None = None) -> dict[str, Any]:
         root = self._project_root()
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
         checks = {
             'manifest_in': (root / 'MANIFEST.in').exists(),
             'release_build_script': (root / 'scripts' / 'build_release_artifacts.py').exists(),
             'release_verify_script': (root / 'scripts' / 'verify_release_artifacts.py').exists(),
             'release_workflow': (root / '.github' / 'workflows' / 'release.yml').exists(),
-<<<<<<< HEAD
             'reproducible_workflow': (
                 root / '.github' / 'workflows' / 'package-reproducible.yml'
             ).exists(),
@@ -197,11 +175,6 @@ class PackagingHardeningService:
             ).exists(),
         }
 
-=======
-            'reproducible_workflow': (root / '.github' / 'workflows' / 'package-reproducible.yml').exists(),
-            'local_setup_action': (root / '.github' / 'actions' / 'setup-openmiura' / 'action.yml').exists(),
-        }
->>>>>>> origin/main
         return {
             'ok': all(checks.values()),
             'phase': self.PHASE_LABEL,
@@ -393,7 +366,6 @@ class PackagingHardeningService:
         expected = {item['path']: item['sha256'] for item in expected_files}
         actual = {item['path']: item['sha256'] for item in current['files']}
 
-<<<<<<< HEAD
         missing = sorted(item_path for item_path in expected if item_path not in actual)
         changed = sorted(
             item_path
@@ -413,8 +385,6 @@ class PackagingHardeningService:
             'actual_count': len(actual),
         }
 
-=======
->>>>>>> origin/main
     def generate_release_manifest(
         self,
         *,
@@ -425,17 +395,12 @@ class PackagingHardeningService:
     ) -> dict[str, Any]:
         dist = Path(dist_dir).resolve()
         dist.mkdir(parents=True, exist_ok=True)
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
         artifacts: list[dict[str, Any]] = []
         for path in sorted(dist.iterdir()):
             if not path.is_file():
                 continue
             if path.name in {self.RELEASE_MANIFEST_NAME, self.RELEASE_CHECKSUMS_NAME}:
                 continue
-<<<<<<< HEAD
 
             sha = hashlib.sha256(path.read_bytes()).hexdigest()
             artifacts.append(
@@ -465,20 +430,6 @@ class PackagingHardeningService:
             kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present
         ]
 
-=======
-            sha = hashlib.sha256(path.read_bytes()).hexdigest()
-            artifacts.append({
-                'filename': path.name,
-                'sha256': sha,
-                'size': path.stat().st_size,
-                'kind': self._classify_release_artifact(path.name),
-            })
-        checksums_path = dist / self.RELEASE_CHECKSUMS_NAME
-        checksum_lines = [f"{item['sha256']}  {item['filename']}" for item in artifacts]
-        checksums_path.write_text('\n'.join(checksum_lines) + ('\n' if checksum_lines else ''), encoding='utf-8')
-        kinds_present = sorted({str(item.get('kind') or '') for item in artifacts if str(item.get('kind') or '')})
-        missing_required = [kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present]
->>>>>>> origin/main
         notes_path = dist / release_notes_name
         manifest = {
             'tag': str(tag or '').strip(),
@@ -491,7 +442,6 @@ class PackagingHardeningService:
             'missing_required': missing_required,
             'artifact_count': len(artifacts),
         }
-<<<<<<< HEAD
 
         manifest_path = dist / self.RELEASE_MANIFEST_NAME
         manifest_path.write_text(
@@ -499,10 +449,6 @@ class PackagingHardeningService:
             encoding='utf-8',
         )
 
-=======
-        manifest_path = dist / self.RELEASE_MANIFEST_NAME
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8')
->>>>>>> origin/main
         return {
             'ok': not missing_required,
             'manifest_path': str(manifest_path),
@@ -516,7 +462,6 @@ class PackagingHardeningService:
         dist = Path(dist_dir).resolve()
         manifest_path = dist / self.RELEASE_MANIFEST_NAME
         checksums_path = dist / self.RELEASE_CHECKSUMS_NAME
-<<<<<<< HEAD
 
         missing: list[str] = []
         changed: list[str] = []
@@ -537,56 +482,30 @@ class PackagingHardeningService:
         payload = json.loads(manifest_path.read_text(encoding='utf-8'))
         artifacts = list(payload.get('artifacts') or [])
 
-=======
-        missing: list[str] = []
-        changed: list[str] = []
-        if not manifest_path.exists():
-            missing.append(self.RELEASE_MANIFEST_NAME)
-            return {'ok': False, 'dist_dir': str(dist), 'missing': missing, 'changed': changed, 'missing_required': list(self.RELEASE_REQUIRED_KINDS)}
-        if not checksums_path.exists():
-            missing.append(self.RELEASE_CHECKSUMS_NAME)
-        payload = json.loads(manifest_path.read_text(encoding='utf-8'))
-        artifacts = list(payload.get('artifacts') or [])
->>>>>>> origin/main
         checksum_map: dict[str, str] = {}
         if checksums_path.exists():
             for raw in checksums_path.read_text(encoding='utf-8').splitlines():
                 line = raw.strip()
                 if not line:
                     continue
-<<<<<<< HEAD
                 digest, _, filename = line.partition(' ')
                 if digest and filename:
                     checksum_map[filename] = digest
 
-=======
-                digest, _, filename = line.partition('  ')
-                if digest and filename:
-                    checksum_map[filename] = digest
->>>>>>> origin/main
         kinds_present: set[str] = set()
         for item in artifacts:
             filename = str(item.get('filename') or '')
             if not filename:
                 continue
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
             path = dist / filename
             if not path.exists():
                 missing.append(filename)
                 continue
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
             current_sha = hashlib.sha256(path.read_bytes()).hexdigest()
             if current_sha != str(item.get('sha256') or ''):
                 changed.append(filename)
             elif checksum_map.get(filename) not in {None, current_sha}:
                 changed.append(filename)
-<<<<<<< HEAD
 
             kinds_present.add(str(item.get('kind') or ''))
 
@@ -594,10 +513,6 @@ class PackagingHardeningService:
             kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present
         ]
 
-=======
-            kinds_present.add(str(item.get('kind') or ''))
-        missing_required = [kind for kind in self.RELEASE_REQUIRED_KINDS if kind not in kinds_present]
->>>>>>> origin/main
         return {
             'ok': not missing and not changed and not missing_required,
             'dist_dir': str(dist),
@@ -612,10 +527,6 @@ class PackagingHardeningService:
     def _classify_release_artifact(self, filename: str) -> str:
         name = str(filename or '').strip()
         lower = name.lower()
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
         if lower.endswith('.whl'):
             return 'wheel'
         if lower.endswith('.tar.gz'):
@@ -626,7 +537,6 @@ class PackagingHardeningService:
             return 'reproducible_bundle'
         if lower == 'release_notes.md':
             return 'release_notes'
-<<<<<<< HEAD
 
         return 'other'
 
@@ -635,11 +545,6 @@ class PackagingHardeningService:
         root: Path,
         include: list[str] | None = None,
     ) -> dict[str, Any]:
-=======
-        return 'other'
-
-    def _manifest_for_root(self, root: Path, include: list[str] | None = None) -> dict[str, Any]:
->>>>>>> origin/main
         selected = include or list(self.DEFAULT_REPRO_INCLUDE)
         files: list[dict[str, Any]] = []
 

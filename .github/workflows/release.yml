@@ -24,75 +24,10 @@ jobs:
         run: |
           python scripts/build_release_artifacts.py
 
-<<<<<<< HEAD
       - name: Verify release artifacts
         shell: bash
         run: |
           python scripts/verify_release_artifacts.py --dist-dir dist
-=======
-      - name: Set up Python and install local package
-        uses: ./.github/actions/setup-openmiura
-        with:
-          python-version: '3.11'
-          extras: dev
-          install-requirements: 'true'
-          pip-check: 'true'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install release-only build dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install build twine
-
-      - name: Fast validation before release
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m compileall -q app.py openmiura tests
-          node --check openmiura/ui/static/app.js
-          pytest -q
-
-      - name: Build Python distributions
-        shell: bash
-        env:
-          SOURCE_DATE_EPOCH: '1577836800'
-        run: |
-          set -euo pipefail
-          python -m build --sdist --wheel
-          python -m twine check dist/*
-
-      - name: Build reproducible package
-        shell: bash
-        env:
-          SOURCE_DATE_EPOCH: '1577836800'
-        run: |
-          set -euo pipefail
-          python scripts/reproducible_package.py \
-            --target "${{ steps.meta.outputs.target }}" \
-            --label "GitHub Release ${{ steps.meta.outputs.tag }}" \
-            --version "${{ steps.meta.outputs.version }}" \
-            --output-dir dist
-
-      - name: Prepare release notes
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            if [[ -n "${{ inputs.notes || '' }}" ]]; then
-              printf '%s\n\n' "${{ inputs.notes || '' }}"
-            fi
-            printf 'Release artifact summary for `%s`.\n\n' "${{ steps.meta.outputs.tag }}"
-            printf '%s\n' '- Python distributions: sdist + wheel'
-            printf '%s\n' "- Reproducible package: ${{ steps.meta.outputs.target }}"
-            printf '%s\n' '- Checksums: SHA256SUMS.txt'
-            printf '%s\n' '- Manifest: RELEASE_MANIFEST.json'
-          } > dist/RELEASE_NOTES.md
->>>>>>> origin/main
 
       - name: Build release manifest and checksums
         shell: bash

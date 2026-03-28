@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 include README.md
 include LICENSE
 include MANIFEST.in
@@ -15,29 +14,3 @@ recursive-include .github/actions *.yml
 global-exclude __pycache__ *.py[cod] .DS_Store
 prune .pytest_cache
 prune tests/__pycache__
-=======
-include LICENSE
-include README.md
-include SECURITY.md
-include PUBLIC_RELEASE_AUDIT.md
-include Dockerfile
-include docker-compose.yml
-include app.py
-include .env.example
-recursive-include openmiura *.py *.json *.yaml *.yml *.md *.js *.css *.html
-recursive-include configs *.yaml *.yml
-recursive-include docs *.md *.yml
-recursive-include packaging *
-recursive-include assets *
-recursive-include scripts *.py *.sh
-recursive-include docker *.sh
-recursive-include ops *.yml *.tmpl *.sh
-recursive-include skills *.yaml *.md
-recursive-include tests *.py
-recursive-include .github/workflows *.yml
-recursive-include .github/actions *.yml
-prune data
-prune dist
-prune reports
-global-exclude __pycache__ *.py[cod]
->>>>>>> origin/main

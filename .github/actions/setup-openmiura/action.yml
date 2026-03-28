@@ -1,5 +1,4 @@
 name: setup-openmiura
-<<<<<<< HEAD
 description: Set up Python, install dependencies and local package
 
 inputs:
@@ -11,34 +10,11 @@ inputs:
     description: Optional extras group to install
     required: false
     default: ""
-=======
-
-description: Set up Python and install the local openmiura package consistently for CI and release jobs.
-
-inputs:
-  python-version:
-    description: Python version to install
-    required: false
-    default: '3.11'
-  extras:
-    description: Optional extras to install with the local package, for example dev
-    required: false
-    default: 'dev'
-  install-requirements:
-    description: Whether to install requirements.txt when present
-    required: false
-    default: 'true'
-  pip-check:
-    description: Whether to run python -m pip check at the end of installation
-    required: false
-    default: 'true'
->>>>>>> origin/main
 
 runs:
   using: composite
   steps:
     - name: Set up Python
-<<<<<<< HEAD
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
@@ -61,40 +37,12 @@ runs:
         EXTRAS: ${{ inputs.extras }}
       run: |
         if [ -n "${EXTRAS}" ]; then
-=======
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ inputs.python-version }}
-        cache: pip
-
-    - name: Install local openmiura package
-      shell: bash
-      run: |
-        set -euo pipefail
-        python -m pip install --upgrade pip
-        EXTRAS="${{ inputs.extras }}"
-        if [[ -n "${EXTRAS}" ]]; then
->>>>>>> origin/main
           python -m pip install -e ".[${EXTRAS}]"
         else
           python -m pip install -e .
         fi
-<<<<<<< HEAD
 
     - name: Smoke check local package import
       shell: bash
       run: |
         python -c "import importlib; importlib.import_module('openmiura')"
-=======
-        if [[ "${{ inputs.install-requirements }}" == "true" && -f requirements.txt ]]; then
-          python -m pip install -r requirements.txt
-        fi
-        python - <<'PY'
-        import importlib
-        mod = importlib.import_module('openmiura')
-        print(mod.__file__)
-        PY
-        if [[ "${{ inputs.pip-check }}" == "true" ]]; then
-          python -m pip check
-        fi
->>>>>>> origin/main
