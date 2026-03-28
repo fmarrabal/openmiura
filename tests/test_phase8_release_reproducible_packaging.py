@@ -5,6 +5,7 @@ from pathlib import Path
 
 from openmiura.application.packaging import PackagingHardeningService
 
+<<<<<<< HEAD
 def test_manifest_in_exists() -> None:
     assert Path("MANIFEST.in").exists()
 
@@ -14,6 +15,9 @@ def test_packaging_service_has_release_methods() -> None:
     assert hasattr(svc, "generate_release_manifest")
     assert hasattr(svc, "verify_release_artifacts")
     
+=======
+
+>>>>>>> origin/main
 def test_phase8_release_manifest_and_verification(tmp_path: Path) -> None:
     dist = tmp_path / 'dist'
     dist.mkdir()

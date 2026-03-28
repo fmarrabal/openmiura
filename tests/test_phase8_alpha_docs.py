@@ -4,10 +4,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+<<<<<<< HEAD
 def test_enterprise_alpha_docs_exist() -> None:
     assert Path("docs/enterprise_alpha.md").exists()
     assert Path("docs/alpha_release_checklist.md").exists()
     
+=======
+
+>>>>>>> origin/main
 def test_enterprise_alpha_docs_cover_installation_risks_limitations_and_checklist() -> None:
     guide = (ROOT / 'docs/enterprise_alpha.md').read_text(encoding='utf-8')
     checklist = (ROOT / 'docs/alpha_release_checklist.md').read_text(encoding='utf-8')

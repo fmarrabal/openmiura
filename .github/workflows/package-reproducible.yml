@@ -43,15 +43,37 @@ jobs:
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
         with:
+<<<<<<< HEAD
           python-version: "3.11"
+=======
+          python-version: '3.11'
+          extras: dev
+          install-requirements: 'true'
+          pip-check: 'true'
+>>>>>>> origin/main
 
       - name: Build deterministic package
         shell: bash
+        env:
+          SOURCE_DATE_EPOCH: '1577836800'
         run: |
+<<<<<<< HEAD
           python scripts/reproducible_package.py
+=======
+          set -euo pipefail
+          python scripts/reproducible_package.py             --target desktop             --label "CI reproducible build"             --version "${GITHUB_SHA::12}"             --output-dir dist
+>>>>>>> origin/main
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
+<<<<<<< HEAD
           name: openmiura-release-artifacts
           path: dist/**
+=======
+          name: openmiura-reproducible-package
+          path: |
+            dist/*.zip
+            dist/*.manifest.json
+          if-no-files-found: error
+>>>>>>> origin/main
