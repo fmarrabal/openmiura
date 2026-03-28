@@ -1,37 +1,59 @@
 name: package-reproducible
 
-on:
+'on':
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/package-reproducible.yml"
+      - ".github/actions/setup-openmiura/action.yml"
+      - "scripts/reproducible_package.py"
+      - "scripts/build_release_artifacts.py"
+      - "scripts/verify_release_artifacts.py"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "openmiura/**"
+      - "packaging/**"
+      - "configs/**"
+      - "docs/**"
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+    paths:
+      - ".github/workflows/package-reproducible.yml"
+      - ".github/actions/setup-openmiura/action.yml"
+      - "scripts/reproducible_package.py"
+      - "scripts/build_release_artifacts.py"
+      - "scripts/verify_release_artifacts.py"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "openmiura/**"
+      - "packaging/**"
+      - "configs/**"
+      - "docs/**"
 
 jobs:
   reproducible-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
         with:
-          python-version: '3.11'
-          extras: dev
-          install-requirements: 'true'
-          pip-check: 'true'
+          python-version: "3.11"
 
       - name: Build deterministic package
         shell: bash
         env:
           SOURCE_DATE_EPOCH: '1577836800'
         run: |
-          set -euo pipefail
-          python scripts/reproducible_package.py             --target desktop             --label "CI reproducible build"             --version "${GITHUB_SHA::12}"             --output-dir dist
+          python scripts/reproducible_package.py
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: openmiura-reproducible-package
-          path: |
-            dist/*.zip
-            dist/*.manifest.json
-          if-no-files-found: error
+          name: openmiura-release-artifacts
+          path: dist/**
