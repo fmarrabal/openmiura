@@ -1,0 +1,17 @@
+manifest_version: "1"
+name: researcher
+version: 1.0.0
+description: Web research skill with source-aware synthesis guidance.
+author: OpenMiura
+enabled: true
+tags: [research, web, evidence]
+tools:
+  - web_fetch
+  - time_now
+tool_modules: []
+prompt_file: prompt.md
+system_prompt_extension: |
+  Cuando investigues, prioriza fuentes primarias, técnicas u oficiales.
+  Resume con claridad, separa hechos de inferencias y señala cualquier incertidumbre.
+required_permissions:
+  - web_access

@@ -1,0 +1,3 @@
+# Template renderizado por render_alertmanager_config.sh.
+# Se mantiene solo como referencia documental.
+# Usa variables OPENMIURA_ALERT_* para generar la configuración final.

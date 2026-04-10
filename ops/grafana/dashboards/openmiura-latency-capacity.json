@@ -1,0 +1,25 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {"type": "stat", "title": "p95 latency (5m)", "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(openmiura_latency_seconds_bucket[5m])))", "refId": "A"}]},
+    {"type": "stat", "title": "p50 latency (5m)", "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "histogram_quantile(0.50, sum by (le) (rate(openmiura_latency_seconds_bucket[5m])))", "refId": "A"}]},
+    {"type": "stat", "title": "Req/s (5m)", "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "sum(rate(openmiura_requests_total[5m]))", "refId": "A"}]},
+    {"type": "stat", "title": "Token throughput/s", "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "sum(rate(openmiura_tokens_used_total[5m]))", "refId": "A"}]},
+    {"type": "timeseries", "title": "Latency p50/p95", "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "histogram_quantile(0.50, sum by (le) (rate(openmiura_latency_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"}, {"expr": "histogram_quantile(0.95, sum by (le) (rate(openmiura_latency_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"}]},
+    {"type": "timeseries", "title": "Requests by channel", "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "sum by (channel) (rate(openmiura_requests_total[5m]))", "legendFormat": "{{channel}}", "refId": "A"}]},
+    {"type": "timeseries", "title": "Tokens by model", "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "sum by (model) (rate(openmiura_tokens_used_total[5m]))", "legendFormat": "{{model}}", "refId": "A"}]},
+    {"type": "timeseries", "title": "Error pressure", "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "targets": [{"expr": "sum(rate(openmiura_errors_total[5m]))", "legendFormat": "errors/s", "refId": "A"}]}
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["openmiura", "capacity"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "openMiura Latency & Capacity",
+  "version": 1
+}

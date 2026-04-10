@@ -1,0 +1,17 @@
+manifest_version: "1"
+name: researcher
+version: 1.0.0
+description: Habilidad declarativa de investigación web y síntesis de fuentes.
+author: OpenMiura
+enabled: true
+tags: [research, web, evidence]
+tools:
+  - web_fetch
+  - time_now
+tool_modules: []
+prompt_file: prompt.md
+system_prompt_extension: |
+  Cuando investigues, prioriza fuentes primarias u oficiales.
+  Resume con claridad, indica incertidumbre y evita inventar datos.
+required_permissions:
+  - web_access

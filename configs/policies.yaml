@@ -1,0 +1,20 @@
+agent_rules:
+  - agent: researcher
+    allow_tools: [web_fetch, time_now, fs_read]
+  - agent: writer
+    deny_tools: [fs_write]
+  - agent: admin_agent
+    allow_tools: [time_now, fs_read, fs_write, terminal_exec]
+
+user_rules:
+  - user: "tg:12345"
+    allow_agents: ["*"]
+  - user: "tg:99999"
+    deny_agents: [admin_agent]
+
+tool_rules:
+  - tool: fs_write
+    requires_confirmation: true
+
+  - tool: terminal_exec
+    requires_confirmation: true

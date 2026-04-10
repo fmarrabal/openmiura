@@ -1,0 +1,52 @@
+name: release
+
+'on':
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONHASHSEED: "0"
+      SOURCE_DATE_EPOCH: "1577836800"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
+        with:
+          python-version: "3.11"
+
+      - name: Build release artifacts
+        shell: bash
+        run: |
+          python scripts/build_release_artifacts.py
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          python scripts/verify_release_artifacts.py --dist-dir dist
+
+      - name: Build release manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_release_artifacts.py \
+            --dist-dir dist \
+            --tag "${{ steps.meta.outputs.tag }}" \
+            --target "${{ steps.meta.outputs.target }}" \
+            --strict
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_release_artifacts.py --dist-dir dist
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openmiura-release
+          path: dist/**

@@ -1,0 +1,17 @@
+manifest_version: "1"
+contract_version: "1.0"
+name: demo_echo
+kind: tool
+version: "0.1.0"
+description: Demo tool for the public extension SDK
+entrypoint: demo_tool.tool:EchoTool
+author: OpenMiura
+tags:
+  - example
+  - sdk
+permissions:
+  - tools.read
+capabilities:
+  - echo
+metadata:
+  category: examples

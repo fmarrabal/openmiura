@@ -1,0 +1,79 @@
+groups:
+  - name: openmiura.rules
+    rules:
+      - alert: OpenMiuraTargetDown
+        expr: up{job="openmiura"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: openmiura
+        annotations:
+          summary: openMiura no responde en Prometheus
+          description: El target openmiura lleva al menos 1 minuto sin responder al scrape de /metrics.
+          runbook_url: docs/runbooks/alerts.md#openmiuratargetdown
+
+      - alert: OpenMiuraHighErrorRate
+        expr: sum(rate(openmiura_errors_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: openmiura
+        annotations:
+          summary: Tasa de errores elevada en openMiura
+          description: La tasa agregada de openmiura_errors_total supera 0.05 errores/segundo en los últimos 5 minutos.
+          runbook_url: docs/runbooks/alerts.md#openmiurahigherrorrate
+
+      - alert: OpenMiuraHighLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(openmiura_latency_seconds_bucket[5m]))) > 2.5
+        for: 10m
+        labels:
+          severity: warning
+          service: openmiura
+        annotations:
+          summary: Latencia p95 alta en openMiura
+          description: La latencia p95 supera 2.5 segundos durante al menos 10 minutos.
+          runbook_url: docs/runbooks/alerts.md#openmiurahighlatencyp95
+
+      - alert: OpenMiuraToolErrorsBurst
+        expr: sum(rate(openmiura_tool_calls_total{status="error"}[5m])) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+          service: openmiura
+        annotations:
+          summary: Errores de tools en openMiura
+          description: Se detecta una ráfaga sostenida de errores de tool calls en los últimos 5 minutos.
+          runbook_url: docs/runbooks/alerts.md#openmiuratoolerrorsburst
+
+      - alert: OpenMiuraNoActiveSessions
+        expr: max(openmiura_active_sessions) < 1
+        for: 30m
+        labels:
+          severity: info
+          service: openmiura
+        annotations:
+          summary: No hay sesiones activas en openMiura
+          description: No se han observado sesiones activas en la última media hora.
+          runbook_url: docs/runbooks/alerts.md#openmiuranoactivesessions
+
+      - alert: OpenMiuraBrokerAuthFailures
+        expr: sum(rate(openmiura_errors_total{type=~"auth|csrf|broker_auth"}[5m])) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+          service: openmiura
+        annotations:
+          summary: Fallos de autenticación o CSRF en openMiura
+          description: Se detecta una tasa sostenida de errores de autenticación/CSRF en broker o UI.
+          runbook_url: docs/runbooks/alerts.md#openmiurabrokerauthfailures
+
+      - alert: OpenMiuraTokenUsageDrop
+        expr: sum(rate(openmiura_tokens_used_total[15m])) == 0 and sum(rate(openmiura_requests_total{status="ok"}[15m])) > 0
+        for: 15m
+        labels:
+          severity: info
+          service: openmiura
+        annotations:
+          summary: Peticiones sin consumo de tokens observado
+          description: Hay tráfico correcto pero no se observan tokens consumidos; revisar proveedor LLM o instrumentación.
+          runbook_url: docs/runbooks/alerts.md#openmiuratokenusagedrop

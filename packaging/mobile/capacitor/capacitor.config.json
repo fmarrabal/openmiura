@@ -1,0 +1,6 @@
+{
+  "appId": "com.openmiura.phase8",
+  "appName": "openMiura",
+  "webDir": "../../openmiura/ui/static",
+  "server": {"url": "http://127.0.0.1:8081/ui/", "cleartext": true}
+}
