@@ -726,15 +726,30 @@ class ReleaseService:
         return actions
     @staticmethod
     def _sort_audit_items_desc(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        def _key(item: dict[str, Any]) -> tuple[str, str]:
-            ts = str(
+        action_priority = {
+            'rollback': 50,
+            'promote': 40,
+            'approve': 30,
+            'submit': 20,
+            'reject': 10,
+        }
+
+        def _as_float(value: Any) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return 0.0
+
+        def _key(item: dict[str, Any]) -> tuple[float, int, str]:
+            ts = _as_float(
                 item.get('created_at')
                 or item.get('updated_at')
                 or item.get('approved_at')
                 or item.get('promoted_at')
                 or item.get('rolled_back_at')
-                or ''
+                or 0.0
             )
+            action = str(item.get('action') or '').strip().lower()
             ident = str(
                 item.get('approval_id')
                 or item.get('promotion_id')
@@ -742,6 +757,6 @@ class ReleaseService:
                 or item.get('release_id')
                 or ''
             )
-            return (ts, ident)
+            return (ts, action_priority.get(action, 0), ident)
 
         return sorted(list(items or []), key=_key, reverse=True)

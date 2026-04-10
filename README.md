@@ -9,156 +9,119 @@
 </p>
 
 <p align="center">
-  Deploy agents with control, approvals, auditability, and runtime governance
+  Bring your runtime. openMiura governs it.
 </p>
 
 <p align="center">
   Local-first • Multi-tenant • Policy-driven • Auditable • Extensible
 </p>
 
-<p align="center">
-  <strong>Bring your runtime. openMiura governs it.</strong>
-</p>
-
----
-
-## Overview
-
-openMiura is a **governed agent operations platform** for organizations that want to run AI agents across email, terminal, Slack, browsers, CRM, ERP, and internal tools with **policy control, approvals, secrets isolation, auditability, and rollback**.
-
-Most agent systems focus on making assistants more capable.  
-openMiura focuses on making agents **deployable in real organizations**.
-
-It adds the missing enterprise layer around agent execution:
-
-- controlled execution of tools, workflows, and operational actions
-- tenant / workspace / environment isolation
-- RBAC, policy engine, approvals, and audit-first design
-- release governance, promotions, rollbacks, and canary routing
-- live operational surfaces for operators and reviewers
-- reproducible packaging and controlled deployment workflows
-
----
-
-## Why openMiura
-
-Organizations increasingly want to use agents in real operational environments, but real deployment requires much more than a model and a chat interface.
-
-They need to answer questions such as:
-
-- Who can run which agent?
-- Which tools may an agent use?
-- Which actions require human approval?
-- What secret can be used, and where?
-- What happened during execution?
-- Can we replay, inspect, or roll back a run?
-- Can we deploy agents safely across teams and environments?
-
-openMiura is designed to answer those questions by acting as the **control plane** around agent execution.
-
 ---
 
 ## What openMiura is
 
-openMiura sits between:
+openMiura is a **governed agent operations platform** for organizations that want to run AI agents and operational automations with **approvals, policy control, auditability, release governance, replayability, and environment isolation**.
 
-- models
-- tools
-- channels
-- operators
-- workflows
-- runtime policies
-- enterprise controls
+The platform is designed around a simple idea:
 
-Instead of optimizing only for chat-style interaction, it focuses on **agent operations**.
+- **the runtime executes**
+- **openMiura governs**
 
-That means turning agent execution into something:
+That makes it useful when an organization wants to work with agents across chat, HTTP, operational workflows, or external runtimes, but cannot accept ungoverned execution.
 
-- governable
-- inspectable
-- replayable
-- auditable
-- controllable
-- deployable across real organizational boundaries
+## What this bundle currently contains
 
----
+This repository already includes implemented surfaces for:
 
-## Core capabilities
+- **admin and control-plane APIs** over FastAPI
+- **multi-tenant scoping** with tenant, workspace, and environment boundaries
+- **workflow and approval services**
+- **release, promotion, rollback, and evidence flows**
+- **live operational canvas** documents, nodes, inspectors, views, overlays, and actions
+- **OpenClaw governance adapters** for governed runtime dispatch
+- **evidence export, escrow, verification, and packaging hardening**
+- **voice, PWA, operator, replay, session, and cost services**
+- **HTTP broker and MCP integration surfaces**
+- **channel adapters** for Telegram, Slack, and Discord
+- **extension SDK and private registry foundations**
 
-### 1. Governance and release operations
+In practice, this means openMiura is not just a chat wrapper. It is a control plane around runtime actions, policies, approvals, operational review, and governed rollout.
 
-- release bundles, promotions, approvals, and rollbacks
-- evaluation gates for quality, latency, cost, and policy adherence
-- canary routing and release observations
-- change intelligence and release summaries
-- controlled rollout and rollback patterns for agent releases
+## Why it exists
 
-### 2. Runtime and control plane
+Most agent demos optimize for capability. Real deployment requires something else:
 
-- HTTP API and admin endpoints
-- broker interfaces for governed runtime access
-- policy-aware tool execution
-- confirmation and approval flows
-- audit logging and operational traceability
-- controlled routing between agents, tools, and workflows
+- who can execute what
+- in which environment
+- under which policy
+- with which secret
+- with which approval chain
+- with what audit evidence afterward
+- and how the action can be inspected, replayed, or rolled back
 
-### 3. Voice, mobile, and operator experience
+openMiura focuses on those operational questions.
 
-- voice sessions, transcripts, and command lifecycle
-- local voice asset pipeline hooks
-- PWA/mobile operational mode
-- operator console for runtime administration
-- task visibility for operational users and reviewers
+## Core capability areas
+
+### 1. Governed execution
+
+- policy-aware runtime dispatch
+- action gating and confirmation flows
+- role-aware control surfaces
+- environment scoping for dev, stage, and prod-like operation
+
+### 2. Workflows and approvals
+
+- workflow creation and execution tracking
+- approval steps, assignment, claim, decision, and cancellation flows
+- operational actions exposed through admin and canvas inspectors
+
+### 3. Release governance
+
+- governed promotions and release flows
+- approval-gated releases
+- rollback and supersedence support
+- release evidence and export artifacts
+- rollout intelligence for controlled change management
 
 ### 4. Live operations canvas
 
-- persisted canvas documents, nodes, edges, and views
-- overlays for approvals, failures, costs, traces, and policies
-- comments, snapshots, compare views, and shared operational context
-- visual support for replay, rollback, and postmortem workflows
+- persisted canvas documents and nodes
+- operational views and suggested views
+- node inspectors with contextual actions
+- replay, comparison, routing, and governance-oriented inspection
+- collaboration-oriented operational visualization
 
-### 5. Security and enterprise controls
+### 5. Security and evidence
 
 - tenant / workspace / environment segregation
-- role-based access control
-- policy enforcement
-- secret governance hooks
-- hardened limits for voice, canvas, and HTTP surfaces
-- approval boundaries for sensitive actions
+- audit-first persistence model
+- evidence package generation and escrow flows
+- verification-on-read and tamper-detection paths
+- packaging and operational hardening controls
 
-### 6. Developer experience and packaging
+### 6. Integrations and runtime posture
 
-- migrations and automated validation
-- extension SDK and registry foundations
-- reproducible packaging artifacts
-- quickstarts, runbooks, and operational docs
-- controlled project structure for extensibility and maintenance
-
----
-
-## Key documents
-
-- [Agent Control Plane overview](docs/openMiura_agent_control_plane.md)
-- [24-month investor strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
-- [Commercial one-pager](docs/openMiura_one_pager_commercial.md)
-- [Use cases](docs/use_cases.md)
-- [Self-hosted Enterprise Alpha](docs/enterprise_alpha.md)
-- [Enterprise Alpha release checklist](docs/alpha_release_checklist.md)
-
----
+- FastAPI HTTP application
+- HTTP broker surface
+- MCP server integration
+- Telegram, Slack, and Discord channel adapters
+- OpenClaw runtime governance adapter
+- local-first default posture with configurable infrastructure
 
 ## High-level architecture
 
 ```text
-Channels / UI / PWA / Voice / Canvas
-                |
-        HTTP API / Broker / Admin
-                |
-        Application services layer
-                |
- Policies / approvals / routing / audit
-                |
- Persistence / registries / artifacts
+Channels / UI / Voice / PWA / Canvas / Broker / MCP
+                         |
+                FastAPI control plane
+                         |
+      Governance services, workflows, approvals, releases,
+         evidence, operator actions, replay, packaging
+                         |
+         Policies / audit / tenancy / secrets / routing
+                         |
+          Persistence / registries / artifacts / runtimes
 ```
 
 ## Repository structure
@@ -166,42 +129,41 @@ Channels / UI / PWA / Voice / Canvas
 ```text
 .
 ├── app.py
-├── configs/                 # YAML configuration and runtime policy definitions
-├── docs/                    # architecture, operations, quickstarts, runbooks
-├── docker/                  # container entrypoints and deployment helpers
+├── configs/                 # YAML configuration
+├── docker/                  # container helpers
+├── docs/                    # product, architecture, ops, and runbooks
 ├── openmiura/
-│   ├── agents/              # agent routing and agent-specific logic
-│   ├── application/         # services for releases, voice, pwa, canvas, packaging, etc.
-│   ├── builtin_skills/      # bundled skills and built-in capability definitions
-│   ├── channels/            # channel adapters (Telegram, Slack, Discord, ...)
-│   ├── core/                # config, schema, audit, memory, auth, security primitives
-│   ├── endpoints/           # HTTP endpoint composition
-│   ├── extensions/          # SDK, loader, registry, scaffolding
-│   ├── infrastructure/      # persistence and infra support services
-│   ├── interfaces/          # HTTP, broker, and admin route surfaces
-│   ├── tools/               # tool implementations and execution controls
-│   ├── ui/                  # browser UI / operator surface assets
-│   └── workers/             # background and channel workers
+│   ├── application/         # control-plane services
+│   ├── channels/            # Telegram, Slack, Discord, HTTP broker, MCP
+│   ├── core/                # config, auth, audit, memory, migrations
+│   ├── extensions/          # SDK, scaffolding, registry helpers
+│   ├── infrastructure/      # persistence and infra adapters
+│   ├── interfaces/          # HTTP app and route composition
+│   ├── tools/               # governed tool execution surfaces
+│   ├── ui/                  # UI assets
+│   └── workers/             # background workers
 ├── ops/                     # observability assets
-├── packaging/               # desktop/mobile packaging scaffolds
-├── scripts/                 # operational and maintenance scripts
-├── skills/                  # user/project-defined skills
-└── tests/                   # unit and integration tests
+├── packaging/               # packaging scaffolds
+├── scripts/                 # operational scripts
+├── skills/                  # skill manifests
+└── tests/                   # regression and integration coverage
 ```
 
-## Supported deployment posture
+## Deployment posture
 
-openMiura is designed to run **local-first** or in controlled infrastructure. A common baseline is:
+openMiura is built to run **local-first** or inside controlled infrastructure.
 
-- FastAPI application behind a reverse proxy
-- local SQLite for baseline operation or external database where appropriate
-- Ollama-compatible local model endpoints by default
-- separate workers for Telegram/Slack/Discord when enabled
-- admin and broker endpoints protected by tokens, auth, and policy controls
+Typical baseline:
+
+- FastAPI application
+- SQLite by default, with PostgreSQL support available
+- Ollama-compatible LLM endpoint by default
+- channel workers enabled only when needed
+- admin and broker surfaces protected by tokens and policy controls
 
 ## Quickstart
 
-### 1. Create and activate a virtual environment
+### 1. Create an environment
 
 ```bash
 python -m venv .venv
@@ -215,13 +177,13 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 2. Install dependencies
+### 2. Install
 
 ```bash
 pip install -e .[dev]
 ```
 
-or, if you prefer requirements:
+Alternative:
 
 ```bash
 pip install -r requirements.txt
@@ -229,13 +191,11 @@ pip install -r requirements.txt
 
 ### 3. Prepare configuration
 
-Copy the example environment file and adjust only the variables you need:
-
 ```bash
 cp .env.example .env
 ```
 
-The default runtime configuration file is:
+Default config file:
 
 ```text
 configs/openmiura.yaml
@@ -247,13 +207,19 @@ configs/openmiura.yaml
 python -m openmiura run --config configs/openmiura.yaml
 ```
 
-You can also run the FastAPI app directly:
+Direct ASGI run:
 
 ```bash
 uvicorn app:app --host 127.0.0.1 --port 8081 --reload
 ```
 
-### 5. Optional workers
+### 5. Health and diagnostics
+
+```bash
+python -m openmiura doctor --config configs/openmiura.yaml
+```
+
+### 6. Optional workers
 
 Telegram polling:
 
@@ -267,133 +233,113 @@ Discord worker:
 python scripts/discord_worker.py
 ```
 
-### 6. Environment health check
+## CLI surfaces included
 
-```bash
-python -m openmiura doctor --config configs/openmiura.yaml
-```
+The current CLI already exposes groups for:
+
+- `openmiura run`
+- `openmiura doctor`
+- `openmiura db ...`
+- `openmiura memory ...`
+- `openmiura mcp ...`
+- `openmiura create ...`
+- `openmiura sdk ...`
+- `openmiura registry ...`
 
 ## Validation
 
-Typical validation flow:
+Typical local validation flow:
 
 ```bash
 python -m compileall -q app.py openmiura tests
-pytest --collect-only -q
-pytest -q tests/unit
+pytest -q
 ```
 
-Optional UI syntax validation:
+## Key documentation
 
-```bash
-node --check openmiura/ui/static/app.js
-```
+### Product and positioning
 
-## Security model
+- [Agent Control Plane overview](docs/openMiura_agent_control_plane.md)
+- [Commercial one-pager](docs/openMiura_one_pager_commercial.md)
+- [Use cases](docs/use_cases.md)
+- [24-month product strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
 
-openMiura assumes an enterprise-style control model:
-
-- tenant/workspace/environment segregation
-- approvals for sensitive operations
-- release governance and promotion evidence
-- audit logging for sensitive runtime actions
-- policy enforcement at channel, tool, and control-plane boundaries
-- secrets kept outside the repository and injected at runtime
-
-Before running openMiura outside a local sandbox, read [SECURITY.md](SECURITY.md).
-
-## Public repository hygiene
-
-This public-ready bundle excludes generated caches, local runtime artifacts, embedded audio samples, and VCS metadata. Do **not** commit:
-
-- `.env`
-- real admin, broker, channel, or provider tokens
-- local databases and backups
-- generated voice assets
-- local sandbox outputs
-
-## Recommended docs to read next
+### Setup and operations
 
 - [Installation](docs/installation.md)
 - [Deployment](docs/deployment.md)
-- [Security](docs/security.md)
+- [Production](docs/production.md)
 - [Observability](docs/observability.md)
+- [Security](docs/security.md)
 - [Backup and restore](docs/backup_restore.md)
+- [Migrations](docs/migrations.md)
 - [Troubleshooting](docs/troubleshooting.md)
+
+### Integrations and platform docs
+
+- [LLM providers](docs/llm_providers.md)
+- [MCP](docs/mcp.md)
+- [MCP broker integration](docs/mcp_broker_integration.md)
+- [Extension SDK](docs/extensions_sdk.md)
+- [Extension registry](docs/extensions_registry.md)
+
+### Quickstarts and operational docs
+
 - [Operator quickstart](docs/quickstarts/operator.md)
 - [Admin quickstart](docs/quickstarts/admin.md)
 - [Developer quickstart](docs/quickstarts/developer.md)
 - [Approver quickstart](docs/quickstarts/approver.md)
-- [24-month product strategy roadmap](docs/ROADMAP_24M_PRODUCT_STRATEGY.md)
-- [openMiura Agent Control Plane](docs/openMiura_agent_control_plane.md)
+- [Alert runbook](docs/runbooks/alerts.md)
 
----
+## Current status
 
-## Compatibility direction
+This bundle is suitable for:
 
-openMiura is being shaped as a **governance and control layer** around agent runtimes.
+- local development
+- controlled internal evaluation
+- private collaboration
+- staged hardening for self-hosted enterprise-style deployments
 
-That means the long-term direction is not limited to a single execution engine. The platform is intended to support governed interaction with external runtimes, tools, and execution surfaces while preserving:
+It already contains substantial implementation across governance, canvas operations, release flows, evidence handling, and runtime control. Production rollout still depends on your concrete identity, secret-management, infrastructure, and operating model choices.
 
-- policy enforcement
-- approval workflows
-- audit evidence
-- secret isolation
-- operational visibility
-- replay and rollback semantics
+## Public repository hygiene
 
-In practical terms, the vision is:
+Do not commit:
 
-> Bring your runtime. openMiura governs it.
-
-
-## Typical use cases
-
-openMiura is especially relevant where agent usefulness is blocked by risk, governance, or operational control requirements.
-
-Examples include:
-
-- **IT / SecOps / Platform Ops**  
-  Agents that inspect alerts, open incidents, propose remediation, and execute controlled playbooks only after approval.
-
-- **Finance / Procurement / Compliance**  
-  Agents that process documents, prepare reconciliations, route approvals, and maintain evidence trails.
-
-- **Laboratories / Pharma / Regulated Industry**  
-  Agents that operate SOP-driven flows, QA workflows, document control, and controlled operational tasks with strong traceability.
-
----
-
-## Project status
-
-The codebase is suitable for private collaboration and controlled deployments, and it now has a public-friendly repository structure.
-
-Production use still requires environment-specific decisions around:
-
-- external identity integration and secret management
-- real provider credentials for voice and model services
-- infrastructure, reverse proxying, backups, and observability setup
-- release promotion workflow and approval ownership
-- deployment topology and operational responsibility boundaries
+- real credentials or tokens
+- local databases and backups
+- generated voice assets
+- temporary patch scripts or debug dumps
+- local sandbox outputs and generated escrow artifacts
 
 ## Contributing
 
-Contributions are welcome, especially around:
+Contributions are especially valuable in:
 
-- governance and policy features
-- runtime adapters and integrations
-- operational tooling
-- documentation improvements
-- packaging and deployment workflows
-- testing, validation, and developer experience
+- runtime adapters
+- policy and approval features
+- canvas and operator experience
+- security and evidence hardening
+- documentation and deployment workflows
+- tests and regression coverage
 
-Before contributing, make sure to:
+Before contributing:
 
 1. read the relevant docs in `docs/`
 2. run the validation steps locally
 3. avoid committing secrets or generated runtime artifacts
-4. keep changes aligned with the governed agent operations model
+4. keep changes aligned with the governed-agent-operations model
 
+
+## Documentation
+
+Start here:
+
+- [Documentation index](docs/README.md)
+- [Installation guide](docs/installation.md)
+- [Production guide](docs/production.md)
+- [Enterprise alpha guide](docs/enterprise_alpha.md)
+- [Alpha release checklist](docs/alpha_release_checklist.md)
 
 ## License
 
