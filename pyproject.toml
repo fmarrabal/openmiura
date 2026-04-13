@@ -33,7 +33,7 @@ dependencies = [
   "PyYAML>=6.0",
   "click>=8.1",
   "discord.py>=2.4",
-  "cryptography>=46.0",
+  "cryptography>=46.0.7",
   "prometheus-client>=0.21",
   "mcp>=1.0",
 ]
