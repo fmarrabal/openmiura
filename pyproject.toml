@@ -34,7 +34,7 @@ dependencies = [
   "click>=8.1",
   "discord.py>=2.4",
   "cryptography>=46.0",
-  "prometheus-client>=0.21",
+  "prometheus-client>=0.25.0",
   "mcp>=1.0",
 ]
 
