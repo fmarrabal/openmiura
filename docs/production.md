@@ -36,7 +36,11 @@ Para producción más seria:
 - Prometheus/Grafana/Alertmanager activos
 - API tokens con TTL y rotación
 
-## 3. Variables importantes
+## 3. Perfil base recomendado
+
+Usa `ops/env/production-like.env` como plantilla inicial. openMiura es ahora secure-by-default: limita dominios de `web_fetch`, deja `terminal_exec` deshabilitado y obliga a revisar explícitamente cualquier relajación. Después sustituye todos los placeholders y revisa `docs/configuration_profiles.md` para entender la precedencia entre `.env` y YAML.
+
+## 4. Variables importantes
 
 - `OPENMIURA_ADMIN_TOKEN`
 - `OPENMIURA_UI_ADMIN_USERNAME`
@@ -52,7 +56,7 @@ Para producción más seria:
 - `OPENMIURA_AUTH_COOKIE_SECURE`
 - `OPENMIURA_AUTH_CSRF_ENABLED`
 
-## 4. Reverse proxy y TLS
+## 5. Reverse proxy y TLS
 
 Publica openMiura detrás de Nginx o Caddy. Termina TLS ahí y reenvía:
 
@@ -63,7 +67,7 @@ Publica openMiura detrás de Nginx o Caddy. Termina TLS ahí y reenvía:
 
 Mantén `proxy_buffering off` si vas a usar SSE de chat, terminal o eventos live.
 
-## 5. Endpoints a proteger especialmente
+## 6. Endpoints a proteger especialmente
 
 - `/broker/auth/*`
 - `/broker/admin/*`
@@ -71,7 +75,7 @@ Mantén `proxy_buffering off` si vas a usar SSE de chat, terminal o eventos live
 - `/broker/terminal/stream`
 - `/metrics`, Grafana, Prometheus y Alertmanager si no están en red interna
 
-## 6. Recomendaciones operativas
+## 7. Recomendaciones operativas
 
 - usa roles `user`, `operator` y `admin`
 - restringe `terminal_exec` al mínimo posible
@@ -80,16 +84,16 @@ Mantén `proxy_buffering off` si vas a usar SSE de chat, terminal o eventos live
 - revisa dashboards a diario si el sistema está en uso continuo
 - programa backups y prueba restore periódicamente
 
-## 7. Arranque recomendado con Compose
+## 8. Arranque recomendado con Compose
 
 ```bash
-cp .env.example .env
+cp ops/env/production-like.env .env
 docker compose --profile observability up --build -d
 ```
 
-## 8. Lista de comprobación previa a producción
+## 9. Lista de comprobación previa a producción
 
-- `openmiura doctor --config configs/` sin errores críticos
+- `openmiura doctor --config configs/openmiura.yaml` sin errores críticos
 - backup inicial generado
 - login admin probado
 - alertas sintéticas enviadas
@@ -103,3 +107,6 @@ docker compose --profile observability up --build -d
 
 - [Self-hosted Enterprise Alpha](enterprise_alpha.md)
 - [Enterprise Alpha release checklist](alpha_release_checklist.md)
+- [Release Candidate RC1](release_candidate.md)
+- [Release support matrix](release_support_matrix.md)
+- [RC1 quickstart](quickstarts/release_candidate.md)

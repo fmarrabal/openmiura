@@ -1,0 +1,17 @@
+# Core release-required validation suites
+# Keep this list intentionally curated and fast enough for CI.
+tests/test_cli_doctor.py
+tests/test_cli_provider_doctor.py
+tests/test_config_env_defaults.py
+tests/test_sprint2_configuration_profiles.py
+tests/test_sprint3_secure_defaults.py
+tests/test_phase8_github_workflows.py
+tests/test_phase8_release_reproducible_packaging.py
+tests/test_phase9_operational_hardening_packaging.py
+tests/test_phase8_tiny_runtime_ui.py
+tests/test_phase9_config_center_ui.py
+tests/test_phase9_operational_hardening_admin.py
+tests/test_phase9_operational_hardening_canary.py
+tests/test_openclaw_portfolio_native_providers_reconciliation_v2.py
+tests/test_openclaw_portfolio_live_validation_worm_quorum_v2.py
+tests/test_openclaw_portfolio_real_provider_custody_anchor_v2.py

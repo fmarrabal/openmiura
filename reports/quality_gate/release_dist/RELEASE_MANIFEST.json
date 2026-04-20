@@ -1,0 +1,32 @@
+{
+  "artifact_count": 2,
+  "artifacts": [
+    {
+      "filename": "openmiura-1.0.0-py3-none-any.whl",
+      "kind": "wheel",
+      "sha256": "f0ee31cd4def08c2160502ddd6563a42fe80ad0102ce67347021942b950696df",
+      "size": 748967
+    },
+    {
+      "filename": "openmiura-1.0.0.tar.gz",
+      "kind": "sdist",
+      "sha256": "08842a61aaa0d17f0c890e8bb58c681381b72fe660df9cf91d055d1870db202a",
+      "size": 962496
+    }
+  ],
+  "checksums_path": "SHA256SUMS.txt",
+  "generated_at": "2026-04-18T08:18:02.981234+00:00",
+  "missing_required": [
+    "reproducible_bundle",
+    "reproducible_manifest"
+  ],
+  "release_notes": null,
+  "required_kinds": [
+    "wheel",
+    "sdist",
+    "reproducible_bundle",
+    "reproducible_manifest"
+  ],
+  "tag": "v-quality-gate",
+  "target": "desktop"
+}

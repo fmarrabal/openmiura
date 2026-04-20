@@ -73,3 +73,12 @@ python -m pip install --upgrade build twine
 python -m build --sdist --wheel
 python -m twine check dist/*
 ```
+
+## Final PR, merge and publication flow
+
+For the RC1 close-out path, use `docs/github_pr_merge_publish_checklist.md` as the operational checklist for:
+
+- final PR preparation
+- merge decision
+- post-merge verification
+- publication readiness

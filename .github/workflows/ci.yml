@@ -25,6 +25,7 @@ jobs:
         uses: ./.github/actions/setup-openmiura
         with:
           python-version: ${{ matrix.python-version }}
+          extras: dev
 
       - name: Doctor
         shell: bash
@@ -41,6 +42,30 @@ jobs:
         run: |
           python -m pytest -q
 
+  quality-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python and install local package
+        uses: ./.github/actions/setup-openmiura
+        with:
+          python-version: "3.11"
+          extras: dev
+
+      - name: Run release quality gate
+        shell: bash
+        run: |
+          python scripts/run_release_quality_gate.py --include-extended --output-dir reports/quality_gate
+
+      - name: Upload quality gate reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: openmiura-quality-gate
+          path: reports/quality_gate/**
+
   reproducible-package:
     runs-on: ubuntu-latest
 
@@ -52,13 +77,14 @@ jobs:
         uses: ./.github/actions/setup-openmiura
         with:
           python-version: "3.11"
+          extras: dev
 
       - name: Build release artifacts
         shell: bash
         run: |
-          python scripts/build_release_artifacts.py
+          python scripts/build_release_artifacts.py --dist-dir dist --tag v-ci --target desktop --strict
 
       - name: Verify release artifacts
         shell: bash
         run: |
-          python scripts/verify_release_artifacts.py
+          python scripts/verify_release_artifacts.py --dist-dir dist

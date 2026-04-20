@@ -40,8 +40,14 @@ class VoiceRuntimeService:
         'ayuda': 'help',
     }
 
-    def _assets_dir(self) -> Path:
-        path = Path(__file__).resolve().parents[3] / 'data' / 'voice_assets'
+    def _assets_dir(self, gw) -> Path:
+        audit = getattr(gw, 'audit', None)
+        db_path = str(getattr(audit, 'db_path', '') or '').strip()
+        if db_path and db_path not in {':memory:', ''}:
+            base_dir = Path(db_path).resolve().parent
+        else:
+            base_dir = Path(__file__).resolve().parents[3] / 'data'
+        path = base_dir / 'voice_assets'
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -432,7 +438,7 @@ class VoiceRuntimeService:
             return None
         digest = hashlib.sha256(audio_bytes).hexdigest()
         extension = 'wav' if 'wav' in str(mime_type or '').lower() else 'bin'
-        storage_ref = self._assets_dir() / f'{digest[:16]}-{asset_kind}.{extension}'
+        storage_ref = self._assets_dir(gw) / f'{digest[:16]}-{asset_kind}.{extension}'
         storage_ref.write_bytes(audio_bytes)
         return gw.audit.create_voice_audio_asset(
             voice_session_id,

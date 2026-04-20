@@ -1,0 +1,3 @@
+# High-signal, broader governance regression suites for release candidates.
+tests/test_openclaw_portfolio_baseline_attestations_canvas_v2.py
+tests/test_openclaw_portfolio_baseline_catalog_promotion_v2.py

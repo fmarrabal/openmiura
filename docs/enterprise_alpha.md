@@ -163,7 +163,7 @@ Run these checks after the first startup.
 ### 7.1 Doctor
 
 ```bash
-openmiura doctor --config configs/
+openmiura doctor --config configs/openmiura.yaml
 ```
 
 Expected result:
@@ -306,3 +306,13 @@ That means the most important discipline at this stage is:
 - document limitations honestly
 
 If you follow that discipline, this alpha is strong enough to support internal validation, demos and early design-partner conversations.
+
+
+## 11. RC1 companion material
+
+For the formal frozen candidate handoff, also include:
+
+- `RELEASE_NOTES_RC1.md`
+- `docs/release_candidate.md`
+- `docs/release_support_matrix.md`
+- `docs/quickstarts/release_candidate.md`

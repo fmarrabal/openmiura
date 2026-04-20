@@ -7,14 +7,15 @@ from typing import Any, Dict
 import yaml
 
 from .audit import AuditStore
-from .config import Settings
+from .config import Settings, resolve_config_related_path
 
 
 class AgentRouter:
-    def __init__(self, settings: Settings, audit: AuditStore):
+    def __init__(self, settings: Settings, audit: AuditStore, config_path: str | None = None):
         self.settings = settings
         self.audit = audit
-        self.agents_path = str(getattr(settings, "agents_path", "configs/agents.yaml"))
+        self.config_path = config_path
+        self.agents_path = resolve_config_related_path(config_path, getattr(settings, "agents_path", "agents.yaml"), default_path="agents.yaml").as_posix()
         self._signature: str | None = None
         self._session_agent: dict[str, str] = {}
         self.agents: dict[str, dict[str, Any]] = {}
@@ -91,6 +92,8 @@ class AgentRouter:
 
         normalized_path = str(p).replace("\\", "/").strip()
         is_default_agents_path = normalized_path in {
+            "agents.yaml",
+            "./agents.yaml",
             "configs/agents.yaml",
             "./configs/agents.yaml",
         }

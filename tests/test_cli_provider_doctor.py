@@ -31,7 +31,7 @@ mcp:
 """,
         encoding='utf-8'
     )
-    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-openai-key')
     payload, exit_code = cli._doctor_payload(str(cfg))
     assert exit_code == 0
     names = {row['name']: row for row in payload['checks']}
