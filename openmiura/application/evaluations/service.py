@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import time
 import uuid
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from openmiura.core.config import resolve_config_related_path
 
 
 class EvaluationService:
@@ -15,8 +18,9 @@ class EvaluationService:
 
     def _suites_path(self, gw: Any) -> Path:
         settings = self._settings(gw)
-        raw_path = str(getattr(settings, "suites_path", "configs/evaluations.yaml") or "configs/evaluations.yaml")
-        return Path(raw_path)
+        raw_path = str(getattr(settings, "suites_path", "evaluations.yaml") or "evaluations.yaml")
+        config_path = getattr(gw, "config_path", "") or os.environ.get("OPENMIURA_CONFIG", "configs/openmiura.yaml")
+        return resolve_config_related_path(config_path, raw_path, default_path="evaluations.yaml")
 
     def _load_catalog(self, gw: Any) -> dict[str, Any]:
         path = self._suites_path(gw)
@@ -56,7 +60,7 @@ class EvaluationService:
             )
         return {
             "ok": True,
-            "path": str(catalog.get("path") or self._suites_path(gw)),
+            "path": Path(str(catalog.get("path") or self._suites_path(gw))).as_posix(),
             "defaults": dict(catalog.get("defaults") or {}),
             "suites": suites_out,
         }

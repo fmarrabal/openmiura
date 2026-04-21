@@ -58,6 +58,13 @@ def _env_bool_override(env_name: str, cfg_value: Any, default: bool = False) -> 
         return _as_bool(raw, default)
     return _as_bool(cfg_value, default)
 
+
+def _env_list_override(env_name: str, cfg_value: Any) -> list[str]:
+    raw = os.environ.get(env_name)
+    if raw is not None:
+        return [item.strip() for item in str(raw).split(',') if item.strip()]
+    return [str(item).strip() for item in (cfg_value or []) if str(item).strip()]
+
 def _expand_env(value: Any) -> Any:
     if isinstance(value, str):
         if value.startswith("env:"):
@@ -75,6 +82,36 @@ def _expand_env(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _expand_env(v) for k, v in value.items()}
     return value
+
+
+def resolve_config_related_path(
+    config_path: str | Path | None,
+    raw_path: str | Path | None,
+    *,
+    default_path: str,
+) -> Path:
+    candidate = Path(str(raw_path or default_path).strip() or default_path)
+    if candidate.is_absolute():
+        return candidate.expanduser().resolve()
+
+    if config_path is None or str(config_path).strip() == "":
+        return candidate.expanduser().resolve()
+
+    base_dir = Path(config_path).expanduser().resolve().parent
+    direct = (base_dir / candidate).resolve()
+    parts = list(candidate.parts)
+    if direct.exists() or not parts:
+        return direct
+
+    if len(parts) > 1 and parts[0] == base_dir.name:
+        return (base_dir / Path(*parts[1:])).resolve()
+
+    if len(parts) == 1 and parts[0] == 'skills':
+        project_candidate = (base_dir.parent / 'skills').resolve()
+        if project_candidate.exists():
+            return project_candidate
+
+    return direct
 
 
 def _parse_scope_rbac(raw: Any):
@@ -298,7 +335,7 @@ class SecretsSettings:
 @dataclass(frozen=True)
 class EvaluationSettings:
     enabled: bool = True
-    suites_path: str = "configs/evaluations.yaml"
+    suites_path: str = "evaluations.yaml"
     persist_results: bool = True
     max_cases_per_run: int = 200
     default_latency_budget_ms: float = 5000.0
@@ -505,9 +542,10 @@ class Settings:
     sandbox: SandboxSettings | None = None
     evaluations: EvaluationSettings | None = None
     cost_governance: CostGovernanceSettings | None = None
-    agents_path: str = "configs/agents.yaml"
-    policies_path: str = "configs/policies.yaml"
-    skills_path: str = "skills"
+    agents_path: str = "agents.yaml"
+    policies_path: str = "policies.yaml"
+    skills_path: str = "../skills"
+    config_path: str = ""
 
 
 def load_settings(path: str) -> Settings:
@@ -662,22 +700,22 @@ def load_settings(path: str) -> Settings:
         web_fetch=WebFetchSettings(
             timeout_s=_as_int(web_fetch_raw.get("timeout_s", 20), 20),
             max_bytes=_as_int(web_fetch_raw.get("max_bytes", 250000), 250000),
-            allow_all_domains=_as_bool(web_fetch_raw.get("allow_all_domains", True), True),
-            allowed_domains=[str(x) for x in (web_fetch_raw.get("allowed_domains") or [])],
-            block_private_ips=_as_bool(web_fetch_raw.get("block_private_ips", True), True),
+            allow_all_domains=_env_bool_override("OPENMIURA_WEB_FETCH_ALLOW_ALL_DOMAINS", web_fetch_raw.get("allow_all_domains", False), False),
+            allowed_domains=_env_list_override("OPENMIURA_WEB_FETCH_ALLOWED_DOMAINS", web_fetch_raw.get("allowed_domains") or []),
+            block_private_ips=_env_bool_override("OPENMIURA_WEB_FETCH_BLOCK_PRIVATE_IPS", web_fetch_raw.get("block_private_ips", True), True),
         ),
         terminal=TerminalToolSettings(
-            enabled=_as_bool(terminal_raw.get("enabled", True), True),
+            enabled=_env_bool_override("OPENMIURA_TERMINAL_ENABLED", terminal_raw.get("enabled", False), False),
             timeout_s=_as_int(terminal_raw.get("timeout_s", 30), 30),
             max_output_chars=_as_int(terminal_raw.get("max_output_chars", 12000), 12000),
             shell_executable=str(terminal_raw.get("shell_executable", "")),
-            allow_shell=_as_bool(terminal_raw.get("allow_shell", True), True),
-            allow_shell_metacharacters=_as_bool(terminal_raw.get("allow_shell_metacharacters", True), True),
+            allow_shell=_env_bool_override("OPENMIURA_TERMINAL_ALLOW_SHELL", terminal_raw.get("allow_shell", False), False),
+            allow_shell_metacharacters=_env_bool_override("OPENMIURA_TERMINAL_ALLOW_METACHARACTERS", terminal_raw.get("allow_shell_metacharacters", False), False),
             allow_multiline=_as_bool(terminal_raw.get("allow_multiline", False), False),
-            require_explicit_allowlist=_as_bool(terminal_raw.get("require_explicit_allowlist", False), False),
-            allowed_commands=[str(x).strip() for x in (terminal_raw.get("allowed_commands") or []) if str(x).strip()],
-            blocked_commands=[str(x).strip() for x in (terminal_raw.get("blocked_commands") or []) if str(x).strip()],
-            blocked_patterns=[str(x).strip() for x in (terminal_raw.get("blocked_patterns") or []) if str(x).strip()],
+            require_explicit_allowlist=_env_bool_override("OPENMIURA_TERMINAL_REQUIRE_EXPLICIT_ALLOWLIST", terminal_raw.get("require_explicit_allowlist", True), True),
+            allowed_commands=_env_list_override("OPENMIURA_TERMINAL_ALLOWED_COMMANDS", terminal_raw.get("allowed_commands") or []),
+            blocked_commands=_env_list_override("OPENMIURA_TERMINAL_BLOCKED_COMMANDS", terminal_raw.get("blocked_commands") or []),
+            blocked_patterns=_env_list_override("OPENMIURA_TERMINAL_BLOCKED_PATTERNS", terminal_raw.get("blocked_patterns") or []),
             max_timeout_s=_as_int(terminal_raw.get("max_timeout_s", 120), 120),
             role_policies={
                 str(role).strip().lower(): dict(cfg or {})
@@ -759,7 +797,7 @@ def load_settings(path: str) -> Settings:
     evaluations_raw = raw_cfg.get("evaluations", {}) or {}
     evaluations = EvaluationSettings(
         enabled=_as_bool(evaluations_raw.get("enabled", True), True),
-        suites_path=str(evaluations_raw.get("suites_path", "configs/evaluations.yaml") or "configs/evaluations.yaml"),
+        suites_path=str(evaluations_raw.get("suites_path", "evaluations.yaml") or "evaluations.yaml"),
         persist_results=_as_bool(evaluations_raw.get("persist_results", True), True),
         max_cases_per_run=_as_int(evaluations_raw.get("max_cases_per_run", 200), 200),
         default_latency_budget_ms=_as_float(evaluations_raw.get("default_latency_budget_ms", 5000.0), 5000.0),
@@ -948,6 +986,7 @@ def load_settings(path: str) -> Settings:
     )
 
     return Settings(
+        config_path=str(p.resolve()),
         server=server,
         storage=storage,
         llm=llm,
@@ -967,7 +1006,7 @@ def load_settings(path: str) -> Settings:
         sandbox=sandbox,
         evaluations=evaluations,
         cost_governance=cost_governance,
-        agents_path=str(raw_cfg.get("agents_path") or "configs/agents.yaml"),
-        policies_path=str(raw_cfg.get("policies_path") or "configs/policies.yaml"),
-        skills_path=str(raw_cfg.get("skills_path") or "skills"),
+        agents_path=str(raw_cfg.get("agents_path") or "agents.yaml"),
+        policies_path=str(raw_cfg.get("policies_path") or "policies.yaml"),
+        skills_path=str(raw_cfg.get("skills_path") or "../skills"),
     )

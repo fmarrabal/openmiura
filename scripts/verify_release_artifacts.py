@@ -1,46 +1,37 @@
 from __future__ import annotations
 
-import hashlib
+import argparse
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DIST = ROOT / "dist"
-MANIFEST_PATH = DIST / "RELEASE_MANIFEST.json"
-SHA_PATH = DIST / "SHA256SUMS.txt"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from openmiura.application.packaging import PackagingHardeningService
 
 
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def _resolve_dist_dir(raw: str) -> Path:
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = ROOT / candidate
+    return candidate.resolve()
 
 
-def main() -> None:
-    if not MANIFEST_PATH.exists():
-        raise SystemExit("Missing RELEASE_MANIFEST.json")
-    if not SHA_PATH.exists():
-        raise SystemExit("Missing SHA256SUMS.txt")
-
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    artifacts = manifest.get("artifacts") or []
-    if not artifacts:
-        raise SystemExit("Manifest contains no artifacts")
-
-    for item in artifacts:
-        path = DIST / item["name"]
-        if not path.exists():
-            raise SystemExit(f"Missing artifact: {path.name}")
-        digest = sha256_file(path)
-        if digest != item["sha256"]:
-            raise SystemExit(f"Checksum mismatch: {path.name}")
-
-    sha_lines = SHA_PATH.read_text(encoding="utf-8").splitlines()
-    if not sha_lines:
-        raise SystemExit("SHA256SUMS.txt is empty")
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Verify openMiura release artifacts against RELEASE_MANIFEST.json')
+    parser.add_argument('--dist-dir', default='dist', help='Directory containing release artifacts and manifest')
+    return parser.parse_args(argv)
 
 
-if __name__ == "__main__":
-    main()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    dist_dir = _resolve_dist_dir(args.dist_dir)
+    payload = PackagingHardeningService().verify_release_artifacts(dist_dir=str(dist_dir))
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get('ok') else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

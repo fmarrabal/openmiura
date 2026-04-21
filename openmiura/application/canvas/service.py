@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import time
 from collections import Counter
@@ -8,6 +8,16 @@ from typing import Any
 
 from openmiura.application.packaging import PackagingHardeningService
 
+from openmiura.application.canvas.helpers import (
+    enforce_canvas_counts as canvas_enforce_counts,
+    enforce_canvas_payload as canvas_enforce_payload,
+    enforce_scope_limits as canvas_enforce_scope_limits,
+    normalize_toggles as canvas_normalize_toggles,
+    payload_size as canvas_payload_size,
+    redact_sensitive as canvas_redact_sensitive,
+    safe_call as canvas_safe_call,
+    sanitize_scope as canvas_sanitize_scope,
+)
 from openmiura.application.costs import CostGovernanceService
 from openmiura.application.operator import OperatorConsoleService
 from openmiura.application.openclaw import OpenClawAdapterService, OpenClawRecoverySchedulerService
@@ -51,10 +61,7 @@ class LiveCanvasService:
 
     @staticmethod
     def _payload_size(payload: Any) -> int:
-        try:
-            return len(json.dumps(payload, ensure_ascii=False))
-        except Exception:
-            return len(str(payload))
+        return canvas_payload_size(payload)
 
     @staticmethod
     
@@ -630,28 +637,23 @@ class LiveCanvasService:
         return data
 
     def _enforce_scope_limits(self, gw: AdminGatewayLike, *, scope: dict[str, Any]) -> None:
-        count = int(gw.audit.count_canvas_documents(tenant_id=scope.get('tenant_id'), workspace_id=scope.get('workspace_id'), environment=scope.get('environment')) or 0)
-        if count >= self.MAX_DOCUMENTS_PER_SCOPE:
-            raise ValueError('canvas document scope limit exceeded')
+        canvas_enforce_scope_limits(gw, scope=scope, max_documents_per_scope=self.MAX_DOCUMENTS_PER_SCOPE)
 
     def _enforce_canvas_payload(self, *, payload: Any) -> None:
-        if self._payload_size(payload) > self.MAX_PAYLOAD_CHARS:
-            raise ValueError("canvas payload exceeds max size")
+        canvas_enforce_payload(payload=payload, max_payload_chars=self.MAX_PAYLOAD_CHARS)
 
     def _enforce_canvas_counts(self, gw: AdminGatewayLike, *, canvas_id: str, kind: str, tenant_id: str | None, workspace_id: str | None, environment: str | None) -> None:
-        if kind == 'node':
-            current = int(gw.audit.count_canvas_nodes(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) or 0)
-            if current >= self.MAX_NODES_PER_CANVAS:
-                raise ValueError('canvas node limit exceeded')
-        elif kind == 'edge':
-            current = int(gw.audit.count_canvas_edges(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) or 0)
-            if current >= self.MAX_EDGES_PER_CANVAS:
-                raise ValueError('canvas edge limit exceeded')
-        elif kind == 'view':
-            current = int(gw.audit.count_canvas_views(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) or 0)
-            if current >= self.MAX_VIEWS_PER_CANVAS:
-                raise ValueError('canvas view limit exceeded')
-
+        canvas_enforce_counts(
+            gw,
+            canvas_id=canvas_id,
+            kind=kind,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            max_nodes_per_canvas=self.MAX_NODES_PER_CANVAS,
+            max_edges_per_canvas=self.MAX_EDGES_PER_CANVAS,
+            max_views_per_canvas=self.MAX_VIEWS_PER_CANVAS,
+        )
 
     def _sanitize_scope(
         self,
@@ -661,49 +663,23 @@ class LiveCanvasService:
         workspace_id: str | None,
         environment: str | None,
     ) -> dict[str, Any]:
-        tenancy = getattr(gw, 'tenancy', None)
-        if tenancy is not None and hasattr(tenancy, 'normalize_scope'):
-            try:
-                return tenancy.normalize_scope(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-            except Exception:
-                pass
-        return {
-            'tenant_id': tenant_id,
-            'workspace_id': workspace_id,
-            'environment': environment,
-        }
+        return canvas_sanitize_scope(
+            gw,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        )
 
     def _normalize_toggles(self, toggles: dict[str, Any] | None) -> dict[str, bool]:
-        normalized = dict(self._DEFAULT_TOGGLES)
-        for key, value in dict(toggles or {}).items():
-            if key in normalized:
-                normalized[key] = bool(value)
-        return normalized
+        return canvas_normalize_toggles(toggles, defaults=self._DEFAULT_TOGGLES)
 
     @staticmethod
     def _safe_call(obj: Any, method_name: str, default: Any, /, *args: Any, **kwargs: Any) -> Any:
-        method = getattr(obj, method_name, None)
-        if not callable(method):
-            return default
-        try:
-            return method(*args, **kwargs)
-        except Exception:
-            return default
+        return canvas_safe_call(obj, method_name, default, *args, **kwargs)
 
     @staticmethod
     def _redact_sensitive(value: Any) -> Any:
-        if isinstance(value, dict):
-            redacted: dict[str, Any] = {}
-            for key, item in value.items():
-                lowered = str(key).lower()
-                if any(token in lowered for token in ('secret', 'token', 'password', 'value', 'credential')):
-                    redacted[key] = '***redacted***'
-                else:
-                    redacted[key] = LiveCanvasService._redact_sensitive(item)
-            return redacted
-        if isinstance(value, list):
-            return [LiveCanvasService._redact_sensitive(item) for item in value]
-        return value
+        return canvas_redact_sensitive(value)
 
     def _replace_node_data(
         self,

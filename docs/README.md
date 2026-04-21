@@ -29,3 +29,7 @@
 
 - [Self-hosted Enterprise Alpha](enterprise_alpha.md)
 - [Checklist de release alpha](alpha_release_checklist.md)
+- [Release Candidate RC1](release_candidate.md)
+- [Matriz de soporte de RC1](release_support_matrix.md)
+- [Nota de cierre de RC1](release_candidate_closure.md)
+- [Checklist final de PR, merge y publicación](github_pr_merge_publish_checklist.md)

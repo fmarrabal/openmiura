@@ -4,7 +4,7 @@ import secrets
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -100,6 +100,59 @@ class ComplianceExportRequest(BaseModel):
     limit_per_section: int = Field(default=100, ge=1, le=1000)
     sections: list[str] = Field(default_factory=lambda: ["overview", "security", "secret_usage", "approvals", "config_changes", "tool_calls", "sessions"])
     report_label: str = Field(default="initial")
+
+
+class ConfigCenterValidateRequest(BaseModel):
+    section: str = Field(...)
+    content: str = Field(default='')
+    form_payload: dict[str, Any] | None = Field(default=None)
+
+
+class ConfigCenterSaveRequest(BaseModel):
+    section: str = Field(...)
+    content: str = Field(default='')
+    form_payload: dict[str, Any] | None = Field(default=None)
+    reload_after_save: bool = Field(default=False)
+    actor: str = Field(default='admin')
+
+
+class ChannelWizardValidateRequest(BaseModel):
+    channel: str = Field(...)
+    content: str = Field(default='')
+    wizard_payload: dict[str, Any] | None = Field(default=None)
+
+
+class ChannelWizardSaveRequest(BaseModel):
+    channel: str = Field(...)
+    content: str = Field(default='')
+    wizard_payload: dict[str, Any] | None = Field(default=None)
+    reload_after_save: bool = Field(default=False)
+    actor: str = Field(default='admin')
+
+
+
+class SecretEnvWizardValidateRequest(BaseModel):
+    profile: str = Field(...)
+    content: str = Field(default='')
+    wizard_payload: dict[str, Any] | None = Field(default=None)
+    env_prefix: str = Field(default='OPENMIURA')
+
+
+class SecretEnvWizardSaveRequest(BaseModel):
+    profile: str = Field(...)
+    content: str = Field(default='')
+    wizard_payload: dict[str, Any] | None = Field(default=None)
+    env_prefix: str = Field(default='OPENMIURA')
+    reload_after_save: bool = Field(default=False)
+    actor: str = Field(default='admin')
+
+
+class ReloadAssistantApplyRequest(BaseModel):
+    sections: list[str] = Field(default_factory=list)
+    apply_live_reload: bool = Field(default=False)
+    request_restart: bool = Field(default=False)
+    execute_restart_hook: bool = Field(default=False)
+    actor: str = Field(default='admin')
 
 
 class EvaluationObservation(BaseModel):
@@ -2500,6 +2553,167 @@ def admin_reload(request: Request):
     gw = _require_admin(request)
     response = _ADMIN_SERVICE.reload(gw)
     _audit_admin(gw, "reload", {k: v for k, v in response.items() if k != "ok"})
+    return response
+
+
+@router.get("/admin/config-center")
+def admin_config_center(request: Request):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.config_center_snapshot(gw)
+    _audit_admin(gw, "config_center_read", {"sections": [item.get("name") for item in response.get("sections", [])]})
+    return response
+
+
+@router.post("/admin/config-center/validate")
+def admin_config_center_validate(payload: ConfigCenterValidateRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.validate_config_content(gw, section=payload.section, content=payload.content, form_payload=payload.form_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_validate", {"section": payload.section, "valid": response.get("valid", False)})
+    return response
+
+
+@router.post("/admin/config-center/save")
+def admin_config_center_save(payload: ConfigCenterSaveRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.save_config_content(
+            gw,
+            section=payload.section,
+            content=payload.content,
+            reload_after_save=payload.reload_after_save,
+            actor=payload.actor,
+            form_payload=payload.form_payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_save", {"section": payload.section, "reload_applied": response.get("reload_applied"), "restart_required": response.get("restart_required")})
+    return response
+
+
+@router.get("/admin/config-center/reload-assistant")
+def admin_config_center_reload_assistant(request: Request):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.reload_assistant_snapshot(gw)
+    _audit_admin(gw, "config_center_reload_assistant_read", {"sections": [item.get("name") for item in response.get("sections", [])], "hook_configured": (response.get("restart_hook") or {}).get("configured")})
+    return response
+
+
+@router.post("/admin/config-center/reload-assistant/apply")
+def admin_config_center_reload_assistant_apply(payload: ReloadAssistantApplyRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.apply_reload_assistant(
+            gw,
+            sections=payload.sections,
+            apply_live_reload=payload.apply_live_reload,
+            request_restart=payload.request_restart,
+            execute_restart_hook=payload.execute_restart_hook,
+            actor=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_reload_assistant_apply", {"sections": payload.sections, "live_reload_applied": response.get("live_reload_applied"), "restart_required": response.get("restart_required"), "restart_status": ((response.get("restart_request") or {}).get("status"))})
+    return response
+
+
+@router.get("/admin/config-center/channels-wizard")
+def admin_config_center_channels_wizard(request: Request):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.channel_setup_wizard_snapshot(gw)
+    _audit_admin(gw, "config_center_channels_wizard_read", {"channels": [item.get("name") for item in response.get("channels", [])]})
+    return response
+
+
+@router.post("/admin/config-center/channels-wizard/validate")
+def admin_config_center_channels_wizard_validate(payload: ChannelWizardValidateRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.validate_channel_setup(
+            gw,
+            channel=payload.channel,
+            content=payload.content,
+            wizard_payload=payload.wizard_payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_channels_wizard_validate", {"channel": response.get("channel"), "configured": response.get("channel_status", {}).get("configured")})
+    return response
+
+
+@router.post("/admin/config-center/channels-wizard/save")
+def admin_config_center_channels_wizard_save(payload: ChannelWizardSaveRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.save_channel_setup(
+            gw,
+            channel=payload.channel,
+            content=payload.content,
+            wizard_payload=payload.wizard_payload,
+            reload_after_save=payload.reload_after_save,
+            actor=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_channels_wizard_save", {"channel": response.get("channel"), "restart_required": response.get("restart_required")})
+    return response
+
+
+@router.get("/admin/config-center/secrets-wizard")
+def admin_config_center_secrets_wizard(request: Request, env_prefix: Optional[str] = Query(default='OPENMIURA')):
+    gw = _require_admin(request)
+    response = _ADMIN_SERVICE.secret_env_reference_wizard_snapshot(gw, env_prefix=env_prefix or 'OPENMIURA')
+    _audit_admin(gw, "config_center_secrets_wizard_read", {"profiles": [item.get("name") for item in response.get("profiles", [])], "env_prefix": response.get("env_prefix")})
+    return response
+
+
+@router.post("/admin/config-center/secrets-wizard/validate")
+def admin_config_center_secrets_wizard_validate(payload: SecretEnvWizardValidateRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.validate_secret_env_references(
+            gw,
+            profile=payload.profile,
+            content=payload.content,
+            wizard_payload=payload.wizard_payload,
+            env_prefix=payload.env_prefix,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_secrets_wizard_validate", {"profile": response.get("profile"), "configured": response.get("profile_status", {}).get("configured")})
+    return response
+
+
+@router.post("/admin/config-center/secrets-wizard/save")
+def admin_config_center_secrets_wizard_save(payload: SecretEnvWizardSaveRequest, request: Request):
+    gw = _require_admin(request)
+    try:
+        response = _ADMIN_SERVICE.save_secret_env_references(
+            gw,
+            profile=payload.profile,
+            content=payload.content,
+            wizard_payload=payload.wizard_payload,
+            env_prefix=payload.env_prefix,
+            reload_after_save=payload.reload_after_save,
+            actor=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_admin(gw, "config_center_secrets_wizard_save", {"profile": response.get("profile"), "restart_required": response.get("restart_required")})
     return response
 
 

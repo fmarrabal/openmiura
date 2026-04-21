@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from openmiura.core.config import resolve_config_related_path
 from openmiura.core.policies.models import PolicyDecision, PolicyTrace, ToolAccessDecision
 
 
@@ -37,8 +38,8 @@ def _listify(value: Any, *, lower: bool = False) -> list[str]:
 
 
 class PolicyEngine:
-    def __init__(self, policies_path: str | None = None):
-        self.policies_path = str(policies_path or "configs/policies.yaml")
+    def __init__(self, policies_path: str | None = None, *, config_path: str | None = None):
+        self.policies_path = resolve_config_related_path(config_path, policies_path or "policies.yaml", default_path="policies.yaml").as_posix()
         self._in_memory = False
         self._signature: str | None = None
         self._data: dict[str, Any] = self._empty_data()

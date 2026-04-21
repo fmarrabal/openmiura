@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import hashlib
@@ -41,6 +41,29 @@ from .job_family_common import OpenClawJobFamilyCommonMixin
 from .runtime_context import OpenClawRuntimeContextMixin
 from .approval_common import OpenClawApprovalCommonMixin
 from .governance_explainability import OpenClawGovernanceExplainabilityMixin
+from .scheduler_primitives import (
+    alert_delivery_job_definition,
+    baseline_simulation_custody_job_definition,
+    baseline_simulation_custody_job_id,
+    baseline_wave_advance_job_definition,
+    baseline_wave_job_id,
+    decorate_idempotency_record,
+    decorate_worker_lease,
+    due_slot,
+    governance_wave_advance_job_definition,
+    governance_wave_job_id,
+    holder_id,
+    is_workflow_job,
+    job_idempotency_key,
+    job_lease_key,
+    lease_type,
+    recovery_job_definition,
+    runtime_lease_key,
+    scheduler_policy,
+    scope as scheduler_scope,
+    workspace_lease_keys,
+    workspace_lease_prefix,
+)
 
 
 class OpenClawRecoverySchedulerService(
@@ -85,20 +108,11 @@ class OpenClawRecoverySchedulerService(
 
     @staticmethod
     def _scope(*, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
-        return {
-            'tenant_id': str(tenant_id).strip() if tenant_id is not None else None,
-            'workspace_id': str(workspace_id).strip() if workspace_id is not None else None,
-            'environment': str(environment).strip() if environment is not None else None,
-        }
+        return scheduler_scope(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     @classmethod
     def _is_recovery_job(cls, item: dict[str, Any] | None, *, runtime_id: str | None = None) -> bool:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        if str(definition.get('kind') or '').strip().lower() != cls.JOB_KIND:
-            return False
-        if runtime_id is None:
-            return True
-        return str(definition.get('runtime_id') or '').strip() == str(runtime_id or '').strip()
+        return is_workflow_job(item, kind=cls.JOB_KIND, field_name='runtime_id' if runtime_id is not None else None, field_value=runtime_id)
 
     @staticmethod
     def _job_definition(
@@ -109,23 +123,18 @@ class OpenClawRecoverySchedulerService(
         reason: str,
         scheduler_policy: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
-            'kind': OpenClawRecoverySchedulerService.JOB_KIND,
-            'runtime_id': str(runtime_id or '').strip(),
-            'limit': int(limit),
-            'reason': str(reason or '').strip(),
-            'scheduler_policy': dict(scheduler_policy or {}),
-            'created_by': str(actor or 'system'),
-        }
+        return recovery_job_definition(
+            runtime_id=runtime_id,
+            actor=actor,
+            limit=limit,
+            reason=reason,
+            scheduler_policy=scheduler_policy,
+            kind=OpenClawRecoverySchedulerService.JOB_KIND,
+        )
 
     @classmethod
     def _is_alert_delivery_job(cls, item: dict[str, Any] | None, *, runtime_id: str | None = None) -> bool:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        if str(definition.get('kind') or '').strip().lower() != cls.ALERT_DELIVERY_JOB_KIND:
-            return False
-        if runtime_id is None:
-            return True
-        return str(definition.get('runtime_id') or '').strip() == str(runtime_id or '').strip()
+        return is_workflow_job(item, kind=cls.ALERT_DELIVERY_JOB_KIND, field_name='runtime_id' if runtime_id is not None else None, field_value=runtime_id)
 
     @staticmethod
     def _alert_delivery_job_definition(
@@ -141,28 +150,23 @@ class OpenClawRecoverySchedulerService(
         notification_dispatch_id: str = '',
         route: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
-            'kind': OpenClawRecoverySchedulerService.ALERT_DELIVERY_JOB_KIND,
-            'runtime_id': str(runtime_id or '').strip(),
-            'alert_code': str(alert_code or '').strip(),
-            'workflow_action': str(workflow_action or 'escalate').strip().lower() or 'escalate',
-            'reason': str(reason or '').strip(),
-            'escalation_level': int(escalation_level or 0),
-            'attempt_no': max(0, int(attempt_no or 0)),
-            'notification_dispatch_id': str(notification_dispatch_id or '').strip(),
-            'target': dict(target or {}),
-            'route': dict(route or {}),
-            'created_by': str(actor or 'system'),
-        }
+        return alert_delivery_job_definition(
+            runtime_id=runtime_id,
+            alert_code=alert_code,
+            workflow_action=workflow_action,
+            actor=actor,
+            target=target,
+            reason=reason,
+            escalation_level=escalation_level,
+            attempt_no=attempt_no,
+            notification_dispatch_id=notification_dispatch_id,
+            route=route,
+            kind=OpenClawRecoverySchedulerService.ALERT_DELIVERY_JOB_KIND,
+        )
 
     @classmethod
     def _is_governance_wave_advance_job(cls, item: dict[str, Any] | None, *, bundle_id: str | None = None) -> bool:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        if str(definition.get('kind') or '').strip().lower() != cls.GOVERNANCE_WAVE_ADVANCE_JOB_KIND:
-            return False
-        if bundle_id is None:
-            return True
-        return str(definition.get('bundle_id') or '').strip() == str(bundle_id or '').strip()
+        return is_workflow_job(item, kind=cls.GOVERNANCE_WAVE_ADVANCE_JOB_KIND, field_name='bundle_id' if bundle_id is not None else None, field_value=bundle_id)
 
     @staticmethod
     def _governance_wave_advance_job_definition(
@@ -173,27 +177,22 @@ class OpenClawRecoverySchedulerService(
         actor: str,
         reason: str,
     ) -> dict[str, Any]:
-        return {
-            'kind': OpenClawRecoverySchedulerService.GOVERNANCE_WAVE_ADVANCE_JOB_KIND,
-            'bundle_id': str(bundle_id or '').strip(),
-            'source_wave_no': int(source_wave_no or 0),
-            'next_wave_no': int(next_wave_no or 0) if next_wave_no else None,
-            'reason': str(reason or '').strip(),
-            'created_by': str(actor or 'system'),
-        }
+        return governance_wave_advance_job_definition(
+            bundle_id=bundle_id,
+            source_wave_no=source_wave_no,
+            next_wave_no=next_wave_no,
+            actor=actor,
+            reason=reason,
+            kind=OpenClawRecoverySchedulerService.GOVERNANCE_WAVE_ADVANCE_JOB_KIND,
+        )
 
     @staticmethod
     def _governance_wave_job_id(bundle_id: str, source_wave_no: int) -> str:
-        return f"openclaw-governance-wave-advance:{str(bundle_id or '').strip()}:{int(source_wave_no or 0)}"
+        return governance_wave_job_id(bundle_id, source_wave_no)
 
     @classmethod
     def _is_baseline_wave_advance_job(cls, item: dict[str, Any] | None, *, promotion_id: str | None = None) -> bool:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        if str(definition.get('kind') or '').strip().lower() != cls.BASELINE_WAVE_ADVANCE_JOB_KIND:
-            return False
-        if promotion_id is None:
-            return True
-        return str(definition.get('promotion_id') or '').strip() == str(promotion_id or '').strip()
+        return is_workflow_job(item, kind=cls.BASELINE_WAVE_ADVANCE_JOB_KIND, field_name='promotion_id' if promotion_id is not None else None, field_value=promotion_id)
 
     @staticmethod
     def _baseline_wave_advance_job_definition(
@@ -204,27 +203,22 @@ class OpenClawRecoverySchedulerService(
         actor: str,
         reason: str,
     ) -> dict[str, Any]:
-        return {
-            'kind': OpenClawRecoverySchedulerService.BASELINE_WAVE_ADVANCE_JOB_KIND,
-            'promotion_id': str(promotion_id or '').strip(),
-            'source_wave_no': int(source_wave_no or 0),
-            'next_wave_no': int(next_wave_no or 0) if next_wave_no else None,
-            'reason': str(reason or '').strip(),
-            'created_by': str(actor or 'system'),
-        }
+        return baseline_wave_advance_job_definition(
+            promotion_id=promotion_id,
+            source_wave_no=source_wave_no,
+            next_wave_no=next_wave_no,
+            actor=actor,
+            reason=reason,
+            kind=OpenClawRecoverySchedulerService.BASELINE_WAVE_ADVANCE_JOB_KIND,
+        )
 
     @staticmethod
     def _baseline_wave_job_id(promotion_id: str, source_wave_no: int) -> str:
-        return f"openclaw-baseline-wave-advance:{str(promotion_id or '').strip()}:{int(source_wave_no or 0)}"
+        return baseline_wave_job_id(promotion_id, source_wave_no)
 
     @classmethod
     def _is_baseline_simulation_custody_job(cls, item: dict[str, Any] | None, *, promotion_id: str | None = None) -> bool:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        if str(definition.get('kind') or '').strip().lower() != cls.BASELINE_SIMULATION_CUSTODY_JOB_KIND:
-            return False
-        if promotion_id is None:
-            return True
-        return str(definition.get('promotion_id') or '').strip() == str(promotion_id or '').strip()
+        return is_workflow_job(item, kind=cls.BASELINE_SIMULATION_CUSTODY_JOB_KIND, field_name='promotion_id' if promotion_id is not None else None, field_value=promotion_id)
 
     @staticmethod
     def _baseline_simulation_custody_job_definition(
@@ -234,127 +228,61 @@ class OpenClawRecoverySchedulerService(
         interval_s: int,
         reason: str,
     ) -> dict[str, Any]:
-        return {
-            'kind': OpenClawRecoverySchedulerService.BASELINE_SIMULATION_CUSTODY_JOB_KIND,
-            'promotion_id': str(promotion_id or '').strip(),
-            'interval_s': max(60, int(interval_s or 3600)),
-            'reason': str(reason or '').strip(),
-            'created_by': str(actor or 'system'),
-        }
+        return baseline_simulation_custody_job_definition(
+            promotion_id=promotion_id,
+            actor=actor,
+            interval_s=interval_s,
+            reason=reason,
+            kind=OpenClawRecoverySchedulerService.BASELINE_SIMULATION_CUSTODY_JOB_KIND,
+        )
 
     @staticmethod
     def _baseline_simulation_custody_job_id(promotion_id: str) -> str:
-        return f"openclaw-baseline-simulation-custody:{str(promotion_id or '').strip()}"
+        return baseline_simulation_custody_job_id(promotion_id)
 
     @staticmethod
     def _holder_id(actor: str) -> str:
-        host = socket.gethostname() or 'localhost'
-        return f"{str(actor or 'worker').strip()}:{host}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+        return holder_id(actor)
 
     @staticmethod
     def _scheduler_policy(item: dict[str, Any] | None) -> dict[str, Any]:
-        definition = dict((item or {}).get('workflow_definition') or {})
-        raw = dict(definition.get('scheduler_policy') or {})
-        try:
-            lease_ttl_s = int(raw.get('lease_ttl_s') or 120)
-        except Exception:
-            lease_ttl_s = 120
-        try:
-            idempotency_ttl_s = int(raw.get('idempotency_ttl_s') or 1800)
-        except Exception:
-            idempotency_ttl_s = 1800
-        try:
-            workspace_backpressure_limit = int(raw.get('workspace_backpressure_limit') or 1)
-        except Exception:
-            workspace_backpressure_limit = 1
-        return {
-            **raw,
-            'lease_ttl_s': max(5, lease_ttl_s),
-            'idempotency_ttl_s': max(30, idempotency_ttl_s),
-            'workspace_backpressure_limit': max(1, workspace_backpressure_limit),
-            'runtime_exclusive': bool(raw.get('runtime_exclusive', True)),
-        }
+        return scheduler_policy(item)
 
     @staticmethod
     def _due_slot(item: dict[str, Any] | None, *, now: float | None = None) -> int:
-        base = (item or {}).get('next_run_at')
-        if base is None:
-            base = now if now is not None else time.time()
-        try:
-            return int(float(base))
-        except Exception:
-            return int(now if now is not None else time.time())
+        return due_slot(item, now=now)
 
     @staticmethod
     def _job_lease_key(job_id: str) -> str:
-        return f'openclaw-recovery:job:{str(job_id or "").strip()}'
+        return job_lease_key(job_id)
 
     @staticmethod
     def _runtime_lease_key(runtime_id: str) -> str:
-        return f'openclaw-recovery:runtime:{str(runtime_id or "").strip()}'
+        return runtime_lease_key(runtime_id)
 
     @classmethod
     def _workspace_lease_prefix(cls, scope: dict[str, Any]) -> str:
-        return 'openclaw-recovery:workspace:{tenant}:{workspace}:{environment}:'.format(
-            tenant=str(scope.get('tenant_id') or '-').strip() or '-',
-            workspace=str(scope.get('workspace_id') or '-').strip() or '-',
-            environment=str(scope.get('environment') or '-').strip() or '-',
-        )
+        return workspace_lease_prefix(scope)
 
     @classmethod
     def _workspace_lease_keys(cls, scope: dict[str, Any], *, limit: int) -> list[str]:
-        prefix = cls._workspace_lease_prefix(scope)
-        return [f'{prefix}{idx}' for idx in range(max(1, int(limit)))]
+        return workspace_lease_keys(scope, limit=limit)
 
     @staticmethod
     def _job_idempotency_key(job_id: str, due_slot: int) -> str:
-        return f'openclaw-recovery:idempotency:{str(job_id or "").strip()}:{int(due_slot)}'
+        return job_idempotency_key(job_id, due_slot)
 
     @staticmethod
     def _lease_type(lease_key: str) -> str:
-        raw = str(lease_key or '').strip()
-        if raw.startswith('openclaw-recovery:job:'):
-            return 'job'
-        if raw.startswith('openclaw-recovery:runtime:'):
-            return 'runtime'
-        if raw.startswith('openclaw-recovery:workspace:'):
-            return 'workspace'
-        return 'other'
+        return lease_type(lease_key)
 
     @staticmethod
     def _decorate_worker_lease(item: dict[str, Any] | None, *, now: float | None = None) -> dict[str, Any]:
-        record = dict(item or {})
-        ts = float(now if now is not None else time.time())
-        lease_until = float(record.get('lease_until') or 0.0)
-        created_at = float(record.get('created_at') or 0.0)
-        updated_at = float(record.get('updated_at') or created_at or 0.0)
-        lease_key = str(record.get('lease_key') or '').strip()
-        record['lease_type'] = OpenClawRecoverySchedulerService._lease_type(lease_key)
-        record['active'] = lease_until > ts
-        record['lease_remaining_s'] = max(0.0, lease_until - ts) if lease_until else 0.0
-        record['held_for_s'] = max(0.0, ts - created_at) if created_at else 0.0
-        record['updated_age_s'] = max(0.0, ts - updated_at) if updated_at else 0.0
-        return record
+        return decorate_worker_lease(item, now=now)
 
     @staticmethod
     def _decorate_idempotency_record(item: dict[str, Any] | None, *, now: float | None = None) -> dict[str, Any]:
-        record = dict(item or {})
-        ts = float(now if now is not None else time.time())
-        expires_at = record.get('expires_at')
-        expires_value = float(expires_at) if expires_at is not None else None
-        updated_at = float(record.get('updated_at') or record.get('created_at') or 0.0)
-        record['active'] = str(record.get('status') or '').strip().lower() == 'in_progress' and (expires_value is None or expires_value > ts)
-        record['expires_in_s'] = None if expires_value is None else max(0.0, expires_value - ts)
-        record['updated_age_s'] = max(0.0, ts - updated_at) if updated_at else 0.0
-        key = str(record.get('idempotency_key') or '').strip()
-        parts = key.split(':')
-        if len(parts) >= 4:
-            record['job_id'] = parts[-2]
-            record['due_slot'] = int(parts[-1]) if parts[-1].isdigit() else parts[-1]
-        else:
-            record['job_id'] = ''
-            record['due_slot'] = None
-        return record
+        return decorate_idempotency_record(item, now=now)
 
 
     @staticmethod

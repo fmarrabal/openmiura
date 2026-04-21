@@ -15,7 +15,7 @@ from openmiura.core.worker_runtime import build_worker_manager, resolve_worker_m
 from openmiura.infrastructure.persistence.db import DBConnection
 from openmiura.core.migrations import apply_migrations, backup_database, downgrade_migrations, restore_database, schema_status
 from openmiura.gateway import Gateway
-from openmiura.core.config import load_settings
+from openmiura.core.config import load_settings, resolve_config_related_path
 from openmiura.infrastructure.persistence.audit_store import AuditStore
 from openmiura.extensions.sdk import ExtensionHarness, ExtensionRegistry, scaffold_project
 
@@ -83,6 +83,63 @@ def _check_storage(*, backend: str, db_path: str, database_url: str) -> tuple[bo
         label = "PostgreSQL" if str(backend).strip().lower() == "postgresql" else "SQLite"
         target = database_url if str(backend).strip().lower() == "postgresql" else db_path
         return False, f"{label} error for {target}: {exc!r}"
+
+
+
+def _looks_like_placeholder(value: Any) -> bool:
+    token = str(value or '').strip().lower()
+    if not token:
+        return True
+    return token in {
+        'change-me',
+        'replace-me',
+        'demo-password',
+        'demo-admin-token',
+        'set-me',
+        'your-token-here',
+        'your-password-here',
+    }
+
+
+def _tool_posture_checks(settings: Any) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    tools = getattr(settings, 'tools', None)
+    web_fetch = getattr(tools, 'web_fetch', None) if tools is not None else None
+    terminal = getattr(tools, 'terminal', None) if tools is not None else None
+
+    allow_all_domains = bool(getattr(web_fetch, 'allow_all_domains', False)) if web_fetch is not None else False
+    allowed_domains = list(getattr(web_fetch, 'allowed_domains', []) or []) if web_fetch is not None else []
+    checks.append({
+        'name': 'web_fetch_posture',
+        'ok': True,
+        'detail': (
+            'web_fetch unrestricted to all domains' if allow_all_domains else
+            'web_fetch restricted' + (f" to {', '.join(allowed_domains)}" if allowed_domains else ' with explicit domain review still required')
+        ),
+        'level': 'warning' if allow_all_domains else 'info',
+    })
+
+    terminal_enabled = bool(getattr(terminal, 'enabled', False)) if terminal is not None else False
+    allow_shell = bool(getattr(terminal, 'allow_shell', False)) if terminal is not None else False
+    allow_metachars = bool(getattr(terminal, 'allow_shell_metacharacters', False)) if terminal is not None else False
+    require_allowlist = bool(getattr(terminal, 'require_explicit_allowlist', True)) if terminal is not None else True
+    allowed_commands = list(getattr(terminal, 'allowed_commands', []) or []) if terminal is not None else []
+    insecure_terminal = terminal_enabled and (allow_shell or allow_metachars or not require_allowlist)
+    if not terminal_enabled:
+        detail = 'terminal_exec disabled by default posture'
+        ok = True
+        level = 'info'
+    elif insecure_terminal:
+        detail = 'terminal_exec enabled with permissive shell posture'
+        ok = True
+        level = 'warning'
+    else:
+        suffix = f" (allowed commands: {', '.join(allowed_commands)})" if allowed_commands else ' (no commands allowlisted yet)'
+        detail = 'terminal_exec enabled with constrained posture' + suffix
+        ok = True
+        level = 'info'
+    checks.append({'name': 'terminal_posture', 'ok': ok, 'detail': detail, 'level': level})
+    return checks
 
 
 def _doctor_payload(config_path: str) -> tuple[dict[str, Any], int]:
@@ -197,6 +254,24 @@ def _doctor_payload(config_path: str) -> tuple[dict[str, Any], int]:
         if skill_loader.errors:
             add_check("skills_errors", True, f"Ignored invalid manifests: {len(skill_loader.errors)}", "warning")
 
+    for check in _tool_posture_checks(settings):
+        add_check(check['name'], check['ok'], check['detail'], check['level'])
+
+    admin_cfg = getattr(settings, 'admin', None)
+    auth_cfg = getattr(settings, 'auth', None)
+    broker_cfg = getattr(settings, 'broker', None)
+    placeholder_findings: list[str] = []
+    if admin_cfg is not None and bool(getattr(admin_cfg, 'enabled', False)) and _looks_like_placeholder(getattr(admin_cfg, 'token', '')):
+        placeholder_findings.append('OPENMIURA_ADMIN_TOKEN')
+    if auth_cfg is not None and bool(getattr(auth_cfg, 'enabled', False)) and _looks_like_placeholder(getattr(auth_cfg, 'ui_admin_password', '')):
+        placeholder_findings.append('OPENMIURA_UI_ADMIN_PASSWORD')
+    if broker_cfg is not None and bool(getattr(broker_cfg, 'enabled', False)) and _looks_like_placeholder(getattr(broker_cfg, 'token', '')):
+        placeholder_findings.append('OPENMIURA_BROKER_TOKEN')
+    if placeholder_findings:
+        add_check('placeholder_credentials', True, 'Replace placeholder secrets: ' + ', '.join(placeholder_findings), 'warning')
+    else:
+        add_check('placeholder_credentials', True, 'No obvious placeholder admin/broker credentials detected')
+
     provider = str(settings.llm.provider or 'ollama').strip().lower()
     if provider == 'ollama':
         ollama_tags = settings.llm.base_url.rstrip('/') + '/api/tags'
@@ -242,12 +317,19 @@ def _doctor_payload(config_path: str) -> tuple[dict[str, Any], int]:
         "embed_model": settings.memory.embed_model if settings.memory else None,
         "history_limit": settings.runtime.history_limit,
         "pending_confirmation_ttl_s": getattr(settings.runtime, "pending_confirmation_ttl_s", None),
-        "skills_path": getattr(settings, "skills_path", "skills"),
+        "skills_path": resolve_config_related_path(
+            getattr(settings, "config_path", None),
+            getattr(settings, "skills_path", "../skills"),
+            default_path="../skills",
+        ).as_posix(),
         "skills_loaded": [row["name"] for row in getattr(getattr(getattr(gw, "runtime", None), "skill_loader", None), "catalog", lambda: [])()],
         "vault_enabled": bool(getattr(getattr(settings, "memory", None), "vault", None) and settings.memory.vault.enabled),
         "mcp_enabled": bool(getattr(settings, "mcp", None) and settings.mcp.enabled),
         "broker_enabled": bool(getattr(settings, "broker", None) and settings.broker.enabled),
         "broker_base_path": getattr(getattr(settings, "broker", None), "base_path", None),
+        "web_fetch_allow_all_domains": bool(getattr(getattr(settings, "tools", None), "web_fetch", None) and settings.tools.web_fetch.allow_all_domains),
+        "terminal_enabled": bool(getattr(getattr(settings, "tools", None), "terminal", None) and settings.tools.terminal.enabled),
+        "terminal_require_explicit_allowlist": bool(getattr(getattr(settings, "tools", None), "terminal", None) and settings.tools.terminal.require_explicit_allowlist),
     }
     return payload, exit_code
 

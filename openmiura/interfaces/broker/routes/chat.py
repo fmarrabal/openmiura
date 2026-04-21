@@ -111,7 +111,22 @@ def build_chat_router() -> APIRouter:
         if tools_runtime is None:
             raise HTTPException(status_code=503, detail="Tool runtime not configured")
         user_key = resolve_user_key(auth_ctx, payload.user_key)
-        access = tools_runtime.tool_access(payload.agent_id, "terminal_exec")
+        role = str(auth_ctx.get("role") or "user")
+        scope = {
+            "tenant_id": auth_ctx.get("tenant_id"),
+            "workspace_id": auth_ctx.get("workspace_id"),
+            "environment": auth_ctx.get("environment"),
+        }
+
+        access = tools_runtime.tool_access(
+            payload.agent_id,
+            "terminal_exec",
+            user_role=role,
+            tenant_id=scope.get("tenant_id"),
+            workspace_id=scope.get("workspace_id"),
+            environment=scope.get("environment"),
+            channel="broker",
+        )
         if not bool(access.get("allowed", True)):
             raise HTTPException(status_code=403, detail=str(access.get("reason") or "terminal_exec not allowed"))
         if bool(access.get("requires_confirmation", False)) and not payload.confirmed:
@@ -119,10 +134,33 @@ def build_chat_router() -> APIRouter:
 
         ctx = tools_runtime.sandbox_dir
         terminal_cfg = getattr(getattr(gw.settings, "tools", None), "terminal", None)
-        enforce_rate_limit(request, auth_ctx, bucket="terminal_stream", limit_per_minute=max(5, int(getattr(gw.settings.broker, "rate_limit_per_minute", 120) or 120) // 4))
-        role = str(auth_ctx.get("role") or "user")
+        enforce_rate_limit(
+            request,
+            auth_ctx,
+            bucket="terminal_stream",
+            limit_per_minute=max(5, int(getattr(gw.settings.broker, "rate_limit_per_minute", 120) or 120) // 4),
+        )
+
+        sandbox_decision = None
+        sandbox_manager = getattr(tools_runtime, "sandbox_manager", None)
+        if sandbox_manager is not None:
+            sandbox_decision = sandbox_manager.resolve(
+                user_role=role,
+                tenant_id=scope.get("tenant_id"),
+                workspace_id=scope.get("workspace_id"),
+                environment=scope.get("environment"),
+                channel="broker",
+                agent_name=payload.agent_id,
+                tool_name="terminal_exec",
+            )
+
         try:
-            parts, executable, policy = validate_terminal_command_policy(payload.command, terminal_cfg, role)
+            parts, executable, policy = validate_terminal_command_policy(
+                payload.command,
+                terminal_cfg,
+                role,
+                sandbox_decision=sandbox_decision,
+            )
         except ToolError as exc:
             audit_sensitive(gw, action="terminal_stream_denied", auth_ctx=auth_ctx, status="denied", target=payload.command, details={"reason": str(exc)})
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -136,7 +174,7 @@ def build_chat_router() -> APIRouter:
             workdir = _resolve_in_sandbox(ctx, payload.cwd)
             if not workdir.exists() or not workdir.is_dir():
                 raise HTTPException(status_code=404, detail="Working directory not found")
-        scope = {"tenant_id": auth_ctx.get("tenant_id"), "workspace_id": auth_ctx.get("workspace_id"), "environment": auth_ctx.get("environment")}
+        
         tenancy_enabled = bool(getattr(getattr(gw.settings, "tenancy", None), "enabled", False))
         session_id = payload.session_id or (
             build_scoped_session_id(prefix="broker-terminal", user_key=user_key, agent_id=payload.agent_id, **scope)

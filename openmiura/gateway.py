@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -41,6 +42,7 @@ class Gateway:
     policy: Optional[PolicyEngine] = None
     identity: Optional[IdentityManager] = None
     started_at: float = field(default_factory=time.time)
+    boot_instance_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     pending_confirmations: PendingConfirmationStore = field(default_factory=PendingConfirmationStore)
     realtime_bus: object | None = None
     secret_broker: SecretBroker | None = None
@@ -126,8 +128,8 @@ class Gateway:
                     audit.ensure_auth_user(username=admin_user, password=admin_pass, user_key=f"user:{admin_user}", role="admin")
                 except Exception:
                     pass
-        policy = PolicyEngine(getattr(settings, "policies_path", None))
-        router = AgentRouter(settings=settings, audit=audit)
+        policy = PolicyEngine(getattr(settings, "policies_path", None), config_path=path)
+        router = AgentRouter(settings=settings, audit=audit, config_path=path)
         runtime = AgentRuntime(settings=settings, audit=audit)
         identity = IdentityManager(audit)
 
@@ -164,7 +166,22 @@ class Gateway:
         reg.register(WebFetchTool())
         reg.register(FsReadTool())
         reg.register(FsWriteTool())
-        if settings.tools is None or getattr(getattr(settings.tools, 'terminal', None), 'enabled', True):
+
+        explicit_terminal_opt_in = any(
+            'terminal_exec' in {
+                str(x).strip()
+                for x in ((cfg or {}).get('allowed_tools') or (cfg or {}).get('tools') or [])
+                if str(x).strip()
+            }
+            for cfg in (getattr(settings, 'agents', {}) or {}).values()
+            if isinstance(cfg, dict)
+        )
+
+        if (
+            settings.tools is None
+            or getattr(getattr(settings.tools, 'terminal', None), 'enabled', True)
+            or explicit_terminal_opt_in
+        ):
             reg.register(TerminalExecTool())
 
         skill_loader = getattr(runtime, "skill_loader", None)
@@ -212,16 +229,24 @@ class Gateway:
             secret_broker=secret_broker,
             sandbox=sandbox,
         )
+        gw.config_path = path
+        startup_payload = {
+            "event": "startup",
+            "config_path": path,
+            "boot_instance_id": str(getattr(gw, "boot_instance_id", "") or ""),
+            "pid": os.getpid(),
+            "started_at": float(getattr(gw, "started_at", time.time()) or time.time()),
+        }
         gw.audit.log_event(
             direction="system",
             channel="system",
             user_id="system",
             session_id="system",
-            payload={"event": "startup", "config_path": path},
+            payload=startup_payload,
         )
         if gw.realtime_bus is not None:
             try:
-                gw.realtime_bus.publish("system", event="startup", config_path=path)
+                gw.realtime_bus.publish("system", **startup_payload)
             except Exception:
                 pass
         return gw

@@ -60,8 +60,10 @@
           <button class="tab-btn" data-tab="operator">Operator</button>
           <button class="tab-btn" data-tab="releases">Releases</button>
           <button class="tab-btn" data-tab="voice">Voice</button>
+          <button class="tab-btn" data-tab="tinyRuntime">Tiny Runtime</button>
           <button class="tab-btn" data-tab="app">App</button>
           <button class="tab-btn" data-tab="canvas">Canvas</button>
+          <button class="tab-btn" data-tab="config">Config</button>
           <button class="tab-btn" data-tab="admin">Admin</button>
           <select id="agentSelect"></select>
           <button id="refreshAgentsBtn" class="ghost">Refresh agents</button>
@@ -406,6 +408,35 @@
       </section>
 
 
+      <section id="tinyRuntimeTab" class="tab stack hidden">
+        <div class="grid-three">
+          <section class="panel stat-card"><div class="row between"><h3>Tiny Runtime</h3><button id="refreshTinyRuntimeBtn" class="ghost">Refresh</button></div><div id="tinyRuntimeOverview" class="overview-grid"></div></section>
+          <section class="panel stat-card"><h3>Selected runtime</h3><div id="tinyRuntimeSelectedBadge" class="badge" data-runtime-id="">No runtime selected</div></section>
+          <section class="panel stat-card"><h3>Dispatch summary</h3><pre id="tinyRuntimeDispatchSummaryBox" class="code-box"></pre></section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between wrap"><h3>Tiny Runtime Console</h3><div class="row wrap"><input id="tinyRuntimeTenant" placeholder="tenant_id" /><input id="tinyRuntimeWorkspace" placeholder="workspace_id" /><input id="tinyRuntimeEnvironment" placeholder="environment" value="dev" /></div></div>
+            <div class="row wrap"><input id="tinyRuntimeFilterStatus" placeholder="status (optional)" /><input id="tinyRuntimeFilterKind" placeholder="kind filter" value="tiny_openclaw" /></div>
+            <pre id="tinyRuntimeConsoleBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Runtime registry</h3><span id="tinyRuntimeListSummary" class="muted">Not loaded</span></div>
+            <div id="tinyRuntimeList" class="history admin-list"></div>
+          </section>
+        </div>
+        <div class="grid-two">
+          <section class="panel stack">
+            <div class="row between"><h3>Runtime detail</h3><span id="tinyRuntimeDetailBadge" class="muted">No runtime selected</span></div>
+            <pre id="tinyRuntimeDetailBox" class="code-box"></pre>
+          </section>
+          <section class="panel stack">
+            <div class="row between"><h3>Recent dispatches</h3><span class="muted">Latest runtime activity</span></div>
+            <div id="tinyRuntimeDispatchList" class="history admin-list"></div>
+          </section>
+        </div>
+      </section>
+
       <section id="appTab" class="tab stack hidden">
         <div class="grid-three">
           <section class="panel stat-card"><div class="row between"><h3>PWA status</h3><button id="refreshAppFoundationBtn" class="ghost">Refresh</button></div><div id="appOverview" class="overview-grid"></div></section>
@@ -416,7 +447,7 @@
           <section class="panel stack">
             <div class="row between wrap"><h3>Register current device</h3><button id="registerCurrentPwaBtn">Register installation</button></div>
             <div class="row wrap"><input id="appUserKey" placeholder="user_key" /><input id="appPlatform" placeholder="pwa|android|ios|desktop" value="pwa" /></div>
-            <div class="row wrap"><input id="appDeviceLabel" placeholder="Current browser / mobile" /><input id="appTenant" placeholder="tenant_id" /><input id="appWorkspace" placeholder="workspace_id" /></div>
+            <div class="row wrap"><input id="appDeviceLabel" placeholder="Current browser / mobile" /><input id="appTenant" placeholder="tenant_id" /><input id="appWorkspace" placeholder="workspace_id" /><input id="appEnvironment" placeholder="environment" value="dev" /></div>
             <div class="row wrap"><label class="toggle"><input id="appPushCapable" type="checkbox" /> push capable</label><input id="appNotificationPermission" placeholder="default|granted|denied" value="default" /></div>
             <pre id="appInstallResultBox" class="code-box"></pre>
           </section>
@@ -538,6 +569,96 @@
     <section class="panel stack">
       <div class="row between"><h3>Overlay inspector</h3><span class="muted">Policy, cost, failures, approvals, secrets</span></div>
       <div id="canvasOverlayList" class="history admin-list"></div>
+    </section>
+  </div>
+</section>
+
+
+<section id="configTab" class="tab stack hidden">
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between wrap"><h3>Configuration Center</h3><div class="row wrap"><button id="refreshConfigCenterBtn" class="ghost">Refresh</button><button id="validateConfigBtn">Validate</button><button id="saveConfigBtn">Save</button><button id="saveReloadConfigBtn">Save + apply</button></div></div>
+      <div class="row wrap"><select id="configSectionSelect"></select><input id="configFilePath" placeholder="Config path" readonly /></div>
+      <div class="row wrap"><label class="check"><input id="configReloadToggle" type="checkbox" /> apply live reload when supported</label><button id="copyConfigPathBtn" class="ghost">Copy path</button><button id="copyConfigYamlBtn" class="ghost">Copy YAML</button></div>
+      <textarea id="configEditor" class="builder-json" placeholder="YAML configuration…"></textarea>
+      <pre id="configValidationBox" class="code-box"></pre>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Current file summary</h3><span id="configSectionBadge" class="muted">Not loaded</span></div>
+      <pre id="configSummaryBox" class="code-box"></pre>
+      <div class="row between"><h3>Quick settings</h3><span class="muted">Effective runtime snapshot</span></div>
+      <pre id="configQuickSettingsBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack" id="configFormPanel">
+      <div class="row between wrap"><h3>Main settings form</h3><div class="row wrap"><button id="loadConfigFormFromEditorBtn" class="ghost">Load form from YAML</button><button id="applyConfigFormBtn" class="ghost">Apply form to editor</button><button id="saveConfigFormBtn">Save form</button><button id="saveReloadConfigFormBtn">Save form + apply</button></div></div>
+      <div id="configFormUnavailable" class="muted">Select <code>openmiura</code> to use the guided form editor.</div>
+      <div id="configFormGroups" class="stack"></div>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Form preview</h3><span class="muted">Generated YAML from structured fields</span></div>
+      <pre id="configFormPreviewBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack" id="channelWizardPanel">
+      <div class="row between wrap"><h3>Channel setup wizard</h3><div class="row wrap"><button id="refreshChannelWizardBtn" class="ghost">Refresh</button><button id="loadChannelWizardFromEditorBtn" class="ghost">Load from YAML</button><button id="applyChannelWizardBtn" class="ghost">Apply to editor</button><button id="saveChannelWizardBtn">Save channel</button><button id="saveReloadChannelWizardBtn">Save channel + apply</button></div></div>
+      <div class="row wrap"><select id="channelWizardChannelSelect"></select><span id="channelWizardBadge" class="muted">Not loaded</span></div>
+      <div id="channelWizardGroups" class="stack"></div>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Channel preview</h3><span class="muted">Generated YAML with selected channel settings</span></div>
+      <pre id="channelWizardPreviewBox" class="code-box"></pre>
+      <div class="row between"><h3>Channel status</h3><span class="muted">Configuration hints</span></div>
+      <pre id="channelWizardSummaryBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack" id="secretEnvWizardPanel">
+      <div class="row between wrap"><h3>Secrets &amp; env references</h3><div class="row wrap"><button id="refreshSecretEnvWizardBtn" class="ghost">Refresh</button><button id="loadSecretEnvWizardFromEditorBtn" class="ghost">Load from YAML</button><button id="applySuggestedSecretEnvRefsBtn" class="ghost">Apply suggested env refs</button><button id="applySecretEnvWizardBtn" class="ghost">Apply to editor</button><button id="saveSecretEnvWizardBtn">Save refs</button><button id="saveReloadSecretEnvWizardBtn">Save refs + apply</button></div></div>
+      <div class="row wrap"><select id="secretEnvProfileSelect"></select><input id="secretEnvPrefixInput" placeholder="Env prefix" value="OPENMIURA" /><span id="secretEnvBadge" class="muted">Not loaded</span></div>
+      <div id="secretEnvGroups" class="stack"></div>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Secret reference preview</h3><span class="muted">Generated YAML for secret refs</span></div>
+      <pre id="secretEnvPreviewBox" class="code-box"></pre>
+      <div class="row between"><h3>.env example</h3><span class="muted">You no longer need to type env var names by hand</span></div>
+      <pre id="secretEnvExampleBox" class="code-box"></pre>
+      <div class="row between"><h3>Reference status</h3><span class="muted">Configured secret sources</span></div>
+      <pre id="secretEnvSummaryBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between wrap"><h3>Reload &amp; restart assistant</h3><div class="row wrap"><button id="refreshReloadAssistantBtn" class="ghost">Refresh</button><button id="applyReloadAssistantBtn">Apply selected actions</button></div></div>
+      <div class="row wrap"><label class="check"><input id="reloadAssistantApplyLiveReload" type="checkbox" checked /> live reload supported sections</label><label class="check"><input id="reloadAssistantRequestRestart" type="checkbox" /> request restart when needed</label><label class="check"><input id="reloadAssistantExecuteHook" type="checkbox" /> execute external restart hook</label></div>
+      <div id="reloadAssistantHookBadge" class="muted">Runtime hook status not loaded.</div>
+      <div id="reloadAssistantSectionList" class="history admin-list"></div>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Runtime health &amp; process state</h3><span id="reloadAssistantRuntimeBadge" class="muted">Runtime status not loaded.</span></div>
+      <pre id="reloadAssistantRuntimeBox" class="code-box"></pre>
+      <div class="row between"><h3>Startup config signature</h3><span class="muted">What this process booted with</span></div>
+      <pre id="reloadAssistantStartupConfigBox" class="code-box"></pre>
+      <div class="row between"><h3>Restart hook result</h3><span id="reloadAssistantHookResultBadge" class="muted">Hook result not loaded.</span></div>
+      <pre id="reloadAssistantHookResultBox" class="code-box"></pre>
+      <div class="row between"><h3>Latest boot evidence</h3><span id="reloadAssistantBootEvidenceBadge" class="muted">Boot evidence not loaded.</span></div>
+      <pre id="reloadAssistantBootEvidenceBox" class="code-box"></pre>
+      <div class="row between"><h3>Recent restart requests</h3><span class="muted">Queued and executed requests</span></div>
+      <div id="reloadAssistantRecentList" class="history admin-list"></div>
+      <div class="row between"><h3>Reload assistant result</h3><span class="muted">Live reload, queue and hook execution</span></div>
+      <pre id="reloadAssistantResultBox" class="code-box"></pre>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel stack">
+      <div class="row between"><h3>Configuration files</h3><span class="muted">Main, agents, policies, evaluations</span></div>
+      <div id="configFileList" class="history admin-list"></div>
+    </section>
+    <section class="panel stack">
+      <div class="row between"><h3>Save result</h3><span class="muted">Reload support and restart hints</span></div>
+      <pre id="configSaveResultBox" class="code-box"></pre>
     </section>
   </div>
 </section>

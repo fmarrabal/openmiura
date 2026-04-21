@@ -12,7 +12,7 @@ from openmiura.tools.runtime import ToolConfirmationRequired
 from openmiura.observability import record_error, record_tokens
 
 from .audit import AuditStore
-from .config import Settings
+from .config import Settings, resolve_config_related_path
 from .llm import AnthropicClient, OllamaClient, OpenAICompatibleClient
 
 _MAX_EXTRA_SYSTEM_CHARS = 3000
@@ -25,7 +25,12 @@ class AgentRuntime:
         self.audit = audit
         self.llm = self._build_llm_client(settings)
 
-        skills_path = getattr(settings, 'skills_path', 'skills')
+        skills_path = resolve_config_related_path(
+            getattr(settings, 'config_path', None),
+            getattr(settings, 'skills_path', '../skills'),
+            default_path='../skills',
+        ).as_posix()
+        self.skills_path = skills_path
         if SkillLoader is not None:
             self.skill_loader = SkillLoader(skills_path)
             try:

@@ -17,7 +17,7 @@ def test_enterprise_alpha_docs_cover_installation_risks_limitations_and_checklis
     assert 'Recommended installation path' in guide
     assert 'Known risks and residual limitations' in guide
     assert 'docker compose up --build -d' in guide
-    assert 'openmiura doctor --config configs/' in guide
+    assert 'openmiura doctor --config configs/openmiura.yaml' in guide
     assert 'scripts/build_release_artifacts.py' in guide
     assert 'scripts/verify_release_artifacts.py' in guide
     assert 'OpenClaw' in guide
@@ -37,8 +37,16 @@ def test_docs_index_and_primary_guides_link_to_enterprise_alpha_material() -> No
 
     assert 'enterprise_alpha.md' in docs_index
     assert 'alpha_release_checklist.md' in docs_index
+    assert 'release_candidate.md' in docs_index
+    assert 'release_support_matrix.md' in docs_index
     assert 'enterprise_alpha.md' in installation
     assert 'alpha_release_checklist.md' in installation
+    assert 'release_candidate.md' in installation
+    assert 'release_support_matrix.md' in installation
     assert 'enterprise_alpha.md' in production
     assert 'alpha_release_checklist.md' in production
+    assert 'release_candidate.md' in production
+    assert 'release_support_matrix.md' in production
     assert 'docs/enterprise_alpha.md' in readme
+    assert 'docs/release_candidate.md' in readme
+    assert 'docs/release_support_matrix.md' in readme

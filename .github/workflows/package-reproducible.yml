@@ -44,6 +44,7 @@ jobs:
         uses: ./.github/actions/setup-openmiura
         with:
           python-version: "3.11"
+          extras: dev
 
       - name: Build deterministic package
         shell: bash

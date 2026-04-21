@@ -191,14 +191,28 @@ pip install -r requirements.txt
 
 ### 3. Prepare configuration
 
+Fastest path for local development:
+
 ```bash
-cp .env.example .env
+cp ops/env/secure-default.env .env
+```
+
+Canonical variable catalog:
+
+```text
+.env.example
 ```
 
 Default config file:
 
 ```text
 configs/openmiura.yaml
+```
+
+Configuration profiles and precedence rules:
+
+```text
+docs/configuration_profiles.md
 ```
 
 ### 4. Run the application
@@ -340,6 +354,10 @@ Start here:
 - [Production guide](docs/production.md)
 - [Enterprise alpha guide](docs/enterprise_alpha.md)
 - [Alpha release checklist](docs/alpha_release_checklist.md)
+- [Release Candidate RC1](docs/release_candidate.md)
+- [Release support matrix](docs/release_support_matrix.md)
+- [RC1 quickstart](docs/quickstarts/release_candidate.md)
+- [RC1 release notes](RELEASE_NOTES_RC1.md)
 
 ## License
 

@@ -55,9 +55,13 @@ pip install -e .[dev]
 
 ## 5. Preparar configuración
 
+Para arranque rápido local:
+
 ```bash
-cp .env.example .env
+cp ops/env/secure-default.env .env
 ```
+
+Si prefieres revisar el catálogo completo de variables antes de elegir perfil, usa `.env.example` como referencia y consulta `docs/configuration_profiles.md`.
 
 Revisa al menos:
 
@@ -76,7 +80,7 @@ La configuración principal está en:
 ## 6. Verificación inicial
 
 ```bash
-openmiura doctor --config configs/
+openmiura doctor --config configs/openmiura.yaml
 ```
 
 Comprueba que el doctor informa correctamente de:
@@ -91,7 +95,7 @@ Comprueba que el doctor informa correctamente de:
 ## 7. Arranque
 
 ```bash
-openmiura run --config configs/
+openmiura run --config configs/openmiura.yaml
 ```
 
 Interfaz web:
@@ -109,7 +113,7 @@ Metrics:
 ## 8. Instalación con Docker
 
 ```bash
-cp .env.example .env
+cp ops/env/secure-default.env .env
 docker compose up --build
 ```
 
@@ -132,7 +136,7 @@ Antes de generar un artefacto público, asegúrate de que no se empaquetan:
 ## 10. Checklist mínima post-instalación
 
 - `openmiura version`
-- `openmiura doctor --config configs/`
+- `openmiura doctor --config configs/openmiura.yaml`
 - acceso a `/ui`
 - login admin bootstrap
 - una conversación de prueba
@@ -144,3 +148,6 @@ Antes de generar un artefacto público, asegúrate de que no se empaquetan:
 
 - [Self-hosted Enterprise Alpha](enterprise_alpha.md)
 - [Enterprise Alpha release checklist](alpha_release_checklist.md)
+- [Release Candidate RC1](release_candidate.md)
+- [Release support matrix](release_support_matrix.md)
+- [RC1 quickstart](quickstarts/release_candidate.md)

@@ -1,3 +1,7 @@
+# Security posture
+
+openMiura is now **secure-by-default** for network and terminal execution. Broad web access and terminal shell execution require an explicit opt-in through environment profiles or targeted overrides.
+
 # Seguridad operativa y reverse proxy
 
 ## Sesiones de navegador, cookies y CSRF

@@ -11,6 +11,11 @@ __pycache__/
 *.pyd
 *.so
 
+# committed environment profile templates
+!ops/
+!ops/env/
+!ops/env/*.env
+
 # Packaging / build artifacts
 build/
 dist/
@@ -49,7 +54,10 @@ htmlcov/
 *.crt
 *.p12
 *.secret
-secrets/
+/secrets/
+!openmiura/application/secrets/
+!openmiura/application/secrets/__init__.py
+!openmiura/application/secrets/service.py
 
 # Logs / runtime DB / pids
 logs/
@@ -61,6 +69,8 @@ logs/
 *.db-*
 *.backup
 *.backup-*.db
+pytest_first_fail.txt
+reports/*.out
 
 # Project runtime folders
 /data/*
@@ -125,3 +135,8 @@ notes-local/
 
 # GitHub Actions local runner temp
 .runner/
+
+# committed environment profile templates
+!ops/
+!ops/env/
+!ops/env/*.env

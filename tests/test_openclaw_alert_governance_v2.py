@@ -40,7 +40,7 @@ auth:
   enabled: true
   session_ttl_s: 3600
 slack:
-  bot_token: "xoxb-test"
+  bot_token: "slack-bot-token-test"
   signing_secret: "slack-signing-secret"
 ''',
         encoding='utf-8',

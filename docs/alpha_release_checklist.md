@@ -10,6 +10,12 @@ Use this checklist before distributing a self-hosted Enterprise Alpha build of o
 
 ## 2. Packaging and artifact validation
 
+## Release quality gate
+
+- [ ] `python scripts/run_release_quality_gate.py --include-extended --output-dir reports/quality_gate` completes successfully in a release-capable environment.
+- [ ] `reports/quality_gate/release_quality_gate_report.md` was reviewed.
+- [ ] The gate outcome is explicitly recorded as required-gate green and full-release-gate green (or the missing dependency is explained).
+
 - [ ] `python -m build --sdist --wheel` completes successfully.
 - [ ] `python scripts/reproducible_package.py --target desktop --label "Enterprise Alpha" --version alpha --output-dir dist` completes successfully.
 - [ ] `python scripts/build_release_artifacts.py --dist-dir dist --tag v-alpha --target desktop --strict` completes successfully.
@@ -20,12 +26,12 @@ Use this checklist before distributing a self-hosted Enterprise Alpha build of o
 
 ## 3. Installation validation
 
-- [ ] `.env` is prepared from `.env.example` and bootstrap credentials were changed from defaults.
+- [ ] `.env` was created from the intended profile in `ops/env/` (or reviewed against `.env.example`) and bootstrap credentials were changed from defaults.
 - [ ] `docker compose up --build -d` succeeds on a clean host or VM.
 - [ ] `docker compose --profile observability up --build -d` was tested if observability is part of the handoff.
 - [ ] `/health` responds correctly.
 - [ ] `/ui` is reachable.
-- [ ] `openmiura doctor --config configs/` reports no critical setup problems.
+- [ ] `openmiura doctor --config configs/openmiura.yaml` reports no critical setup problems.
 
 ## 4. Governance validation
 
@@ -47,6 +53,8 @@ Use this checklist before distributing a self-hosted Enterprise Alpha build of o
 ## 6. Documentation and communication
 
 - [ ] The recipient receives `docs/enterprise_alpha.md`.
+- [ ] The recipient receives `RELEASE_NOTES_RC1.md`.
+- [ ] The recipient receives `docs/release_candidate.md` and `docs/release_support_matrix.md`.
 - [ ] The recipient receives this checklist or an equivalent signed-off copy.
 - [ ] Known risks and limitations have been stated explicitly.
 - [ ] The alpha is presented as a controlled pilot, not a GA promise.
@@ -58,3 +66,11 @@ Mark the release as ready only when all mandatory checks above are complete.
 
 - [ ] GO for controlled alpha distribution
 - [ ] NO-GO until issues are fixed and revalidated
+
+
+## Secure-by-default checks
+
+- confirm the selected profile is intentional (`secure-default`, `production-like`, or `insecure-dev`)
+- replace placeholder admin, broker and vault credentials
+- keep `OPENMIURA_WEB_FETCH_ALLOW_ALL_DOMAINS=false` unless there is an explicit allowlist review
+- keep `OPENMIURA_TERMINAL_ENABLED=false` unless a command allowlist has been approved

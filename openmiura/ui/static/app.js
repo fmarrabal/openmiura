@@ -11,6 +11,9 @@ const state={
   builderCatalog:[],
   deferredInstallPrompt:null,
   serviceWorkerReady:false,
+  channelWizard:null,
+  secretEnvWizard:null,
+  reloadAssistant:null,
 };
 const $=id=>document.getElementById(id);
 const authHeader=()=>state.token?{Authorization:`Bearer ${state.token}`}:{ };
@@ -36,7 +39,7 @@ function renderAgents(items){ const sel=$('agentSelect'); sel.innerHTML=''; for(
 function renderPending(items){ const box=$('pendingList'); box.innerHTML=''; for(const item of items){ const div=document.createElement('div'); div.className='card'; div.innerHTML=`<strong>${item.tool_name}</strong><small>${item.session_id}</small><small>${JSON.stringify(item.args||{})}</small>`; const row=document.createElement('div'); row.className='row'; const ok=document.createElement('button'); ok.textContent='Confirm'; ok.onclick=async()=>{ await api(`/confirmations/${encodeURIComponent(item.session_id)}/confirm`,{method:'POST',body:JSON.stringify({confirmed:true})}); await refreshPending(); await refreshHistory(); await refreshToolCalls();}; const no=document.createElement('button'); no.className='ghost'; no.textContent='Cancel'; no.onclick=async()=>{ await api(`/confirmations/${encodeURIComponent(item.session_id)}/cancel`,{method:'POST'}); await refreshPending();}; row.append(ok,no); div.appendChild(row); box.appendChild(div);} }
 function renderOverview(boxId, items){ const box=$(boxId); box.innerHTML=''; for(const [label,val] of items){ const div=document.createElement('div'); div.className='overview-item'; div.innerHTML=`<small>${label}</small><strong>${val}</strong>`; box.appendChild(div);} }
 function appendLiveEvent(type, data){ const box=$('liveEventsBox'); const div=document.createElement('div'); div.className='card'; div.innerHTML=`<strong>${type}</strong><small>${new Date((data.ts||Date.now()/1000)*1000).toLocaleString()}</small><div>${JSON.stringify(data)}</div>`; box.prepend(div); while(box.children.length>40) box.removeChild(box.lastChild); }
-function setAuthBadge(me){ state.me=me; $('meBadge').textContent = me ? `${me.auth_mode}${me.username?` · ${me.username}`:''}${me.role?` (${me.role})`:''}` : 'Not authenticated'; $('permBadge').textContent = me?.permissions?.length?`Permissions: ${me.permissions.join(', ')}`:''; const admin=isAdminLike(); $('adminRefreshBtn').disabled=!admin; document.querySelector('.tab-btn[data-tab="admin"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="policies"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="secrets"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="replay"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="operator"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="releases"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="voice"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="app"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="canvas"]').disabled=!admin; if(!admin && ($('adminTab').classList.contains('active') || $('policiesTab').classList.contains('active') || $('secretsTab').classList.contains('active') || $('replayTab').classList.contains('active') || $('operatorTab').classList.contains('active') || $('releasesTab').classList.contains('active') || $('voiceTab').classList.contains('active') || $('appTab').classList.contains('active') || $('canvasTab').classList.contains('active'))) switchTab('workspace'); }
+function setAuthBadge(me){ state.me=me; $('meBadge').textContent = me ? `${me.auth_mode}${me.username?` · ${me.username}`:''}${me.role?` (${me.role})`:''}` : 'Not authenticated'; $('permBadge').textContent = me?.permissions?.length?`Permissions: ${me.permissions.join(', ')}`:''; const admin=isAdminLike(); $('adminRefreshBtn').disabled=!admin; document.querySelector('.tab-btn[data-tab="admin"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="policies"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="secrets"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="replay"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="operator"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="releases"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="voice"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="tinyRuntime"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="app"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="canvas"]').disabled=!admin; document.querySelector('.tab-btn[data-tab="config"]').disabled=!admin; if(!admin && ($('adminTab').classList.contains('active') || $('policiesTab').classList.contains('active') || $('secretsTab').classList.contains('active') || $('replayTab').classList.contains('active') || $('operatorTab').classList.contains('active') || $('releasesTab').classList.contains('active') || $('voiceTab').classList.contains('active') || $('tinyRuntimeTab').classList.contains('active') || $('appTab').classList.contains('active') || $('canvasTab').classList.contains('active') || $('configTab').classList.contains('active'))) switchTab('workspace'); }
 
 async function connect(){
   state.baseUrl=$('baseUrl').value.replace(/\/$/,'');
@@ -59,8 +62,10 @@ async function connect(){
     await refreshPolicyExplorerSnapshot().catch(()=>{});
     await refreshSecretGovernance().catch(()=>{});
     await refreshOperatorConsole().catch(()=>{});
+    await refreshTinyRuntimeConsole().catch(()=>{});
     await refreshAppFoundation().catch(()=>{});
     await refreshCanvasCore().catch(()=>{});
+    await refreshConfigCenter().catch(()=>{});
     reconnectLive();
   }catch(err){ $('connectStatus').innerHTML=`<span class="danger">${err.message}</span>`; setStatus(err.message,'danger'); }
 }
@@ -72,6 +77,567 @@ async function refreshPending(){ const data=await api('/confirmations'); renderP
 async function refreshMetrics(){ const data=await api('/metrics/summary'); $('metricsBox').textContent=JSON.stringify(data,null,2); }
 async function memorySearch(){ const q=$('memoryQuery').value.trim(); if(!q)return; const user=$('memoryUserKey').value.trim(); const qs=new URLSearchParams({q}); if(user)qs.set('user_key',user); const data=await api(`/memory/search?${qs.toString()}`); renderCards('memoryResults',data.items||[], item=>`<strong>${item.kind||'memory'}</strong><small>score: ${item.score??''} · tier: ${item.tier??''}</small><div>${item.text}</div>`); }
 async function refreshToolCalls(){ const qs = new URLSearchParams(); if(state.currentSessionId) qs.set('session_id', state.currentSessionId); const data=await api(`/tool-calls${qs.toString()?`?${qs.toString()}`:''}`); renderCards('toolCallsBox', data.items||[], item=>`<strong>${item.tool_name}</strong><small>${item.agent_id} · ${item.ok?'ok':'error'} · ${Math.round(item.duration_ms)} ms</small><small>${new Date(item.ts*1000).toLocaleString()}</small><div>${JSON.stringify(item.args||{})}</div><div>${item.result_excerpt||item.error||''}</div>`); }
+
+
+function renderConfigFileCards(sections){
+  renderCards('configFileList', sections||[], item=>`<strong>${item.title}</strong><small>${item.path}</small><small>${item.exists?'present':'missing'} · ${item.reload_supported?'live reload':'save only'}${item.restart_required?' · restart required':''}</small><div>${JSON.stringify(item.summary||{})}</div>`);
+  [...$('configFileList').children].forEach((div,idx)=>div.onclick=()=>selectConfigSection((sections||[])[idx]?.name));
+}
+
+function selectedReloadAssistantSections(){
+  return [...document.querySelectorAll('[data-reload-assistant-section]')].filter(el=>el.checked).map(el=>el.dataset.reloadAssistantSection||'').filter(Boolean);
+}
+
+function persistReloadAssistantSections(){
+  localStorage.setItem('openmiura.reloadAssistantSections', JSON.stringify(selectedReloadAssistantSections()));
+}
+
+function renderReloadAssistant(snapshot){
+  state.reloadAssistant=snapshot||{sections:[],recent_restart_requests:[],restart_hook:{},operational_state:{}};
+  const remembered=new Set((()=>{ try{return JSON.parse(localStorage.getItem('openmiura.reloadAssistantSections')||'[]')}catch{return []} })());
+  const list=$('reloadAssistantSectionList');
+  list.innerHTML='';
+  const autoSelect=!remembered.size;
+  for(const item of (state.reloadAssistant.sections||[])){
+    const card=document.createElement('label');
+    card.className='card';
+    const checked=remembered.has(item.name) || (autoSelect && (item.reload_supported || item.restart_required));
+    const validity=item.valid===false?' · invalid YAML':'';
+    const presence=item.exists?'present':'missing';
+    card.innerHTML=`<div class="row between wrap"><span class="row wrap"><input type="checkbox" data-reload-assistant-section="${item.name}" ${checked?'checked':''} /><strong>${item.title||item.name}</strong></span><span class="muted">${presence} · ${item.reload_supported?'live reload':'save only'}${item.restart_required?' · restart required':''}${validity}</span></div><small>${item.path||''}</small><div>${JSON.stringify(item.summary||{})}</div>`;
+    list.appendChild(card);
+  }
+  document.querySelectorAll('[data-reload-assistant-section]').forEach(el=>el.onchange=()=>persistReloadAssistantSections());
+  persistReloadAssistantSections();
+  const hook=state.reloadAssistant.restart_hook||{};
+  $('reloadAssistantHookBadge').textContent=hook.configured?`External restart hook configured${hook.command_preview?` · ${hook.command_preview}`:''}`:(hook.allow_self_restart?'Self restart allowed but hook command missing':'External restart hook not configured');
+  $('reloadAssistantExecuteHook').disabled=!hook.configured;
+  if(!hook.configured) $('reloadAssistantExecuteHook').checked=false;
+  const operational=state.reloadAssistant.operational_state||{};
+  const health=operational.health||{};
+  const process=operational.process||{};
+  const restartObservation=operational.restart_observation||{};
+  const hookResult=operational.restart_hook_result||{};
+  const bootEvidence=operational.latest_boot_evidence||{};
+  const currentBoot=operational.current_boot||{};
+  $('reloadAssistantRuntimeBadge').textContent=`${health.status||'unknown'}${process.pid?` · PID ${process.pid}`:''}${process.uptime_human?` · uptime ${process.uptime_human}`:''}${restartObservation.state?` · restart ${restartObservation.state}`:''}`;
+  $('reloadAssistantRuntimeBox').textContent=pretty({health,process,restart_observation:restartObservation,current_boot:currentBoot});
+  $('reloadAssistantStartupConfigBox').textContent=pretty(operational.startup_config||{});
+  $('reloadAssistantHookResultBadge').textContent=hookResult.available?(hookResult.ok?'Hook succeeded':(hookResult.executed?'Hook failed':'Hook not executed')):'No hook result';
+  $('reloadAssistantHookResultBox').textContent=pretty(hookResult);
+  $('reloadAssistantBootEvidenceBadge').textContent=`${bootEvidence.current_process_matches?'Current boot active':'Boot evidence differs'}${bootEvidence.boot_instance_id?` · ${bootEvidence.boot_instance_id}`:''}`;
+  $('reloadAssistantBootEvidenceBox').textContent=pretty(bootEvidence);
+  renderCards('reloadAssistantRecentList', state.reloadAssistant.recent_restart_requests||[], item=>{
+    const hookState=item.execute_restart_hook?(item.hook_ok?'hook ok':'hook pending/failed'):'hook skipped';
+    return `<strong>${item.request_id||'restart-request'}</strong><small>${new Date((item.ts||0)*1000).toLocaleString()}</small><small>${item.status||'queued'} · ${(item.sections||[]).join(', ')||'no sections'} · ${hookState}</small><div>${item.actor||''}${item.execute_restart_hook?' · hook requested':''}</div>`;
+  });
+}
+
+function tinyRuntimeScopeParams(){
+  const qs=new URLSearchParams();
+  const tenant=($('tinyRuntimeTenant')?.value||$('appTenant')?.value||'').trim();
+  const workspace=($('tinyRuntimeWorkspace')?.value||$('appWorkspace')?.value||'').trim();
+  const environment=($('tinyRuntimeEnvironment')?.value||$('appEnvironment')?.value||'').trim();
+  const status=($('tinyRuntimeFilterStatus')?.value||'').trim();
+  const kind=($('tinyRuntimeFilterKind')?.value||'').trim().toLowerCase();
+  if(tenant) qs.set('tenant_id',tenant);
+  if(workspace) qs.set('workspace_id',workspace);
+  if(environment) qs.set('environment',environment);
+  if(status) qs.set('status',status);
+  return {qs, kind, tenant, workspace, environment};
+}
+
+async function refreshTinyRuntimeConsole(){
+  if(!isAdminLike() || !document.getElementById('tinyRuntimeList')) return;
+  const {qs,kind,tenant,workspace,environment}=tinyRuntimeScopeParams();
+  const suffix=qs.toString()?`?${qs.toString()}`:'';
+  const data=await api(`/admin/openclaw/runtimes${suffix}`);
+  const items=(data.items||[]).filter(item=>!kind || String(item?.metadata?.kind||'').toLowerCase()===kind || String(item?.transport||'').toLowerCase()==='simulated');
+  $('tinyRuntimeOverview').innerHTML='';
+  renderOverview('tinyRuntimeOverview',[
+    ['count', items.length],
+    ['tenant', tenant||'—'],
+    ['workspace', workspace||'—'],
+    ['environment', environment||'—'],
+  ]);
+  $('tinyRuntimeListSummary').textContent=`${items.length} runtime(s)`;
+  $('tinyRuntimeConsoleBox').textContent=pretty({summary:data.summary||{},scope:{tenant_id:tenant||null,workspace_id:workspace||null,environment:environment||null},kind_filter:kind||null,items:items.map(item=>({runtime_id:item.runtime_id,name:item.name,status:item.status,kind:item.metadata?.kind,runtime_class:item.metadata?.runtime_class,policy_pack:item.metadata?.policy_pack}))});
+  renderCards('tinyRuntimeList', items, item=>`<strong>${item.name||item.runtime_id}</strong><small>${item.runtime_id}</small><small>${item.status||'registered'} · ${item.transport||'http'} · ${(item.metadata&&item.metadata.kind)||'unknown kind'}</small><div>${(item.metadata&&item.metadata.runtime_class)||''}${item.metadata?.policy_pack?` · pack ${item.metadata.policy_pack}`:''}</div>`);
+  [...$('tinyRuntimeList').children].forEach((div,idx)=>div.onclick=()=>loadTinyRuntimeDetail(items[idx].runtime_id));
+  if(items.length){
+    const selected=$('tinyRuntimeSelectedBadge').dataset.runtimeId||'';
+    const target=items.some(item=>item.runtime_id===selected)?selected:items[0].runtime_id;
+    await loadTinyRuntimeDetail(target);
+  } else {
+    $('tinyRuntimeSelectedBadge').dataset.runtimeId='';
+    $('tinyRuntimeSelectedBadge').textContent='No runtime selected';
+    $('tinyRuntimeDetailBadge').textContent='No runtime selected';
+    $('tinyRuntimeDetailBox').textContent='';
+    $('tinyRuntimeDispatchSummaryBox').textContent='';
+    $('tinyRuntimeDispatchList').innerHTML='';
+  }
+  return data;
+}
+
+async function loadTinyRuntimeDetail(runtimeId){
+  if(!runtimeId || !document.getElementById('tinyRuntimeDetailBox')) return null;
+  const {qs}=tinyRuntimeScopeParams();
+  const suffix=qs.toString()?`?${qs.toString()}`:'';
+  const data=await api(`/admin/openclaw/runtimes/${encodeURIComponent(runtimeId)}${suffix}`);
+  const runtime=data.runtime||{};
+  const summary=data.runtime_summary||{};
+  $('tinyRuntimeSelectedBadge').dataset.runtimeId=runtimeId;
+  $('tinyRuntimeSelectedBadge').textContent=runtime.name||runtimeId;
+  $('tinyRuntimeDetailBadge').textContent=`${runtime.status||'registered'}${summary?.metadata?.kind?` · ${summary.metadata.kind}`:''}${summary?.metadata?.runtime_class?` · ${summary.metadata.runtime_class}`:''}`;
+  $('tinyRuntimeDispatchSummaryBox').textContent=pretty({dispatch_summary:data.dispatch_summary||{},health:data.health||{}});
+  $('tinyRuntimeDetailBox').textContent=pretty({runtime, runtime_summary:summary, health:data.health||{}, available_actions:data.available_actions||[]});
+  renderCards('tinyRuntimeDispatchList', data.dispatches||[], item=>`<strong>${item.action||'dispatch'}</strong><small>${item.dispatch_id||''}</small><small>${item.canonical_status||item.status||'unknown'}</small><div>${item.result_excerpt||item.error||''}</div>`);
+  return data;
+}
+
+function renderConfigForm(file){
+  const box=$('configFormGroups');
+  const unavailable=$('configFormUnavailable');
+  box.innerHTML='';
+  const enabled=!!(file && file.section==='openmiura' && file.form_schema && file.form_values);
+  unavailable.classList.toggle('hidden', enabled);
+  if(!enabled){ $('configFormPreviewBox').textContent=''; return; }
+  const allFields=(file.form_schema||[]).flatMap(group=>group.fields||[]);
+  for(const group of (file.form_schema||[])){
+    const section=document.createElement('section');
+    section.className='config-form-group stack';
+    const title=document.createElement('h4');
+    title.textContent=group.group;
+    section.appendChild(title);
+    const grid=document.createElement('div');
+    grid.className='config-form-grid';
+    for(const field of (group.fields||[])){
+      const row=document.createElement('div');
+      row.className=`config-form-field ${field.type==='bool'?'bool':''}`;
+      const safeId=`configForm__${String(field.name||'').replace(/[^a-zA-Z0-9_]+/g,'_')}`;
+      if(field.type==='bool'){
+        row.innerHTML=`<label><input type="checkbox" id="${safeId}" data-config-form-name="${field.name}" data-config-form-type="${field.type}" /> ${field.label}</label>`;
+      }else if(field.type==='select'){
+        const options=(field.options||[]).map(opt=>`<option value="${opt}">${opt}</option>`).join('');
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><select id="${safeId}" data-config-form-name="${field.name}" data-config-form-type="${field.type}">${options}</select>`;
+      }else{
+        const inputType=field.type==='int' || field.type==='float' ? 'number' : 'text';
+        const attrs=[];
+        if(field.min!==undefined) attrs.push(`min="${field.min}"`);
+        if(field.step!==undefined) attrs.push(`step="${field.step}"`);
+        if(field.placeholder) attrs.push(`placeholder="${field.placeholder}"`);
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><input type="${inputType}" id="${safeId}" data-config-form-name="${field.name}" data-config-form-type="${field.type}" ${attrs.join(' ')} />`;
+      }
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    box.appendChild(section);
+  }
+  setConfigFormValues(file.form_values||{});
+  $('configFormPreviewBox').textContent=file.raw||'';
+}
+
+function renderChannelWizard(snapshot){
+  state.channelWizard=snapshot||{schemas:{},values:{},channels:[]};
+  const select=$('channelWizardChannelSelect');
+  const previous=select.value||localStorage.getItem('openmiura.channelWizardChannel')||'telegram';
+  select.innerHTML='';
+  for(const item of state.channelWizard.channels||[]){ const opt=document.createElement('option'); opt.value=item.name; opt.textContent=item.title||item.name; select.appendChild(opt); }
+  if([...select.options].some(opt=>opt.value===previous)) select.value=previous;
+  if(select.value) selectChannelWizardChannel(select.value,state.channelWizard);
+}
+
+function selectChannelWizardChannel(channel,snapshot){
+  const data=snapshot||state.channelWizard||{schemas:{},values:{},channels:[]};
+  if(!channel) return;
+  $('channelWizardChannelSelect').value=channel;
+  localStorage.setItem('openmiura.channelWizardChannel',channel);
+  const groups=data.schemas?.[channel]||[];
+  const values=data.values?.[channel]||{};
+  const status=(data.channels||[]).find(item=>item.name===channel)?.status||{};
+  const box=$('channelWizardGroups');
+  box.innerHTML='';
+  for(const group of groups){
+    const section=document.createElement('section');
+    section.className='config-form-group stack';
+    const title=document.createElement('h4');
+    title.textContent=group.group;
+    section.appendChild(title);
+    const grid=document.createElement('div');
+    grid.className='config-form-grid';
+    for(const field of (group.fields||[])){
+      const row=document.createElement('div');
+      row.className=`config-form-field ${field.type==='bool'?'bool':''}`;
+      const safeId=`channelWizard__${String(field.name||'').replace(/[^a-zA-Z0-9_]+/g,'_')}`;
+      if(field.type==='bool'){
+        row.innerHTML=`<label><input type="checkbox" id="${safeId}" data-channel-wizard-name="${field.name}" data-channel-wizard-type="${field.type}" /> ${field.label}</label>`;
+      }else if(field.type==='select'){
+        const options=(field.options||[]).map(opt=>`<option value="${opt}">${opt}</option>`).join('');
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><select id="${safeId}" data-channel-wizard-name="${field.name}" data-channel-wizard-type="${field.type}">${options}</select>`;
+      }else{
+        const inputType=field.type==='int' || field.type==='float' ? 'number' : 'text';
+        const attrs=[];
+        if(field.min!==undefined) attrs.push(`min="${field.min}"`);
+        if(field.step!==undefined) attrs.push(`step="${field.step}"`);
+        if(field.placeholder) attrs.push(`placeholder="${field.placeholder}"`);
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><input type="${inputType}" id="${safeId}" data-channel-wizard-name="${field.name}" data-channel-wizard-type="${field.type}" ${attrs.join(' ')} />`;
+      }
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    box.appendChild(section);
+  }
+  setChannelWizardValues(values);
+  $('channelWizardBadge').textContent=`${channel}${status.configured?' · configured':' · not configured'}`;
+  $('channelWizardSummaryBox').textContent=pretty(status||{});
+  $('channelWizardPreviewBox').textContent=data.raw||$('configEditor').value||'';
+}
+
+function secretEnvSuggestionMap(prefix){
+  const safe=(prefix||'OPENMIURA').trim().toUpperCase().replace(/[^A-Z0-9_]+/g,'_')||'OPENMIURA';
+  return {
+    'llm.api_key_env_var': `${safe}_LLM_API_KEY`,
+    'telegram.bot_token': `${safe}_TELEGRAM_BOT_TOKEN`,
+    'telegram.webhook_secret': `${safe}_TELEGRAM_WEBHOOK_SECRET`,
+    'slack.bot_token': `${safe}_SLACK_BOT_TOKEN`,
+    'slack.signing_secret': `${safe}_SLACK_SIGNING_SECRET`,
+    'discord.bot_token': `${safe}_DISCORD_BOT_TOKEN`,
+  };
+}
+
+function renderSecretEnvWizard(snapshot){
+  state.secretEnvWizard=snapshot||{schemas:{},values:{},profiles:[],suggestions:{},env_prefix:'OPENMIURA'};
+  const select=$('secretEnvProfileSelect');
+  const previous=select.value||localStorage.getItem('openmiura.secretEnvProfile')||'llm';
+  select.innerHTML='';
+  for(const item of state.secretEnvWizard.profiles||[]){ const opt=document.createElement('option'); opt.value=item.name; opt.textContent=item.title||item.name; select.appendChild(opt); }
+  if(!$('secretEnvPrefixInput').value) $('secretEnvPrefixInput').value=state.secretEnvWizard.env_prefix||'OPENMIURA';
+  if([...select.options].some(opt=>opt.value===previous)) select.value=previous;
+  if(select.value) selectSecretEnvProfile(select.value,state.secretEnvWizard);
+}
+
+function selectSecretEnvProfile(profile,snapshot){
+  const data=snapshot||state.secretEnvWizard||{schemas:{},values:{},profiles:[]};
+  if(!profile) return;
+  $('secretEnvProfileSelect').value=profile;
+  localStorage.setItem('openmiura.secretEnvProfile',profile);
+  const groups=data.schemas?.[profile]||[];
+  const values=data.values?.[profile]||{};
+  const status=(data.profiles||[]).find(item=>item.name===profile)?.status||{};
+  const box=$('secretEnvGroups');
+  box.innerHTML='';
+  for(const group of groups){
+    const section=document.createElement('section');
+    section.className='config-form-group stack';
+    const title=document.createElement('h4');
+    title.textContent=group.group;
+    section.appendChild(title);
+    const grid=document.createElement('div');
+    grid.className='config-form-grid';
+    for(const field of (group.fields||[])){
+      const row=document.createElement('div');
+      row.className=`config-form-field ${field.type==='bool'?'bool':''}`;
+      const safeId=`secretEnvWizard__${String(field.name||'').replace(/[^a-zA-Z0-9_]+/g,'_')}`;
+      if(field.type==='bool'){
+        row.innerHTML=`<label><input type="checkbox" id="${safeId}" data-secret-env-name="${field.name}" data-secret-env-type="${field.type}" /> ${field.label}</label>`;
+      }else if(field.type==='select'){
+        const options=(field.options||[]).map(opt=>`<option value="${opt}">${opt}</option>`).join('');
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><select id="${safeId}" data-secret-env-name="${field.name}" data-secret-env-type="${field.type}">${options}</select>`;
+      }else{
+        const inputType=field.type==='int' || field.type==='float' ? 'number' : 'text';
+        const attrs=[];
+        if(field.min!==undefined) attrs.push(`min="${field.min}"`);
+        if(field.step!==undefined) attrs.push(`step="${field.step}"`);
+        if(field.placeholder) attrs.push(`placeholder="${field.placeholder}"`);
+        row.innerHTML=`<label for="${safeId}">${field.label}</label><input type="${inputType}" id="${safeId}" data-secret-env-name="${field.name}" data-secret-env-type="${field.type}" ${attrs.join(' ')} />`;
+      }
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    box.appendChild(section);
+  }
+  setSecretEnvWizardValues(values);
+  $('secretEnvBadge').textContent=`${profile}${status.configured?' · configured':' · not configured'}`;
+  $('secretEnvSummaryBox').textContent=pretty(status||{});
+  $('secretEnvExampleBox').textContent=status.env_example||'';
+  $('secretEnvPreviewBox').textContent=data.raw||$('configEditor').value||'';
+}
+
+function collectSecretEnvWizardPayload(){
+  const payload={};
+  document.querySelectorAll('[data-secret-env-name]').forEach(el=>{
+    const name=el.dataset.secretEnvName;
+    const fieldType=el.dataset.secretEnvType||'string';
+    if(fieldType==='bool') payload[name]=!!el.checked;
+    else payload[name]=el.value;
+  });
+  return payload;
+}
+
+function setSecretEnvWizardValues(values){
+  document.querySelectorAll('[data-secret-env-name]').forEach(el=>{
+    const name=el.dataset.secretEnvName;
+    const fieldType=el.dataset.secretEnvType||'string';
+    const raw=values&&Object.prototype.hasOwnProperty.call(values,name)?values[name]:'';
+    if(fieldType==='bool') el.checked=!!raw;
+    else el.value=raw ?? '';
+  });
+}
+
+function applySuggestedSecretEnvRefs(){
+  const profile=$('secretEnvProfileSelect').value||'llm';
+  const suggestions=secretEnvSuggestionMap($('secretEnvPrefixInput').value||'OPENMIURA');
+  document.querySelectorAll('[data-secret-env-name]').forEach(el=>{
+    const name=el.dataset.secretEnvName||'';
+    if(name.endsWith('.mode')){
+      el.value='env';
+      return;
+    }
+    if(name.endsWith('.value')){
+      const base=name.slice(0,-6);
+      el.value=suggestions[base]||el.value||'';
+    }
+  });
+  $('secretEnvBadge').textContent=`${profile} · suggested env refs ready`;
+  setStatus(`Suggested env refs generated for ${profile}`,'ok');
+}
+
+async function refreshSecretEnvWizard(snapshotOverride){
+  const prefix=($('secretEnvPrefixInput')?.value||'OPENMIURA').trim()||'OPENMIURA';
+  const data=snapshotOverride||await api(`/admin/config-center/secrets-wizard?env_prefix=${encodeURIComponent(prefix)}`);
+  renderSecretEnvWizard(data);
+  return data;
+}
+
+async function loadSecretEnvWizardFromEditor(){
+  const profile=$('secretEnvProfileSelect').value||'llm';
+  const env_prefix=($('secretEnvPrefixInput').value||'OPENMIURA').trim()||'OPENMIURA';
+  const data=await api('/admin/config-center/secrets-wizard/validate',{method:'POST',body:JSON.stringify({profile,env_prefix,content:$('configEditor').value})});
+  setSecretEnvWizardValues(data.wizard_values||{});
+  $('secretEnvPreviewBox').textContent=data.normalized_yaml||'';
+  $('secretEnvExampleBox').textContent=data.env_example||'';
+  $('secretEnvSummaryBox').textContent=pretty(data.profile_status||{});
+  $('secretEnvBadge').textContent=`${profile}${data.profile_status?.configured?' · configured':' · not configured'}`;
+  setStatus(`${profile} secret refs loaded from YAML`,'ok');
+  return data;
+}
+
+async function applySecretEnvWizardToEditor(){
+  const profile=$('secretEnvProfileSelect').value||'llm';
+  const env_prefix=($('secretEnvPrefixInput').value||'OPENMIURA').trim()||'OPENMIURA';
+  const data=await api('/admin/config-center/secrets-wizard/validate',{method:'POST',body:JSON.stringify({profile,env_prefix,content:$('configEditor').value,wizard_payload:collectSecretEnvWizardPayload()})});
+  $('configEditor').value=data.normalized_yaml||'';
+  $('secretEnvPreviewBox').textContent=data.normalized_yaml||'';
+  $('secretEnvExampleBox').textContent=data.env_example||'';
+  $('secretEnvSummaryBox').textContent=pretty(data.profile_status||{});
+  setSecretEnvWizardValues(data.wizard_values||{});
+  setStatus(`${profile} secret refs applied to YAML editor`,'ok');
+  return data;
+}
+
+async function saveSecretEnvWizard(reloadAfterSave){
+  const profile=$('secretEnvProfileSelect').value||'llm';
+  const env_prefix=($('secretEnvPrefixInput').value||'OPENMIURA').trim()||'OPENMIURA';
+  const data=await api('/admin/config-center/secrets-wizard/save',{method:'POST',body:JSON.stringify({profile,env_prefix,content:$('configEditor').value,wizard_payload:collectSecretEnvWizardPayload(),reload_after_save:reloadAfterSave || $('configReloadToggle').checked})});
+  $('configSaveResultBox').textContent=pretty(data);
+  $('configEditor').value=data.secret_env_validation?.normalized_yaml||data.snapshot?.raw||$('configEditor').value;
+  $('secretEnvPreviewBox').textContent=data.secret_env_validation?.normalized_yaml||$('configEditor').value;
+  $('secretEnvExampleBox').textContent=data.env_example||'';
+  $('secretEnvSummaryBox').textContent=pretty(data.profile_status||{});
+  await refreshConfigCenter().catch(()=>{});
+  if(state.secretEnvWizard) selectSecretEnvProfile(profile,state.secretEnvWizard);
+  const msg=data.restart_required?`Saved ${profile} secret refs. Restart required for full effect.`:`Saved ${profile} secret refs${data.reload_applied?' and applied live reload':''}.`;
+  setStatus(msg,data.restart_required?'muted':'ok');
+  return data;
+}
+
+function collectChannelWizardPayload(){
+  const payload={};
+  document.querySelectorAll('[data-channel-wizard-name]').forEach(el=>{
+    const name=el.dataset.channelWizardName;
+    const fieldType=el.dataset.channelWizardType||'string';
+    if(fieldType==='bool') payload[name]=!!el.checked;
+    else payload[name]=el.value;
+  });
+  return payload;
+}
+
+function setChannelWizardValues(values){
+  document.querySelectorAll('[data-channel-wizard-name]').forEach(el=>{
+    const name=el.dataset.channelWizardName;
+    const fieldType=el.dataset.channelWizardType||'string';
+    const raw=values&&Object.prototype.hasOwnProperty.call(values,name)?values[name]:'';
+    if(fieldType==='bool') el.checked=!!raw;
+    else if((fieldType==='csv_int' || fieldType==='csv_str') && Array.isArray(raw)) el.value=raw.join(', ');
+    else el.value=raw ?? '';
+  });
+}
+
+async function refreshChannelWizard(snapshotOverride){
+  const data=snapshotOverride||await api('/admin/config-center/channels-wizard');
+  renderChannelWizard(data);
+  return data;
+}
+
+async function loadChannelWizardFromEditor(){
+  const channel=$('channelWizardChannelSelect').value||'telegram';
+  const data=await api('/admin/config-center/channels-wizard/validate',{method:'POST',body:JSON.stringify({channel,content:$('configEditor').value})});
+  setChannelWizardValues(data.wizard_values||{});
+  $('channelWizardPreviewBox').textContent=data.normalized_yaml||'';
+  $('channelWizardSummaryBox').textContent=pretty(data.channel_status||{});
+  $('channelWizardBadge').textContent=`${channel}${data.channel_status?.configured?' · configured':' · not configured'}`;
+  setStatus(`${channel} wizard loaded from YAML`,'ok');
+  return data;
+}
+
+async function applyChannelWizardToEditor(){
+  const channel=$('channelWizardChannelSelect').value||'telegram';
+  const data=await api('/admin/config-center/channels-wizard/validate',{method:'POST',body:JSON.stringify({channel,content:$('configEditor').value,wizard_payload:collectChannelWizardPayload()})});
+  $('configEditor').value=data.normalized_yaml||'';
+  $('channelWizardPreviewBox').textContent=data.normalized_yaml||'';
+  $('channelWizardSummaryBox').textContent=pretty(data.channel_status||{});
+  setChannelWizardValues(data.wizard_values||{});
+  setStatus(`${channel} wizard applied to YAML editor`,'ok');
+  return data;
+}
+
+async function saveChannelWizard(reloadAfterSave){
+  const channel=$('channelWizardChannelSelect').value||'telegram';
+  const data=await api('/admin/config-center/channels-wizard/save',{method:'POST',body:JSON.stringify({channel,content:$('configEditor').value,wizard_payload:collectChannelWizardPayload(),reload_after_save:reloadAfterSave || $('configReloadToggle').checked})});
+  $('configSaveResultBox').textContent=pretty(data);
+  $('configEditor').value=data.validation?.normalized_yaml||data.snapshot?.raw||$('configEditor').value;
+  $('channelWizardPreviewBox').textContent=data.channel_validation?.normalized_yaml||$('configEditor').value;
+  $('channelWizardSummaryBox').textContent=pretty(data.channel_status||{});
+  await refreshConfigCenter().catch(()=>{});
+  if(state.channelWizard) selectChannelWizardChannel(channel,state.channelWizard);
+  const msg=data.restart_required?`Saved ${channel} channel. Restart required for full effect.`:`Saved ${channel} channel${data.reload_applied?' and applied live reload':''}.`;
+  setStatus(msg,data.restart_required?'muted':'ok');
+  return data;
+}
+
+function collectConfigFormPayload(){
+  const payload={};
+  document.querySelectorAll('[data-config-form-name]').forEach(el=>{
+    const name=el.dataset.configFormName;
+    const fieldType=el.dataset.configFormType||'string';
+    if(fieldType==='bool') payload[name]=!!el.checked;
+    else payload[name]=el.value;
+  });
+  return payload;
+}
+
+function setConfigFormValues(values){
+  document.querySelectorAll('[data-config-form-name]').forEach(el=>{
+    const name=el.dataset.configFormName;
+    const value=values&&Object.prototype.hasOwnProperty.call(values,name)?values[name]:'';
+    if(el.dataset.configFormType==='bool') el.checked=!!value;
+    else el.value=value ?? '';
+  });
+}
+
+async function loadConfigFormFromEditor(){
+  if($('configSectionSelect').value!=='openmiura') throw new Error('The guided form is only available for openmiura.yaml');
+  const data=await api('/admin/config-center/validate',{method:'POST',body:JSON.stringify({section:'openmiura',content:$('configEditor').value})});
+  $('configValidationBox').textContent=pretty(data);
+  $('configSummaryBox').textContent=pretty({summary:data.summary||{}, top_level_keys:data.top_level_keys||[], warnings:data.warnings||[]});
+  if(data.form_values) setConfigFormValues(data.form_values);
+  $('configFormPreviewBox').textContent=data.normalized_yaml||'';
+  setStatus('Main settings form loaded from YAML','ok');
+  return data;
+}
+
+async function applyConfigFormToEditor(){
+  const data=await api('/admin/config-center/validate',{method:'POST',body:JSON.stringify({section:'openmiura',content:'',form_payload:collectConfigFormPayload()})});
+  $('configEditor').value=data.normalized_yaml||'';
+  $('configValidationBox').textContent=pretty(data);
+  $('configSummaryBox').textContent=pretty({summary:data.summary||{}, top_level_keys:data.top_level_keys||[], warnings:data.warnings||[]});
+  if(data.form_values) setConfigFormValues(data.form_values);
+  $('configFormPreviewBox').textContent=data.normalized_yaml||'';
+  setStatus('Main settings form applied to YAML editor','ok');
+  return data;
+}
+
+async function saveConfigFormCenter(reloadAfterSave){
+  const data=await api('/admin/config-center/save',{method:'POST',body:JSON.stringify({section:'openmiura',content:'',form_payload:collectConfigFormPayload(),reload_after_save:reloadAfterSave || $('configReloadToggle').checked})});
+  $('configSaveResultBox').textContent=pretty(data);
+  $('configEditor').value=data.validation?.normalized_yaml||data.snapshot?.raw||$('configEditor').value;
+  $('configFormPreviewBox').textContent=data.validation?.normalized_yaml||$('configFormPreviewBox').textContent;
+  await refreshConfigCenter().catch(()=>{});
+  selectConfigSection('openmiura');
+  const msg=data.restart_required?'Saved openmiura from form. Restart required for full effect.':`Saved openmiura from form${data.reload_applied?' and applied live reload':''}.`;
+  setStatus(msg, data.restart_required?'muted':'ok');
+  return data;
+}
+
+async function refreshReloadAssistant(snapshotOverride){
+  const data=snapshotOverride||await api('/admin/config-center/reload-assistant');
+  renderReloadAssistant(data);
+  return data;
+}
+
+async function applyReloadAssistant(){
+  const payload={sections:selectedReloadAssistantSections(),apply_live_reload:$('reloadAssistantApplyLiveReload').checked,request_restart:$('reloadAssistantRequestRestart').checked,execute_restart_hook:$('reloadAssistantExecuteHook').checked};
+  const data=await api('/admin/config-center/reload-assistant/apply',{method:'POST',body:JSON.stringify(payload)});
+  $('reloadAssistantResultBox').textContent=pretty(data);
+  await refreshReloadAssistant().catch(()=>{});
+  const status=((data.restart_request||{}).status)||'';
+  setStatus(data.restart_request?`Reload assistant applied · restart ${status||'queued'}`:`Reload assistant applied${data.live_reload_applied?' with live reload':''}`,(status==='hook_failed')?'danger':'ok');
+  return data;
+}
+
+async function refreshConfigCenter(){
+  if(!isAdminLike()) return;
+  const data = await api('/admin/config-center');
+  state.configCenter = data;
+  const select = $('configSectionSelect');
+  const previous = select.value || localStorage.getItem('openmiura.configSection') || 'openmiura';
+  select.innerHTML='';
+  for(const item of data.sections||[]){ const opt=document.createElement('option'); opt.value=item.name; opt.textContent=`${item.title} · ${item.name}`; select.appendChild(opt); }
+  renderConfigFileCards(data.sections||[]);
+  $('configQuickSettingsBox').textContent = pretty(data.quick_settings||{});
+  if(data.channel_wizard) renderChannelWizard(data.channel_wizard);
+  if(data.secret_env_wizard) renderSecretEnvWizard(data.secret_env_wizard);
+  if(data.reload_assistant) renderReloadAssistant(data.reload_assistant);
+  if([...select.options].some(opt=>opt.value===previous)) select.value = previous;
+  if(select.value) selectConfigSection(select.value, data);
+  return data;
+}
+
+function selectConfigSection(section, payload){
+  const data = payload || state.configCenter || {};
+  const file = (data.files||{})[section];
+  if(!file) return;
+  $('configSectionSelect').value = section;
+  localStorage.setItem('openmiura.configSection', section);
+  $('configEditor').value = file.raw || '';
+  $('configFilePath').value = file.path || '';
+  $('configSectionBadge').textContent = `${file.title||section} · ${file.valid?'valid YAML':'parse error'}`;
+  $('configSummaryBox').textContent = pretty({summary:file.summary||{}, top_level_keys:file.top_level_keys||[], reload_supported:file.reload_supported, restart_required:file.restart_required, parse_error:file.parse_error||''});
+  $('configValidationBox').textContent = pretty({path:file.path, exists:file.exists, valid:file.valid, parse_error:file.parse_error||''});
+  $('configReloadToggle').checked = !!file.reload_supported;
+  renderConfigForm(file);
+}
+
+async function validateConfigCenter(){
+  const payload = {section:$('configSectionSelect').value, content:$('configEditor').value};
+  const data = await api('/admin/config-center/validate', {method:'POST', body:JSON.stringify(payload)});
+  $('configValidationBox').textContent = pretty(data);
+  $('configSummaryBox').textContent = pretty({summary:data.summary||{}, top_level_keys:data.top_level_keys||[], warnings:data.warnings||[]});
+  if(payload.section==='openmiura' && data.form_values){ setConfigFormValues(data.form_values); $('configFormPreviewBox').textContent=data.normalized_yaml||''; }
+  setStatus(`Configuration ${payload.section} validated`, 'ok');
+  return data;
+}
+
+async function saveConfigCenter(reloadAfterSave){
+  const payload = {section:$('configSectionSelect').value, content:$('configEditor').value, reload_after_save: reloadAfterSave || $('configReloadToggle').checked};
+  const data = await api('/admin/config-center/save', {method:'POST', body:JSON.stringify(payload)});
+  $('configSaveResultBox').textContent = pretty(data);
+  await refreshConfigCenter().catch(()=>{});
+  selectConfigSection(payload.section);
+  const msg = data.restart_required ? `Saved ${payload.section}. Restart required for full effect.` : `Saved ${payload.section}${data.reload_applied?' and applied live reload':''}.`;
+  setStatus(msg, data.restart_required ? 'muted' : 'ok');
+  return data;
+}
 
 function pretty(value){ return JSON.stringify(value,null,2); }
 function parseJsonInput(text,fallback){ const raw=(text||'').trim(); if(!raw) return fallback; return JSON.parse(raw); }
@@ -179,7 +745,7 @@ $('baseUrl').value=state.baseUrl; $('token').value=state.token; $('username').va
 $('authModeSelect').onchange=()=>{ state.authMode=$('authModeSelect').value; bindAuthMode(); };
 $('connectBtn').onclick=connect; $('logoutBtn').onclick=logout; $('refreshAgentsBtn').onclick=refreshAgents; $('refreshSessionsBtn').onclick=refreshSessions; $('refreshHistoryBtn').onclick=refreshHistory; $('refreshPendingBtn').onclick=refreshPending; $('refreshMetricsBtn').onclick=refreshMetrics; $('memorySearchBtn').onclick=memorySearch; $('sendBtn').onclick=sendChat; $('newSessionBtn').onclick=()=>{ state.currentSessionId=`ui:${Date.now()}`; $('chatSessionLabel').textContent=state.currentSessionId; clearChat(); $('historyBox').innerHTML=''; reconnectLive(); }; $('runTerminalBtn').onclick=runTerminal; $('refreshToolCallsBtn').onclick=refreshToolCalls; $('reconnectLiveBtn').onclick=reconnectLive;
 $(`refreshBuilderCatalogBtn`).onclick=refreshBuilderCatalog; $('refreshVoiceBtn').onclick=()=>refreshVoiceSessions().catch(err=>setStatus(err.message,'danger')); $('refreshAppFoundationBtn').onclick=()=>refreshAppFoundation().catch(err=>setStatus(err.message,'danger')); $('registerCurrentPwaBtn').onclick=()=>registerCurrentPwa().catch(err=>setStatus(err.message,'danger')); $('createAppNotificationBtn').onclick=()=>createAppNotification().catch(err=>setStatus(err.message,'danger')); $('createAppDeepLinkBtn').onclick=()=>createAppDeepLink().catch(err=>setStatus(err.message,'danger')); $('requestNotificationsBtn').onclick=()=>requestNotificationPermission().catch(err=>setStatus(err.message,'danger')); $('installPwaBtn').onclick=()=>installPwa().catch(err=>setStatus(err.message,'danger'));  $('startVoiceBtn').onclick=()=>startVoiceSession().catch(err=>setStatus(err.message,'danger')); $('transcribeVoiceBtn').onclick=()=>transcribeVoiceTurn().catch(err=>setStatus(err.message,'danger')); $('respondVoiceBtn').onclick=()=>respondVoiceTurn().catch(err=>setStatus(err.message,'danger')); $('confirmVoiceBtn').onclick=()=>confirmVoiceTurn('confirm').catch(err=>setStatus(err.message,'danger')); $('cancelVoiceBtn').onclick=()=>confirmVoiceTurn('cancel').catch(err=>setStatus(err.message,'danger')); $('closeVoiceBtn').onclick=()=>closeVoiceSession().catch(err=>setStatus(err.message,'danger')); $('refreshReleasesBtn').onclick=()=>refreshReleases().catch(err=>setStatus(err.message,'danger')); $('createReleaseBtn').onclick=()=>createReleaseFromUi().catch(err=>setStatus(err.message,'danger')); $('submitReleaseBtn').onclick=()=>runReleaseAction('submit').catch(err=>setStatus(err.message,'danger')); $('approveReleaseBtn').onclick=()=>runReleaseAction('approve').catch(err=>setStatus(err.message,'danger')); $('promoteReleaseBtn').onclick=()=>runReleaseAction('promote').catch(err=>setStatus(err.message,'danger')); $('rollbackReleaseBtn').onclick=()=>runReleaseAction('rollback').catch(err=>setStatus(err.message,'danger')); $('refreshSecretsBtn').onclick=()=>refreshSecretGovernance().catch(err=>setStatus(err.message,'danger')); $('runSecretExplainBtn').onclick=()=>explainSecretGovernance().catch(err=>setStatus(err.message,'danger')); $('copySecretCatalogBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('secretSummaryBox').textContent||''); setStatus('Secret catalog copied','ok'); }catch(err){ setStatus(err.message,'danger'); } };  $('refreshOperatorBtn').onclick=()=>refreshOperatorConsole().catch(err=>setStatus(err.message,'danger')); $('applyOperatorFiltersBtn').onclick=()=>refreshOperatorConsole().catch(err=>setStatus(err.message,'danger')); $('loadOperatorSessionBtn').onclick=()=>loadOperatorSession().catch(err=>setStatus(err.message,'danger')); $('loadOperatorWorkflowBtn').onclick=()=>loadOperatorWorkflow().catch(err=>setStatus(err.message,'danger')); $('operatorCancelWorkflowBtn').onclick=()=>runOperatorWorkflowAction('cancel').catch(err=>setStatus(err.message,'danger')); $('operatorClaimApprovalBtn').onclick=()=>runOperatorApprovalAction('claim').catch(err=>setStatus(err.message,'danger')); $('operatorApproveApprovalBtn').onclick=()=>runOperatorApprovalAction('approve').catch(err=>setStatus(err.message,'danger')); $('operatorRejectApprovalBtn').onclick=()=>runOperatorApprovalAction('reject').catch(err=>setStatus(err.message,'danger')); $('loadReplaySessionBtn').onclick=()=>loadSessionReplay().catch(err=>setStatus(err.message,'danger')); $('loadReplayWorkflowBtn').onclick=()=>loadWorkflowReplay().catch(err=>setStatus(err.message,'danger')); $('runReplayCompareBtn').onclick=()=>compareReplay().catch(err=>setStatus(err.message,'danger')); $('copyReplaySummaryBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('replaySummaryBox').textContent||''); setStatus('Replay summary copied','ok'); }catch(err){ setStatus(err.message,'danger'); } };  $('loadBuilderPlaybookBtn').onclick=loadBuilderPlaybook; $('validateBuilderBtn').onclick=validateBuilder; $('createBuilderWorkflowBtn').onclick=createBuilderWorkflow; $('formatBuilderDefinitionBtn').onclick=()=>{ try{$('builderDefinition').value=pretty(parseJsonInput($('builderDefinition').value,{steps:[]}));}catch(err){setStatus(err.message,'danger');} }; $('formatBuilderInputBtn').onclick=()=>{ try{$('builderInput').value=pretty(parseJsonInput($('builderInput').value,{}));}catch(err){setStatus(err.message,'danger');} }; $('copyBuilderDefinitionBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('builderDefinition').value); setStatus('Definition copied','ok'); }catch(err){ setStatus(err.message,'danger'); } }; $('refreshPolicyExplorerBtn').onclick=refreshPolicyExplorerSnapshot; $('simulateCurrentPolicyBtn').onclick=()=>simulatePolicyExplorer(false); $('simulateCandidatePolicyBtn').onclick=()=>simulatePolicyExplorer(true); $('diffPolicyBtn').onclick=diffPolicyExplorer; $('formatPolicyRequestBtn').onclick=()=>{ try{$('policyExplorerRequest').value=pretty(parsePolicyExplorerRequest());}catch(err){setStatus(err.message,'danger');} }; $('clearPolicyCandidateBtn').onclick=()=>{ $('policyExplorerCandidate').value=''; $('policyDiffBox').textContent=''; $('policySimulationBox').textContent=''; }; $('copyPolicySnapshotBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('policySnapshotBox').textContent||''); setStatus('Current policy copied','ok'); }catch(err){ setStatus(err.message,'danger'); } };
-$('refreshCanvasBtn').onclick=()=>refreshCanvasCore().catch(err=>setStatus(err.message,'danger')); $('createCanvasBtn').onclick=()=>createCanvasDocument().catch(err=>setStatus(err.message,'danger')); $('upsertCanvasNodeBtn').onclick=()=>upsertCanvasNode().catch(err=>setStatus(err.message,'danger')); $('upsertCanvasEdgeBtn').onclick=()=>upsertCanvasEdge().catch(err=>setStatus(err.message,'danger')); $('saveCanvasViewBtn').onclick=()=>saveCanvasView().catch(err=>setStatus(err.message,'danger')); $('updateCanvasPresenceBtn').onclick=()=>updateCanvasPresence().catch(err=>setStatus(err.message,'danger')); $('refreshCanvasOverlaysBtn').onclick=()=>refreshCanvasOverlays().catch(err=>setStatus(err.message,'danger')); $('saveCanvasOverlayStateBtn').onclick=()=>saveCanvasOverlayState().catch(err=>setStatus(err.message,'danger')); $('adminRefreshBtn').onclick=refreshAdmin; $('refreshEventsBtn').onclick=refreshAdmin; $('refreshIdentitiesBtn').onclick=refreshAdmin; $('refreshUsersBtn').onclick=refreshAdmin; $('reloadConfigBtn').onclick=reloadConfig; $('createUserBtn').onclick=createUser; $('refreshRolesBtn').onclick=refreshAdmin; $('refreshAdminSessionsBtn').onclick=refreshAdmin; $('refreshAdminMemoryBtn').onclick=refreshAdminMemory; $('refreshAdminMetricsBtn').onclick=refreshAdmin; $('refreshAdminToolCallsBtn').onclick=refreshAdmin;
-document.querySelectorAll('.tab-btn').forEach(btn=>btn.onclick=()=>{ switchTab(btn.dataset.tab); if(btn.dataset.tab==='builder' && !$('builderCatalog').children.length) refreshBuilderCatalog().catch(()=>{}); if(btn.dataset.tab==='policies' && !$('policySnapshotBox').textContent.trim()) refreshPolicyExplorerSnapshot().catch(()=>{}); if(btn.dataset.tab==='secrets' && !$('secretCatalogBox').children.length) refreshSecretGovernance().catch(()=>{}); if(btn.dataset.tab==='replay' && !$('replaySummaryBox').textContent.trim() && state.currentSessionId) { $('replaySessionId').value=state.currentSessionId; loadSessionReplay(state.currentSessionId).catch(()=>{}); } if(btn.dataset.tab==='operator' && !$('operatorOverview').children.length) { refreshOperatorConsole().then(()=>{ if(state.currentSessionId){ $('operatorSessionId').value=state.currentSessionId; return loadOperatorSession(state.currentSessionId); } }).catch(()=>{}); } if(btn.dataset.tab==='releases' && !$('releaseList').children.length) refreshReleases().catch(()=>{}); if(btn.dataset.tab==='voice' && !$('voiceSessionList').children.length) refreshVoiceSessions().catch(()=>{}); if(btn.dataset.tab==='app' && !$('appInstallationList').children.length) refreshAppFoundation().catch(()=>{}); if(btn.dataset.tab==='canvas' && !$('canvasDocumentList').children.length) refreshCanvasCore().catch(()=>{}); });
+$('refreshCanvasBtn').onclick=()=>refreshCanvasCore().catch(err=>setStatus(err.message,'danger')); $('refreshConfigCenterBtn').onclick=()=>refreshConfigCenter().catch(err=>setStatus(err.message,'danger')); $('refreshReloadAssistantBtn').onclick=()=>refreshReloadAssistant().catch(err=>setStatus(err.message,'danger')); $('applyReloadAssistantBtn').onclick=()=>applyReloadAssistant().catch(err=>setStatus(err.message,'danger')); $('configSectionSelect').onchange=()=>selectConfigSection($('configSectionSelect').value); $('validateConfigBtn').onclick=()=>validateConfigCenter().catch(err=>setStatus(err.message,'danger')); $('saveConfigBtn').onclick=()=>saveConfigCenter(false).catch(err=>setStatus(err.message,'danger')); $('saveReloadConfigBtn').onclick=()=>saveConfigCenter(true).catch(err=>setStatus(err.message,'danger')); $('loadConfigFormFromEditorBtn').onclick=()=>loadConfigFormFromEditor().catch(err=>setStatus(err.message,'danger')); $('applyConfigFormBtn').onclick=()=>applyConfigFormToEditor().catch(err=>setStatus(err.message,'danger')); $('saveConfigFormBtn').onclick=()=>saveConfigFormCenter(false).catch(err=>setStatus(err.message,'danger')); $('saveReloadConfigFormBtn').onclick=()=>saveConfigFormCenter(true).catch(err=>setStatus(err.message,'danger')); $('refreshChannelWizardBtn').onclick=()=>refreshChannelWizard().catch(err=>setStatus(err.message,'danger')); $('channelWizardChannelSelect').onchange=()=>selectChannelWizardChannel($('channelWizardChannelSelect').value); $('loadChannelWizardFromEditorBtn').onclick=()=>loadChannelWizardFromEditor().catch(err=>setStatus(err.message,'danger')); $('applyChannelWizardBtn').onclick=()=>applyChannelWizardToEditor().catch(err=>setStatus(err.message,'danger')); $('saveChannelWizardBtn').onclick=()=>saveChannelWizard(false).catch(err=>setStatus(err.message,'danger')); $('saveReloadChannelWizardBtn').onclick=()=>saveChannelWizard(true).catch(err=>setStatus(err.message,'danger')); $('refreshSecretEnvWizardBtn').onclick=()=>refreshSecretEnvWizard().catch(err=>setStatus(err.message,'danger')); $('secretEnvProfileSelect').onchange=()=>selectSecretEnvProfile($('secretEnvProfileSelect').value); $('applySuggestedSecretEnvRefsBtn').onclick=()=>applySuggestedSecretEnvRefs(); $('loadSecretEnvWizardFromEditorBtn').onclick=()=>loadSecretEnvWizardFromEditor().catch(err=>setStatus(err.message,'danger')); $('applySecretEnvWizardBtn').onclick=()=>applySecretEnvWizardToEditor().catch(err=>setStatus(err.message,'danger')); $('saveSecretEnvWizardBtn').onclick=()=>saveSecretEnvWizard(false).catch(err=>setStatus(err.message,'danger')); $('saveReloadSecretEnvWizardBtn').onclick=()=>saveSecretEnvWizard(true).catch(err=>setStatus(err.message,'danger')); $('copyConfigPathBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('configFilePath').value||''); setStatus('Config path copied','ok'); }catch(err){ setStatus(err.message,'danger'); } }; $('copyConfigYamlBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('configEditor').value||''); setStatus('Config YAML copied','ok'); }catch(err){ setStatus(err.message,'danger'); } }; $('createCanvasBtn').onclick=()=>createCanvasDocument().catch(err=>setStatus(err.message,'danger')); $('upsertCanvasNodeBtn').onclick=()=>upsertCanvasNode().catch(err=>setStatus(err.message,'danger')); $('upsertCanvasEdgeBtn').onclick=()=>upsertCanvasEdge().catch(err=>setStatus(err.message,'danger')); $('saveCanvasViewBtn').onclick=()=>saveCanvasView().catch(err=>setStatus(err.message,'danger')); $('updateCanvasPresenceBtn').onclick=()=>updateCanvasPresence().catch(err=>setStatus(err.message,'danger')); $('refreshCanvasOverlaysBtn').onclick=()=>refreshCanvasOverlays().catch(err=>setStatus(err.message,'danger')); $('saveCanvasOverlayStateBtn').onclick=()=>saveCanvasOverlayState().catch(err=>setStatus(err.message,'danger')); $('adminRefreshBtn').onclick=refreshAdmin; $('refreshEventsBtn').onclick=refreshAdmin; $('refreshIdentitiesBtn').onclick=refreshAdmin; $('refreshUsersBtn').onclick=refreshAdmin; $('reloadConfigBtn').onclick=reloadConfig; $('createUserBtn').onclick=createUser; $('refreshRolesBtn').onclick=refreshAdmin; $('refreshAdminSessionsBtn').onclick=refreshAdmin; $('refreshAdminMemoryBtn').onclick=refreshAdminMemory; $('refreshAdminMetricsBtn').onclick=refreshAdmin; $('refreshAdminToolCallsBtn').onclick=refreshAdmin;
+document.querySelectorAll('.tab-btn').forEach(btn=>btn.onclick=()=>{ switchTab(btn.dataset.tab); if(btn.dataset.tab==='builder' && !$('builderCatalog').children.length) refreshBuilderCatalog().catch(()=>{}); if(btn.dataset.tab==='policies' && !$('policySnapshotBox').textContent.trim()) refreshPolicyExplorerSnapshot().catch(()=>{}); if(btn.dataset.tab==='secrets' && !$('secretCatalogBox').children.length) refreshSecretGovernance().catch(()=>{}); if(btn.dataset.tab==='replay' && !$('replaySummaryBox').textContent.trim() && state.currentSessionId) { $('replaySessionId').value=state.currentSessionId; loadSessionReplay(state.currentSessionId).catch(()=>{}); } if(btn.dataset.tab==='operator' && !$('operatorOverview').children.length) { refreshOperatorConsole().then(()=>{ if(state.currentSessionId){ $('operatorSessionId').value=state.currentSessionId; return loadOperatorSession(state.currentSessionId); } }).catch(()=>{}); } if(btn.dataset.tab==='releases' && !$('releaseList').children.length) refreshReleases().catch(()=>{}); if(btn.dataset.tab==='voice' && !$('voiceSessionList').children.length) refreshVoiceSessions().catch(()=>{}); if(btn.dataset.tab==='app' && !$('appInstallationList').children.length) refreshAppFoundation().catch(()=>{}); if(btn.dataset.tab==='canvas' && !$('canvasDocumentList').children.length) refreshCanvasCore().catch(()=>{}); if(btn.dataset.tab==='config' && !$('configFileList').children.length) refreshConfigCenter().catch(()=>{}); });
 bootstrapPwa().catch(()=>{});
 if(state.baseUrl) connect();

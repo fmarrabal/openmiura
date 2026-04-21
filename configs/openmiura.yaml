@@ -124,19 +124,19 @@ tools:
   web_fetch:
     timeout_s: 20
     max_bytes: 250000
-    allow_all_domains: true
+    allow_all_domains: "env:OPENMIURA_WEB_FETCH_ALLOW_ALL_DOMAINS|false"
     allowed_domains: []
-    block_private_ips: true
+    block_private_ips: "env:OPENMIURA_WEB_FETCH_BLOCK_PRIVATE_IPS|true"
   terminal:
-    enabled: true
+    enabled: "env:OPENMIURA_TERMINAL_ENABLED|false"
     timeout_s: 30
     max_timeout_s: 120
     max_output_chars: 12000
     shell_executable: "env:OPENMIURA_TERMINAL_SHELL|"
-    allow_shell: "env:OPENMIURA_TERMINAL_ALLOW_SHELL|true"
-    allow_shell_metacharacters: "env:OPENMIURA_TERMINAL_ALLOW_METACHARACTERS|true"
+    allow_shell: "env:OPENMIURA_TERMINAL_ALLOW_SHELL|false"
+    allow_shell_metacharacters: "env:OPENMIURA_TERMINAL_ALLOW_METACHARACTERS|false"
     allow_multiline: false
-    require_explicit_allowlist: false
+    require_explicit_allowlist: "env:OPENMIURA_TERMINAL_REQUIRE_EXPLICIT_ALLOWLIST|true"
     allowed_commands: []
     blocked_commands: []
     blocked_patterns: []
@@ -212,4 +212,4 @@ auth:
 
 agents_path: "env:OPENMIURA_AGENTS_PATH|agents.yaml"
 policies_path: "env:OPENMIURA_POLICIES_PATH|policies.yaml"
-skills_path: "env:OPENMIURA_SKILLS_PATH|skills"
+skills_path: "env:OPENMIURA_SKILLS_PATH|../skills"

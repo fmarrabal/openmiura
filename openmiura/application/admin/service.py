@@ -3,7 +3,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import subprocess
 import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -22,6 +27,9 @@ from openmiura.application.voice import VoiceRuntimeService
 from openmiura.application.pwa import PWAFoundationService
 from openmiura.application.canvas import LiveCanvasService
 from openmiura.application.packaging import PackagingHardeningService
+from openmiura.application.admin.status_snapshot import build_status_snapshot, collect_registered_tool_names
+from openmiura import __version__
+from openmiura.core.config import resolve_config_related_path
 from openmiura.core.contracts import AdminGatewayLike
 from openmiura.core.policies.engine import PolicyEngine
 
@@ -58,75 +66,13 @@ class AdminService:
         self.packaging_hardening_service = PackagingHardeningService()
 
     def status_snapshot(self, gw: AdminGatewayLike) -> dict[str, Any]:
-        counts = self._safe_call(gw.audit, "table_counts", {})
-        router_obj = getattr(gw, "router", None)
-        policy_obj = getattr(gw, "policy", None)
-        tools_obj = getattr(gw, "tools", None)
-
-        tool_names: list[str] = []
-        registry = getattr(tools_obj, "registry", None)
-        if registry is not None:
-            raw_tools = getattr(registry, "_tools", {}) or {}
-            try:
-                tool_names = sorted(raw_tools.keys())
-            except Exception:
-                tool_names = []
-
-        started_at = float(getattr(gw, "started_at", time.time()))
-        uptime_s = time.time() - started_at
-        settings = getattr(gw, "settings", None)
-        memory_cfg = getattr(settings, "memory", None)
-        llm_cfg = getattr(settings, "llm", None)
-        storage_cfg = getattr(settings, "storage", None)
-
-        return {
-            "ok": True,
-            "service": "openMiura",
-            "uptime_s": uptime_s,
-            "llm": {
-                "provider": getattr(llm_cfg, "provider", ""),
-                "model": getattr(llm_cfg, "model", ""),
-                "base_url": getattr(llm_cfg, "base_url", ""),
-            },
-            "router": {
-                "agents": router_obj.available_agents() if router_obj and hasattr(router_obj, "available_agents") else [],
-                "agents_path": getattr(settings, "agents_path", "configs/agents.yaml"),
-            },
-            "policy": {
-                "enabled": policy_obj is not None,
-                "policies_path": getattr(settings, "policies_path", "configs/policies.yaml"),
-                "signature": self._safe_call(policy_obj, "signature", None),
-            },
-            "sandbox": {
-                "enabled": bool(getattr(getattr(settings, "sandbox", None), "enabled", True)),
-                "default_profile": getattr(getattr(settings, "sandbox", None), "default_profile", "local-safe"),
-                "profiles": sorted(list((getattr(getattr(gw, "sandbox", None), "profiles_catalog", lambda: {})() or {}).keys())),
-            },
-            "memory": {
-                "enabled": bool(memory_cfg and getattr(memory_cfg, "enabled", False)),
-                "embed_model": getattr(memory_cfg, "embed_model", ""),
-                "total_items": self._safe_call(gw.audit, "count_memory_items", 0),
-            },
-            "tools": {
-                "registered": tool_names,
-            },
-            "channels": {
-                "telegram_configured": getattr(gw, "telegram", None) is not None,
-                "slack_configured": getattr(gw, "slack", None) is not None,
-            },
-            "sessions": {
-                "total": self._safe_call(gw.audit, "count_sessions", 0),
-                "active_24h": self._safe_call(gw.audit, "count_active_sessions", 0, window_s=86400),
-            },
-            "events": {
-                "last": self._safe_call(gw.audit, "get_last_event", None),
-            },
-            "db": {
-                "path": getattr(storage_cfg, "db_path", ""),
-                "counts": counts,
-            },
-            "tenancy": self.tenancy_service.catalog(settings),
-        }
+        tool_names = collect_registered_tool_names(getattr(gw, "tools", None))
+        return build_status_snapshot(
+            gw,
+            safe_call=self._safe_call,
+            tenancy_catalog=self.tenancy_service.catalog(getattr(gw, "settings", None)),
+            tool_names=tool_names,
+        )
 
     def search_memory_semantic_or_table(
         self,
@@ -1429,6 +1375,752 @@ class AdminService:
                 result.update(maybe)
         return {"ok": True, **result}
 
+
+    def config_center_snapshot(self, gw: AdminGatewayLike) -> dict[str, Any]:
+        config_path = self._gateway_config_path(gw)
+        snapshots: dict[str, dict[str, Any]] = {}
+        sections: list[dict[str, Any]] = []
+        for spec in self._config_section_specs(gw, config_path):
+            snapshot = self._read_config_snapshot(gw, spec)
+            snapshots[spec['name']] = snapshot
+            sections.append(
+                {
+                    'name': spec['name'],
+                    'title': spec['title'],
+                    'path': snapshot['path'],
+                    'exists': snapshot['exists'],
+                    'reload_supported': spec['reload_supported'],
+                    'restart_required': spec['restart_required'],
+                    'summary': snapshot['summary'],
+                }
+            )
+        status = self.status_snapshot(gw)
+        return {
+            'ok': True,
+            'config_path': self._display_path(config_path),
+            'sections': sections,
+            'files': snapshots,
+            'quick_settings': self._config_quick_settings(status),
+            'channel_wizard': self.channel_setup_wizard_snapshot(gw),
+            'secret_env_wizard': self.secret_env_reference_wizard_snapshot(gw),
+            'reload_assistant': self.reload_assistant_snapshot(gw),
+        }
+
+
+    def reload_assistant_snapshot(self, gw: AdminGatewayLike) -> dict[str, Any]:
+        config_path = self._gateway_config_path(gw)
+        sections: list[dict[str, Any]] = []
+        for spec in self._config_section_specs(gw, config_path):
+            snapshot = self._read_config_snapshot(gw, spec)
+            sections.append(
+                {
+                    'name': spec['name'],
+                    'title': spec['title'],
+                    'path': snapshot['path'],
+                    'exists': snapshot['exists'],
+                    'valid': snapshot['valid'],
+                    'parse_error': snapshot['parse_error'],
+                    'reload_supported': bool(spec['reload_supported']),
+                    'restart_required': bool(spec['restart_required']),
+                    'summary': snapshot['summary'],
+                    'metadata': snapshot.get('metadata') or {},
+                }
+            )
+        hook = self._restart_hook_status()
+        recent = self._recent_restart_requests(gw)
+        operational_state = self._reload_assistant_operational_state(gw, config_path=config_path, sections=sections, recent_restart_requests=recent)
+        return {
+            'ok': True,
+            'config_path': self._display_path(config_path),
+            'sections': sections,
+            'defaults': {
+                'apply_live_reload': True,
+                'request_restart': False,
+                'execute_restart_hook': False,
+            },
+            'capabilities': {
+                'live_reload_sections': [item['name'] for item in sections if item.get('reload_supported')],
+                'restart_required_sections': [item['name'] for item in sections if item.get('restart_required')],
+            },
+            'restart_hook': hook,
+            'operational_state': operational_state,
+            'recent_restart_requests': recent,
+            'pending_restart_requests': [item for item in recent if str(item.get('status') or '') in {'queued', 'hook_failed'}],
+        }
+
+    def apply_reload_assistant(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        sections: list[str] | None = None,
+        apply_live_reload: bool = False,
+        request_restart: bool = False,
+        execute_restart_hook: bool = False,
+        actor: str = 'admin',
+    ) -> dict[str, Any]:
+        config_path = self._gateway_config_path(gw)
+        specs = {spec['name']: spec for spec in self._config_section_specs(gw, config_path)}
+        normalized_sections: list[str] = []
+        for raw in list(sections or []):
+            name = str(raw or '').strip().lower()
+            if name and name in specs and name not in normalized_sections:
+                normalized_sections.append(name)
+        if not normalized_sections and not request_restart:
+            raise ValueError('reload_assistant_requires_sections_or_restart')
+
+        live_reload_sections = [name for name in normalized_sections if bool(specs[name]['reload_supported'])]
+        restart_trigger_sections = [name for name in normalized_sections if bool(specs[name]['restart_required'])]
+        live_reload_applied = False
+        reload_result: dict[str, Any] | None = None
+        if apply_live_reload and live_reload_sections:
+            reload_result = self.reload(gw)
+            live_reload_applied = True
+
+        restart_required = bool(restart_trigger_sections)
+        restart_requested = bool(request_restart or restart_required)
+        hook_status = self._restart_hook_status()
+        hook_result: dict[str, Any] | None = None
+        restart_request: dict[str, Any] | None = None
+
+        if restart_requested:
+            request_id = str(uuid.uuid4())
+            status = 'queued'
+            if execute_restart_hook:
+                if hook_status.get('configured'):
+                    hook_result = self._execute_restart_hook(str(hook_status.get('command') or ''), cwd=config_path.parent)
+                    status = 'executed' if hook_result.get('ok') else 'hook_failed'
+                else:
+                    hook_result = {
+                        'configured': False,
+                        'executed': False,
+                        'ok': False,
+                        'reason': 'restart_hook_not_configured',
+                    }
+                    status = 'queued'
+            restart_request = {
+                'request_id': request_id,
+                'created_at': time.time(),
+                'actor': str(actor or 'admin'),
+                'sections': normalized_sections,
+                'restart_required_sections': restart_trigger_sections,
+                'live_reload_sections': live_reload_sections,
+                'request_restart': bool(request_restart),
+                'restart_required': restart_required,
+                'execute_restart_hook': bool(execute_restart_hook),
+                'status': status,
+                'hook': hook_result,
+            }
+            try:
+                gw.audit.log_event(
+                    direction='system',
+                    channel='system',
+                    user_id=str(actor or 'admin'),
+                    session_id='system',
+                    payload={
+                        'event': 'assistant_restart_request',
+                        **restart_request,
+                    },
+                )
+            except Exception:
+                pass
+        elif live_reload_applied:
+            try:
+                gw.audit.log_event(
+                    direction='system',
+                    channel='system',
+                    user_id=str(actor or 'admin'),
+                    session_id='system',
+                    payload={
+                        'event': 'assistant_reload_applied',
+                        'sections': normalized_sections,
+                        'live_reload_sections': live_reload_sections,
+                        'actor': str(actor or 'admin'),
+                    },
+                )
+            except Exception:
+                pass
+
+        return {
+            'ok': True,
+            'selected_sections': normalized_sections,
+            'apply_live_reload': bool(apply_live_reload),
+            'live_reload_sections': live_reload_sections,
+            'live_reload_applied': live_reload_applied,
+            'reload_result': reload_result,
+            'request_restart': bool(request_restart),
+            'restart_required': restart_required,
+            'restart_request': restart_request,
+            'restart_hook': hook_status,
+            'hook_result': hook_result,
+            'recent_restart_requests': self._recent_restart_requests(gw),
+        }
+
+    def validate_config_content(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        section: str,
+        content: str,
+        form_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        spec = self._config_section_spec(gw, section)
+        rendered_content = self._materialize_config_content(gw, section=section, content=content, form_payload=form_payload)
+        parsed = yaml.safe_load(str(rendered_content or ''))
+        warnings: list[str] = []
+        if parsed is None:
+            parsed = {}
+            warnings.append('empty_yaml_document')
+        top_level_keys: list[str] = []
+        if isinstance(parsed, dict):
+            top_level_keys = [str(k) for k in parsed.keys()]
+        elif isinstance(parsed, list):
+            top_level_keys = [f'item[{idx}]' for idx, _ in enumerate(parsed[:10])]
+        if section == 'openmiura' and isinstance(parsed, dict):
+            llm = parsed.get('llm') or {}
+            if not llm:
+                warnings.append('llm_section_missing')
+            elif not (llm.get('provider') and llm.get('model')):
+                warnings.append('llm_provider_or_model_missing')
+        normalized = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True)
+        response = {
+            'ok': True,
+            'section': section,
+            'path': self._display_path(spec['path']),
+            'valid': True,
+            'warnings': warnings,
+            'top_level_keys': top_level_keys,
+            'summary': self._build_config_file_summary(section, parsed),
+            'normalized_yaml': normalized,
+        }
+        if section == 'openmiura' and isinstance(parsed, dict):
+            response['form_values'] = self._extract_openmiura_form_values(parsed)
+            response['form_schema'] = self._openmiura_form_schema()
+        return response
+
+    def save_config_content(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        section: str,
+        content: str,
+        reload_after_save: bool = False,
+        actor: str = 'admin',
+        form_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        spec = self._config_section_spec(gw, section)
+        validation = self.validate_config_content(gw, section=section, content=content, form_payload=form_payload)
+        target_path = Path(spec['path'])
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_path = None
+        if target_path.exists():
+            backup_root = self._config_backup_root(gw, self._gateway_config_path(gw))
+            backup_root.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime('%Y%m%d-%H%M%S', time.gmtime())
+            backup_name = f"{section}-{stamp}-{target_path.name}.bak"
+            backup_path = backup_root / backup_name
+            backup_path.write_text(target_path.read_text(encoding='utf-8'), encoding='utf-8')
+        final_content = validation.get('normalized_yaml') or str(content or '')
+        if final_content and not final_content.endswith('\n'):
+            final_content += '\n'
+        target_path.write_text(final_content, encoding='utf-8')
+
+        reload_result: dict[str, Any] | None = None
+        reload_applied = False
+        restart_required = bool(spec['restart_required'])
+        if reload_after_save and spec['reload_supported']:
+            reload_result = self.reload(gw)
+            reload_applied = True
+        elif reload_after_save and restart_required:
+            reload_result = {'ok': True, 'restart_required': True, 'reason': 'service_restart_required'}
+
+        try:
+            gw.audit.log_event(
+                direction='security',
+                channel='system',
+                user_id=str(actor or 'admin'),
+                session_id='system',
+                payload={
+                    'event': 'config_file_saved',
+                    'section': section,
+                    'path': self._display_path(target_path),
+                    'reload_applied': reload_applied,
+                    'restart_required': restart_required,
+                    'backup_path': self._display_path(backup_path) if backup_path else '',
+                },
+            )
+        except Exception:
+            pass
+
+        snapshot = self._read_config_snapshot(gw, spec)
+        return {
+            'ok': True,
+            'section': section,
+            'path': self._display_path(target_path),
+            'backup_path': self._display_path(backup_path) if backup_path else None,
+            'reload_supported': spec['reload_supported'],
+            'reload_applied': reload_applied,
+            'restart_required': restart_required,
+            'reload_result': reload_result,
+            'validation': validation,
+            'snapshot': snapshot,
+        }
+
+    def channel_setup_wizard_snapshot(self, gw: AdminGatewayLike) -> dict[str, Any]:
+        spec = self._config_section_spec(gw, 'openmiura')
+        snapshot = self._read_config_snapshot(gw, spec)
+        parsed = yaml.safe_load(snapshot.get('raw') or '') if str(snapshot.get('raw') or '').strip() else {}
+        if parsed is None:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        values = self._extract_channel_wizard_values(parsed)
+        channels = []
+        for name in self._channel_wizard_channel_names():
+            channels.append(
+                {
+                    'name': name,
+                    'title': self._channel_wizard_channel_title(name),
+                    'status': self._channel_wizard_status(name, values.get(name) or {}),
+                }
+            )
+        return {
+            'ok': True,
+            'path': self._display_path(spec['path']),
+            'schemas': self._channel_wizard_schema(),
+            'values': values,
+            'channels': channels,
+            'raw': snapshot.get('raw') or '',
+        }
+
+    def validate_channel_setup(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        channel: str,
+        wizard_payload: dict[str, Any] | None = None,
+        content: str = '',
+    ) -> dict[str, Any]:
+        normalized_channel = self._normalize_channel_name(channel)
+        rendered_content = self._materialize_channel_wizard_content(
+            gw,
+            channel=normalized_channel,
+            content=content,
+            wizard_payload=wizard_payload,
+        )
+        parsed = yaml.safe_load(str(rendered_content or ''))
+        warnings: list[str] = []
+        if parsed is None:
+            parsed = {}
+            warnings.append('empty_yaml_document')
+        if not isinstance(parsed, dict):
+            raise ValueError('channel_wizard_requires_mapping_yaml')
+        values = self._extract_channel_wizard_values(parsed)
+        status = self._channel_wizard_status(normalized_channel, values.get(normalized_channel) or {})
+        normalized_yaml = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True)
+        return {
+            'ok': True,
+            'channel': normalized_channel,
+            'path': str(self._config_section_spec(gw, 'openmiura')['path']),
+            'warnings': warnings,
+            'summary': self._build_config_file_summary('openmiura', parsed),
+            'normalized_yaml': normalized_yaml,
+            'wizard_schema': self._channel_wizard_schema().get(normalized_channel, []),
+            'wizard_values': values.get(normalized_channel) or {},
+            'channel_status': status,
+        }
+
+    def save_channel_setup(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        channel: str,
+        wizard_payload: dict[str, Any] | None = None,
+        content: str = '',
+        reload_after_save: bool = False,
+        actor: str = 'admin',
+    ) -> dict[str, Any]:
+        validation = self.validate_channel_setup(gw, channel=channel, wizard_payload=wizard_payload, content=content)
+        response = self.save_config_content(
+            gw,
+            section='openmiura',
+            content=str(validation.get('normalized_yaml') or ''),
+            reload_after_save=reload_after_save,
+            actor=actor,
+        )
+        response['channel'] = validation['channel']
+        response['channel_validation'] = validation
+        response['channel_status'] = validation['channel_status']
+        return response
+
+
+    @staticmethod
+    def _secret_env_profile_names() -> list[str]:
+        return ['llm', 'telegram', 'slack', 'discord']
+
+    @staticmethod
+    def _secret_env_profile_title(profile: str) -> str:
+        titles = {'llm': 'LLM provider', 'telegram': 'Telegram', 'slack': 'Slack', 'discord': 'Discord'}
+        return titles.get(str(profile or '').strip().lower(), str(profile or '').strip().title() or 'Secret profile')
+
+    def _normalize_secret_env_profile(self, profile: str) -> str:
+        normalized = str(profile or '').strip().lower()
+        if normalized not in self._secret_env_profile_names():
+            raise ValueError('unsupported_secret_env_profile')
+        return normalized
+
+    @staticmethod
+    def _env_reference_fields() -> set[str]:
+        return {'llm.api_key_env_var'}
+
+    def _secret_env_fields(self, profile: str) -> list[dict[str, Any]]:
+        normalized = self._normalize_secret_env_profile(profile)
+        if normalized == 'llm':
+            return [
+                {'group': 'Provider authentication', 'name': 'llm.api_key_env_var.mode', 'label': 'API key source', 'type': 'select', 'options': ['disabled', 'env']},
+                {'group': 'Provider authentication', 'name': 'llm.api_key_env_var.value', 'label': 'API key env var', 'type': 'string', 'placeholder': 'OPENMIURA_LLM_API_KEY'},
+            ]
+        if normalized == 'telegram':
+            return [
+                {'group': 'Authentication', 'name': 'telegram.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'telegram.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_TELEGRAM_BOT_TOKEN'},
+                {'group': 'Authentication', 'name': 'telegram.webhook_secret.mode', 'label': 'Webhook secret source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'telegram.webhook_secret.value', 'label': 'Webhook secret / env var', 'type': 'string', 'placeholder': 'OPENMIURA_TELEGRAM_WEBHOOK_SECRET'},
+            ]
+        if normalized == 'slack':
+            return [
+                {'group': 'Authentication', 'name': 'slack.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'slack.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_SLACK_BOT_TOKEN'},
+                {'group': 'Authentication', 'name': 'slack.signing_secret.mode', 'label': 'Signing secret source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'slack.signing_secret.value', 'label': 'Signing secret / env var', 'type': 'string', 'placeholder': 'OPENMIURA_SLACK_SIGNING_SECRET'},
+            ]
+        return [
+            {'group': 'Authentication', 'name': 'discord.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+            {'group': 'Authentication', 'name': 'discord.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_DISCORD_BOT_TOKEN'},
+        ]
+
+    def _secret_env_schema(self) -> dict[str, list[dict[str, Any]]]:
+        output: dict[str, list[dict[str, Any]]] = {}
+        for profile in self._secret_env_profile_names():
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for field in self._secret_env_fields(profile):
+                groups.setdefault(str(field['group']), []).append({k: v for k, v in field.items() if k != 'group'})
+            output[profile] = [{'group': group, 'fields': fields} for group, fields in groups.items()]
+        return output
+
+    @staticmethod
+    def _extract_env_reference(raw_value: Any) -> tuple[str, str]:
+        value = str(raw_value or '').strip()
+        return ('env', value) if value else ('disabled', '')
+
+    @staticmethod
+    def _compose_env_reference(mode: Any, value: Any) -> str:
+        normalized_mode = str(mode or 'disabled').strip().lower()
+        raw_value = str(value or '').strip()
+        if normalized_mode == 'env' and raw_value:
+            return raw_value
+        return ''
+
+    @staticmethod
+    def _default_secret_env_name(field_path: str, env_prefix: str = 'OPENMIURA') -> str:
+        prefix = str(env_prefix or 'OPENMIURA').strip().upper().replace('-', '_').replace(' ', '_')
+        mapping = {
+            'llm.api_key_env_var': 'LLM_API_KEY',
+            'telegram.bot_token': 'TELEGRAM_BOT_TOKEN',
+            'telegram.webhook_secret': 'TELEGRAM_WEBHOOK_SECRET',
+            'slack.bot_token': 'SLACK_BOT_TOKEN',
+            'slack.signing_secret': 'SLACK_SIGNING_SECRET',
+            'discord.bot_token': 'DISCORD_BOT_TOKEN',
+        }
+        suffix = mapping.get(field_path, field_path.replace('.', '_').upper())
+        return f'{prefix}_{suffix}' if prefix else suffix
+
+    def _secret_env_suggestions(self, env_prefix: str = 'OPENMIURA') -> dict[str, dict[str, str]]:
+        return {
+            'llm': {'llm.api_key_env_var': self._default_secret_env_name('llm.api_key_env_var', env_prefix)},
+            'telegram': {
+                'telegram.bot_token': self._default_secret_env_name('telegram.bot_token', env_prefix),
+                'telegram.webhook_secret': self._default_secret_env_name('telegram.webhook_secret', env_prefix),
+            },
+            'slack': {
+                'slack.bot_token': self._default_secret_env_name('slack.bot_token', env_prefix),
+                'slack.signing_secret': self._default_secret_env_name('slack.signing_secret', env_prefix),
+            },
+            'discord': {'discord.bot_token': self._default_secret_env_name('discord.bot_token', env_prefix)},
+        }
+
+    def _extract_secret_env_values(self, parsed: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+        payload = parsed if isinstance(parsed, dict) else {}
+        defaults: dict[str, dict[str, Any]] = {
+            'llm': {
+                'llm.api_key_env_var.mode': 'disabled',
+                'llm.api_key_env_var.value': '',
+            },
+            'telegram': {
+                'telegram.bot_token.mode': 'disabled',
+                'telegram.bot_token.value': '',
+                'telegram.webhook_secret.mode': 'disabled',
+                'telegram.webhook_secret.value': '',
+            },
+            'slack': {
+                'slack.bot_token.mode': 'disabled',
+                'slack.bot_token.value': '',
+                'slack.signing_secret.mode': 'disabled',
+                'slack.signing_secret.value': '',
+            },
+            'discord': {
+                'discord.bot_token.mode': 'disabled',
+                'discord.bot_token.value': '',
+            },
+        }
+        result = copy.deepcopy(defaults)
+        for profile in self._secret_env_profile_names():
+            values = result[profile]
+            for field in self._secret_env_fields(profile):
+                name = str(field['name'])
+                if name.endswith('.mode') and name[:-5] in self._secret_storage_fields():
+                    mode, _ = self._extract_secret_storage(self._config_get_path(payload, name[:-5], ''))
+                    values[name] = mode
+                    continue
+                if name.endswith('.value') and name[:-6] in self._secret_storage_fields():
+                    _, stored = self._extract_secret_storage(self._config_get_path(payload, name[:-6], ''))
+                    values[name] = stored
+                    continue
+                if name.endswith('.mode') and name[:-5] in self._env_reference_fields():
+                    mode, _ = self._extract_env_reference(self._config_get_path(payload, name[:-5], ''))
+                    values[name] = mode
+                    continue
+                if name.endswith('.value') and name[:-6] in self._env_reference_fields():
+                    _, stored = self._extract_env_reference(self._config_get_path(payload, name[:-6], ''))
+                    values[name] = stored
+                    continue
+                values[name] = self._config_get_path(payload, name, copy.deepcopy(values.get(name)))
+        return result
+
+    @staticmethod
+    def _coerce_secret_env_value(field_type: str, value: Any) -> Any:
+        if field_type == 'bool':
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+        if field_type == 'int':
+            try:
+                return int(value)
+            except Exception:
+                return 0
+        return str(value or '')
+
+    def _apply_secret_env_values(
+        self,
+        base_payload: dict[str, Any],
+        profile: str,
+        wizard_payload: dict[str, Any],
+        *,
+        env_prefix: str = 'OPENMIURA',
+    ) -> dict[str, Any]:
+        normalized = self._normalize_secret_env_profile(profile)
+        merged = copy.deepcopy(base_payload) if isinstance(base_payload, dict) else {}
+        suggestions = self._secret_env_suggestions(env_prefix).get(normalized, {})
+        for field in self._secret_env_fields(normalized):
+            name = str(field['name'])
+            if name.endswith('.mode') and name[:-5] in self._secret_storage_fields():
+                secret_path = name[:-5]
+                ref_value = wizard_payload.get(f'{secret_path}.value')
+                if str(wizard_payload.get(name) or '').strip().lower() == 'env' and not str(ref_value or '').strip():
+                    ref_value = suggestions.get(secret_path, '')
+                composed = self._compose_secret_storage(wizard_payload.get(name), ref_value)
+                self._config_set_path(merged, secret_path, composed)
+                continue
+            if name.endswith('.value') and name[:-6] in self._secret_storage_fields():
+                continue
+            if name.endswith('.mode') and name[:-5] in self._env_reference_fields():
+                ref_path = name[:-5]
+                ref_value = wizard_payload.get(f'{ref_path}.value')
+                if str(wizard_payload.get(name) or '').strip().lower() == 'env' and not str(ref_value or '').strip():
+                    ref_value = suggestions.get(ref_path, '')
+                self._config_set_path(merged, ref_path, self._compose_env_reference(wizard_payload.get(name), ref_value))
+                continue
+            if name.endswith('.value') and name[:-6] in self._env_reference_fields():
+                continue
+            if name not in wizard_payload:
+                continue
+            value = self._coerce_secret_env_value(str(field.get('type') or 'string'), wizard_payload.get(name))
+            self._config_set_path(merged, name, value)
+        return merged
+
+    def _materialize_secret_env_content(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        profile: str,
+        content: str,
+        wizard_payload: dict[str, Any] | None = None,
+        env_prefix: str = 'OPENMIURA',
+    ) -> str:
+        normalized = self._normalize_secret_env_profile(profile)
+        base_raw = str(content or '')
+        if not base_raw.strip():
+            spec = self._config_section_spec(gw, 'openmiura')
+            base_path = Path(spec['path'])
+            if base_path.exists():
+                base_raw = base_path.read_text(encoding='utf-8')
+        base_payload = yaml.safe_load(base_raw) if str(base_raw or '').strip() else {}
+        if base_payload is None:
+            base_payload = {}
+        if not isinstance(base_payload, dict):
+            raise ValueError('secret_env_wizard_requires_mapping_yaml')
+        if not wizard_payload:
+            return yaml.safe_dump(base_payload, sort_keys=False, allow_unicode=True)
+        merged = self._apply_secret_env_values(base_payload, normalized, wizard_payload, env_prefix=env_prefix)
+        return yaml.safe_dump(merged, sort_keys=False, allow_unicode=True)
+
+    def _secret_env_paths_for_profile(self, profile: str) -> list[str]:
+        normalized = self._normalize_secret_env_profile(profile)
+        if normalized == 'llm':
+            return ['llm.api_key_env_var']
+        if normalized == 'telegram':
+            return ['telegram.bot_token', 'telegram.webhook_secret']
+        if normalized == 'slack':
+            return ['slack.bot_token', 'slack.signing_secret']
+        return ['discord.bot_token']
+
+    def _secret_env_profile_status(self, profile: str, values: dict[str, Any], *, env_prefix: str = 'OPENMIURA') -> dict[str, Any]:
+        normalized = self._normalize_secret_env_profile(profile)
+        paths = self._secret_env_paths_for_profile(normalized)
+        suggestions = self._secret_env_suggestions(env_prefix).get(normalized, {})
+        env_vars: list[str] = []
+        env_fields = 0
+        literal_fields = 0
+        disabled_fields = 0
+        for path in paths:
+            mode_key = f'{path}.mode'
+            value_key = f'{path}.value'
+            mode = str(values.get(mode_key) or 'disabled').strip().lower()
+            value = str(values.get(value_key) or '').strip()
+            if mode == 'env':
+                env_fields += 1
+                env_vars.append(value or suggestions.get(path, ''))
+            elif mode == 'literal':
+                literal_fields += 1
+            else:
+                disabled_fields += 1
+        env_lines = [f'{name}=' for name in env_vars if name]
+        return {
+            'configured': (env_fields + literal_fields) > 0,
+            'profile': normalized,
+            'env_prefix': str(env_prefix or 'OPENMIURA').strip() or 'OPENMIURA',
+            'env_fields': env_fields,
+            'literal_fields': literal_fields,
+            'disabled_fields': disabled_fields,
+            'env_vars': env_vars,
+            'env_example': '\n'.join(env_lines),
+            'suggestions': suggestions,
+        }
+
+    def secret_env_reference_wizard_snapshot(self, gw: AdminGatewayLike, *, env_prefix: str = 'OPENMIURA') -> dict[str, Any]:
+        spec = self._config_section_spec(gw, 'openmiura')
+        snapshot = self._read_config_snapshot(gw, spec)
+        parsed = yaml.safe_load(snapshot.get('raw') or '') if str(snapshot.get('raw') or '').strip() else {}
+        if parsed is None:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        values = self._extract_secret_env_values(parsed)
+        profiles = []
+        for name in self._secret_env_profile_names():
+            profiles.append(
+                {
+                    'name': name,
+                    'title': self._secret_env_profile_title(name),
+                    'status': self._secret_env_profile_status(name, values.get(name) or {}, env_prefix=env_prefix),
+                }
+            )
+        return {
+            'ok': True,
+            'path': self._display_path(spec['path']),
+            'schemas': self._secret_env_schema(),
+            'values': values,
+            'profiles': profiles,
+            'suggestions': self._secret_env_suggestions(env_prefix),
+            'env_prefix': str(env_prefix or 'OPENMIURA').strip() or 'OPENMIURA',
+            'raw': snapshot.get('raw') or '',
+        }
+
+    def validate_secret_env_references(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        profile: str,
+        wizard_payload: dict[str, Any] | None = None,
+        content: str = '',
+        env_prefix: str = 'OPENMIURA',
+    ) -> dict[str, Any]:
+        normalized_profile = self._normalize_secret_env_profile(profile)
+        rendered_content = self._materialize_secret_env_content(
+            gw,
+            profile=normalized_profile,
+            content=content,
+            wizard_payload=wizard_payload,
+            env_prefix=env_prefix,
+        )
+        parsed = yaml.safe_load(str(rendered_content or ''))
+        warnings: list[str] = []
+        if parsed is None:
+            parsed = {}
+            warnings.append('empty_yaml_document')
+        if not isinstance(parsed, dict):
+            raise ValueError('secret_env_wizard_requires_mapping_yaml')
+        values = self._extract_secret_env_values(parsed)
+        status = self._secret_env_profile_status(normalized_profile, values.get(normalized_profile) or {}, env_prefix=env_prefix)
+        normalized_yaml = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True)
+        return {
+            'ok': True,
+            'profile': normalized_profile,
+            'path': str(self._config_section_spec(gw, 'openmiura')['path']),
+            'warnings': warnings,
+            'summary': self._build_config_file_summary('openmiura', parsed),
+            'normalized_yaml': normalized_yaml,
+            'wizard_schema': self._secret_env_schema().get(normalized_profile, []),
+            'wizard_values': values.get(normalized_profile) or {},
+            'profile_status': status,
+            'env_prefix': str(env_prefix or 'OPENMIURA').strip() or 'OPENMIURA',
+            'env_example': status.get('env_example') or '',
+            'suggestions': self._secret_env_suggestions(env_prefix).get(normalized_profile, {}),
+        }
+
+    def save_secret_env_references(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        profile: str,
+        wizard_payload: dict[str, Any] | None = None,
+        content: str = '',
+        env_prefix: str = 'OPENMIURA',
+        reload_after_save: bool = False,
+        actor: str = 'admin',
+    ) -> dict[str, Any]:
+        validation = self.validate_secret_env_references(
+            gw,
+            profile=profile,
+            wizard_payload=wizard_payload,
+            content=content,
+            env_prefix=env_prefix,
+        )
+        response = self.save_config_content(
+            gw,
+            section='openmiura',
+            content=str(validation.get('normalized_yaml') or ''),
+            reload_after_save=reload_after_save,
+            actor=actor,
+        )
+        response['profile'] = validation['profile']
+        response['secret_env_validation'] = validation
+        response['profile_status'] = validation['profile_status']
+        response['env_example'] = validation.get('env_example') or ''
+        return response
+
+
     def list_identities(self, gw: AdminGatewayLike, *, global_user_key: str | None) -> dict[str, Any]:
         manager = getattr(gw, "identity", None)
         if manager is not None and hasattr(manager, "list_links"):
@@ -1889,6 +2581,934 @@ class AdminService:
             except Exception:
                 return default
         return default
+
+    @staticmethod
+    def _gateway_config_path(gw: AdminGatewayLike) -> Path:
+        raw = str(getattr(gw, 'config_path', '') or os.environ.get('OPENMIURA_CONFIG', 'configs/openmiura.yaml'))
+        return Path(raw).expanduser().resolve()
+
+    @staticmethod
+    def _resolve_config_related_path(base_config_path: Path, raw_path: str, *, default_path: str = '.') -> Path:
+        return resolve_config_related_path(base_config_path, raw_path, default_path=default_path)
+
+    @staticmethod
+    def _display_path(path: str | Path | None) -> str:
+        if path is None:
+            return ''
+        try:
+            return Path(path).as_posix()
+        except Exception:
+            return str(path).replace('\\', '/')
+
+    def _config_section_specs(self, gw: AdminGatewayLike, config_path: Path) -> list[dict[str, Any]]:
+        settings = getattr(gw, 'settings', None)
+        evaluations = getattr(settings, 'evaluations', None)
+        return [
+            {'name': 'openmiura', 'title': 'Main settings', 'path': config_path, 'reload_supported': False, 'restart_required': True},
+            {'name': 'agents', 'title': 'Agents catalog', 'path': self._resolve_config_related_path(config_path, str(getattr(settings, 'agents_path', 'agents.yaml') or 'agents.yaml')), 'reload_supported': True, 'restart_required': False},
+            {'name': 'policies', 'title': 'Policies', 'path': self._resolve_config_related_path(config_path, str(getattr(settings, 'policies_path', 'policies.yaml') or 'policies.yaml')), 'reload_supported': True, 'restart_required': False},
+            {'name': 'evaluations', 'title': 'Evaluation suites', 'path': self._resolve_config_related_path(config_path, str(getattr(evaluations, 'suites_path', 'evaluations.yaml') or 'evaluations.yaml')), 'reload_supported': False, 'restart_required': False},
+        ]
+
+    def _config_section_spec(self, gw: AdminGatewayLike, section: str) -> dict[str, Any]:
+        config_path = self._gateway_config_path(gw)
+        for spec in self._config_section_specs(gw, config_path):
+            if spec['name'] == section:
+                return spec
+        raise ValueError('unsupported_config_section')
+
+    @staticmethod
+    def _config_get_path(payload: dict[str, Any], dotted_path: str, default: Any = None) -> Any:
+        current: Any = payload
+        for part in dotted_path.split('.'):
+            if not isinstance(current, dict) or part not in current:
+                return copy.deepcopy(default)
+            current = current.get(part)
+        return copy.deepcopy(current)
+
+    @staticmethod
+    def _config_set_path(payload: dict[str, Any], dotted_path: str, value: Any) -> None:
+        current = payload
+        parts = dotted_path.split('.')
+        for part in parts[:-1]:
+            child = current.get(part)
+            if not isinstance(child, dict):
+                child = {}
+                current[part] = child
+            current = child
+        current[parts[-1]] = value
+
+    @staticmethod
+    def _openmiura_form_fields() -> list[dict[str, Any]]:
+        return [
+            {'group': 'Server', 'name': 'server.host', 'label': 'Host', 'type': 'string', 'placeholder': '127.0.0.1'},
+            {'group': 'Server', 'name': 'server.port', 'label': 'Port', 'type': 'int', 'min': 1},
+            {'group': 'Storage', 'name': 'storage.backend', 'label': 'Backend', 'type': 'select', 'options': ['sqlite', 'postgres', 'custom']},
+            {'group': 'Storage', 'name': 'storage.db_path', 'label': 'DB path', 'type': 'string', 'placeholder': 'data/audit.db'},
+            {'group': 'Storage', 'name': 'storage.backup_dir', 'label': 'Backup dir', 'type': 'string', 'placeholder': 'data/backups'},
+            {'group': 'Storage', 'name': 'storage.auto_migrate', 'label': 'Auto migrate', 'type': 'bool'},
+            {'group': 'LLM', 'name': 'llm.provider', 'label': 'Provider', 'type': 'select', 'options': ['ollama', 'openai', 'openai_compat', 'local_openai_compat', 'lmstudio', 'vllm', 'kimi', 'anthropic']},
+            {'group': 'LLM', 'name': 'llm.base_url', 'label': 'Base URL', 'type': 'string', 'placeholder': 'http://127.0.0.1:11434'},
+            {'group': 'LLM', 'name': 'llm.model', 'label': 'Model', 'type': 'string', 'placeholder': 'qwen2.5:7b-instruct'},
+            {'group': 'LLM', 'name': 'llm.timeout_s', 'label': 'Timeout (s)', 'type': 'int', 'min': 1},
+            {'group': 'LLM', 'name': 'llm.max_output_tokens', 'label': 'Max output tokens', 'type': 'int', 'min': 1},
+            {'group': 'LLM', 'name': 'llm.api_key_env_var', 'label': 'API key env var', 'type': 'string', 'placeholder': 'OPENAI_API_KEY'},
+            {'group': 'Runtime', 'name': 'runtime.history_limit', 'label': 'History limit', 'type': 'int', 'min': 1},
+            {'group': 'Runtime', 'name': 'runtime.worker_mode', 'label': 'Worker mode', 'type': 'select', 'options': ['external', 'inline']},
+            {'group': 'Memory', 'name': 'memory.enabled', 'label': 'Memory enabled', 'type': 'bool'},
+            {'group': 'Memory', 'name': 'memory.embed_model', 'label': 'Embedding model', 'type': 'string', 'placeholder': 'nomic-embed-text'},
+            {'group': 'Memory', 'name': 'memory.embed_base_url', 'label': 'Embedding URL', 'type': 'string', 'placeholder': 'http://127.0.0.1:11434'},
+            {'group': 'Memory', 'name': 'memory.top_k', 'label': 'Top K', 'type': 'int', 'min': 1},
+            {'group': 'Memory', 'name': 'memory.min_score', 'label': 'Min score', 'type': 'float', 'step': '0.01'},
+            {'group': 'Tools', 'name': 'tools.sandbox_dir', 'label': 'Sandbox dir', 'type': 'string', 'placeholder': 'data/sandbox'},
+            {'group': 'Broker', 'name': 'broker.enabled', 'label': 'Broker enabled', 'type': 'bool'},
+            {'group': 'Broker', 'name': 'broker.base_path', 'label': 'Broker base path', 'type': 'string', 'placeholder': '/broker'},
+            {'group': 'Auth', 'name': 'auth.enabled', 'label': 'Auth enabled', 'type': 'bool'},
+            {'group': 'Auth', 'name': 'auth.session_ttl_s', 'label': 'Session TTL (s)', 'type': 'int', 'min': 0},
+            {'group': 'Tenancy', 'name': 'tenancy.enabled', 'label': 'Tenancy enabled', 'type': 'bool'},
+            {'group': 'Tenancy', 'name': 'tenancy.default_tenant_id', 'label': 'Default tenant', 'type': 'string', 'placeholder': 'default'},
+            {'group': 'Tenancy', 'name': 'tenancy.default_workspace_id', 'label': 'Default workspace', 'type': 'string', 'placeholder': 'main'},
+            {'group': 'Tenancy', 'name': 'tenancy.default_environment', 'label': 'Default environment', 'type': 'string', 'placeholder': 'prod'},
+            {'group': 'Paths', 'name': 'agents_path', 'label': 'Agents path', 'type': 'string', 'placeholder': 'agents.yaml'},
+            {'group': 'Paths', 'name': 'policies_path', 'label': 'Policies path', 'type': 'string', 'placeholder': 'policies.yaml'},
+            {'group': 'Paths', 'name': 'evaluations.suites_path', 'label': 'Evaluation suites path', 'type': 'string', 'placeholder': 'evaluations.yaml'},
+        ]
+
+    def _openmiura_form_schema(self) -> list[dict[str, Any]]:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for field in self._openmiura_form_fields():
+            groups.setdefault(str(field['group']), []).append({k: v for k, v in field.items() if k != 'group'})
+        return [{'group': group, 'fields': fields} for group, fields in groups.items()]
+
+    def _extract_openmiura_form_values(self, parsed: dict[str, Any] | None) -> dict[str, Any]:
+        payload = parsed if isinstance(parsed, dict) else {}
+        defaults: dict[str, Any] = {
+            'server.host': '127.0.0.1',
+            'server.port': 8081,
+            'storage.backend': 'sqlite',
+            'storage.db_path': 'data/audit.db',
+            'storage.backup_dir': 'data/backups',
+            'storage.auto_migrate': True,
+            'llm.provider': 'ollama',
+            'llm.base_url': 'http://127.0.0.1:11434',
+            'llm.model': 'qwen2.5:7b-instruct',
+            'llm.timeout_s': 60,
+            'llm.max_output_tokens': 2048,
+            'llm.api_key_env_var': '',
+            'runtime.history_limit': 12,
+            'runtime.worker_mode': 'external',
+            'memory.enabled': True,
+            'memory.embed_model': 'nomic-embed-text',
+            'memory.embed_base_url': 'http://127.0.0.1:11434',
+            'memory.top_k': 6,
+            'memory.min_score': 0.25,
+            'tools.sandbox_dir': 'data/sandbox',
+            'broker.enabled': False,
+            'broker.base_path': '/broker',
+            'auth.enabled': False,
+            'auth.session_ttl_s': 3600,
+            'tenancy.enabled': False,
+            'tenancy.default_tenant_id': 'default',
+            'tenancy.default_workspace_id': 'main',
+            'tenancy.default_environment': 'prod',
+            'agents_path': 'agents.yaml',
+            'policies_path': 'policies.yaml',
+            'evaluations.suites_path': 'evaluations.yaml',
+        }
+        return {name: self._config_get_path(payload, name, default) for name, default in defaults.items()}
+
+    @staticmethod
+    def _coerce_openmiura_form_value(field_type: str, value: Any) -> Any:
+        if field_type == 'bool':
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+        if field_type == 'int':
+            try:
+                return int(value)
+            except Exception:
+                return 0
+        if field_type == 'float':
+            try:
+                return float(value)
+            except Exception:
+                return 0.0
+        return str(value or '')
+
+    def _apply_openmiura_form_values(self, base_payload: dict[str, Any], form_payload: dict[str, Any]) -> dict[str, Any]:
+        merged = copy.deepcopy(base_payload) if isinstance(base_payload, dict) else {}
+        field_specs = {field['name']: field for field in self._openmiura_form_fields()}
+        for name, field in field_specs.items():
+            if name not in form_payload:
+                continue
+            value = self._coerce_openmiura_form_value(str(field.get('type') or 'string'), form_payload.get(name))
+            self._config_set_path(merged, name, value)
+        return merged
+
+    @staticmethod
+    def _channel_wizard_channel_names() -> list[str]:
+        return ['telegram', 'slack', 'discord']
+
+    @staticmethod
+    def _channel_wizard_channel_title(channel: str) -> str:
+        titles = {'telegram': 'Telegram', 'slack': 'Slack', 'discord': 'Discord'}
+        return titles.get(str(channel or '').strip().lower(), str(channel or '').strip().title() or 'Channel')
+
+    def _normalize_channel_name(self, channel: str) -> str:
+        normalized = str(channel or '').strip().lower()
+        if normalized not in self._channel_wizard_channel_names():
+            raise ValueError('unsupported_channel_wizard_channel')
+        return normalized
+
+    @staticmethod
+    def _secret_storage_fields() -> set[str]:
+        return {
+            'telegram.bot_token',
+            'telegram.webhook_secret',
+            'slack.bot_token',
+            'slack.signing_secret',
+            'discord.bot_token',
+        }
+
+    def _channel_wizard_fields(self, channel: str) -> list[dict[str, Any]]:
+        normalized = self._normalize_channel_name(channel)
+        if normalized == 'telegram':
+            return [
+                {'group': 'Authentication', 'name': 'telegram.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'telegram.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_TELEGRAM_BOT_TOKEN'},
+                {'group': 'Transport', 'name': 'telegram.mode', 'label': 'Mode', 'type': 'select', 'options': ['polling', 'webhook']},
+                {'group': 'Transport', 'name': 'telegram.webhook_secret.mode', 'label': 'Webhook secret source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Transport', 'name': 'telegram.webhook_secret.value', 'label': 'Webhook secret / env var', 'type': 'string', 'placeholder': 'OPENMIURA_TELEGRAM_WEBHOOK_SECRET'},
+                {'group': 'Allowlist', 'name': 'telegram.allowlist.enabled', 'label': 'Allowlist enabled', 'type': 'bool'},
+                {'group': 'Allowlist', 'name': 'telegram.allowlist.allow_user_ids', 'label': 'Allowed user IDs', 'type': 'csv_int', 'placeholder': '12345,67890'},
+                {'group': 'Allowlist', 'name': 'telegram.allowlist.allow_chat_ids', 'label': 'Allowed chat IDs', 'type': 'csv_int', 'placeholder': '-10012345,-10067890'},
+                {'group': 'Allowlist', 'name': 'telegram.allowlist.allow_groups', 'label': 'Allow groups', 'type': 'bool'},
+                {'group': 'Allowlist', 'name': 'telegram.allowlist.deny_message', 'label': 'Deny message', 'type': 'string', 'placeholder': '⛔ No autorizado. Pide acceso al administrador.'},
+            ]
+        if normalized == 'slack':
+            return [
+                {'group': 'Authentication', 'name': 'slack.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'slack.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_SLACK_BOT_TOKEN'},
+                {'group': 'Authentication', 'name': 'slack.signing_secret.mode', 'label': 'Signing secret source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+                {'group': 'Authentication', 'name': 'slack.signing_secret.value', 'label': 'Signing secret / env var', 'type': 'string', 'placeholder': 'OPENMIURA_SLACK_SIGNING_SECRET'},
+                {'group': 'Transport', 'name': 'slack.bot_user_id', 'label': 'Bot user ID', 'type': 'string', 'placeholder': 'U012345'},
+                {'group': 'Transport', 'name': 'slack.reply_in_thread', 'label': 'Reply in thread', 'type': 'bool'},
+                {'group': 'Allowlist', 'name': 'slack.allowlist.enabled', 'label': 'Allowlist enabled', 'type': 'bool'},
+                {'group': 'Allowlist', 'name': 'slack.allowlist.allow_team_ids', 'label': 'Allowed team IDs', 'type': 'csv_str', 'placeholder': 'T123,T456'},
+                {'group': 'Allowlist', 'name': 'slack.allowlist.allow_channel_ids', 'label': 'Allowed channel IDs', 'type': 'csv_str', 'placeholder': 'C123,C456'},
+                {'group': 'Allowlist', 'name': 'slack.allowlist.allow_im', 'label': 'Allow direct messages', 'type': 'bool'},
+                {'group': 'Allowlist', 'name': 'slack.allowlist.deny_message', 'label': 'Deny message', 'type': 'string', 'placeholder': '⛔ No autorizado. Pide acceso al administrador.'},
+            ]
+        return [
+            {'group': 'Authentication', 'name': 'discord.bot_token.mode', 'label': 'Bot token source', 'type': 'select', 'options': ['disabled', 'env', 'literal']},
+            {'group': 'Authentication', 'name': 'discord.bot_token.value', 'label': 'Bot token / env var', 'type': 'string', 'placeholder': 'OPENMIURA_DISCORD_BOT_TOKEN'},
+            {'group': 'Authentication', 'name': 'discord.application_id', 'label': 'Application ID', 'type': 'string', 'placeholder': '1234567890'},
+            {'group': 'Transport', 'name': 'discord.mention_only', 'label': 'Mention only', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.reply_as_reply', 'label': 'Reply as reply', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.slash_enabled', 'label': 'Slash commands enabled', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.slash_command_name', 'label': 'Slash command name', 'type': 'string', 'placeholder': 'miura'},
+            {'group': 'Transport', 'name': 'discord.sync_on_startup', 'label': 'Sync on startup', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.sync_guild_ids', 'label': 'Sync guild IDs', 'type': 'csv_int', 'placeholder': '111,222'},
+            {'group': 'Transport', 'name': 'discord.expose_native_commands', 'label': 'Expose native commands', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.include_attachments_in_text', 'label': 'Include attachments in text', 'type': 'bool'},
+            {'group': 'Transport', 'name': 'discord.max_attachment_items', 'label': 'Max attachment items', 'type': 'int', 'min': 0},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.enabled', 'label': 'Allowlist enabled', 'type': 'bool'},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.allow_user_ids', 'label': 'Allowed user IDs', 'type': 'csv_int', 'placeholder': '1,2'},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.allow_channel_ids', 'label': 'Allowed channel IDs', 'type': 'csv_int', 'placeholder': '10,20'},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.allow_guild_ids', 'label': 'Allowed guild IDs', 'type': 'csv_int', 'placeholder': '100,200'},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.allow_dm', 'label': 'Allow direct messages', 'type': 'bool'},
+            {'group': 'Allowlist', 'name': 'discord.allowlist.deny_message', 'label': 'Deny message', 'type': 'string', 'placeholder': '⛔ No autorizado. Pide acceso al administrador.'},
+        ]
+
+    def _channel_wizard_schema(self) -> dict[str, list[dict[str, Any]]]:
+        output: dict[str, list[dict[str, Any]]] = {}
+        for channel in self._channel_wizard_channel_names():
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for field in self._channel_wizard_fields(channel):
+                groups.setdefault(str(field['group']), []).append({k: v for k, v in field.items() if k != 'group'})
+            output[channel] = [{'group': group, 'fields': fields} for group, fields in groups.items()]
+        return output
+
+    @staticmethod
+    def _extract_secret_storage(raw_value: Any) -> tuple[str, str]:
+        if isinstance(raw_value, str):
+            value = raw_value.strip()
+            if value.startswith('env:'):
+                env_name = value[4:].split('|', 1)[0].strip()
+                return 'env', env_name
+            if value:
+                return 'literal', value
+        return 'disabled', ''
+
+    @staticmethod
+    def _compose_secret_storage(mode: Any, value: Any) -> str:
+        normalized_mode = str(mode or 'disabled').strip().lower()
+        raw_value = str(value or '').strip()
+        if normalized_mode == 'env':
+            return f'env:{raw_value}' if raw_value else ''
+        if normalized_mode == 'literal':
+            return raw_value
+        return ''
+
+    def _extract_channel_wizard_values(self, parsed: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+        payload = parsed if isinstance(parsed, dict) else {}
+        defaults: dict[str, dict[str, Any]] = {
+            'telegram': {
+                'telegram.bot_token.mode': 'disabled',
+                'telegram.bot_token.value': '',
+                'telegram.mode': 'polling',
+                'telegram.webhook_secret.mode': 'disabled',
+                'telegram.webhook_secret.value': '',
+                'telegram.allowlist.enabled': False,
+                'telegram.allowlist.allow_user_ids': [],
+                'telegram.allowlist.allow_chat_ids': [],
+                'telegram.allowlist.allow_groups': False,
+                'telegram.allowlist.deny_message': '⛔ No autorizado. Pide acceso al administrador.',
+            },
+            'slack': {
+                'slack.bot_token.mode': 'disabled',
+                'slack.bot_token.value': '',
+                'slack.signing_secret.mode': 'disabled',
+                'slack.signing_secret.value': '',
+                'slack.bot_user_id': '',
+                'slack.reply_in_thread': True,
+                'slack.allowlist.enabled': False,
+                'slack.allowlist.allow_team_ids': [],
+                'slack.allowlist.allow_channel_ids': [],
+                'slack.allowlist.allow_im': True,
+                'slack.allowlist.deny_message': '⛔ No autorizado. Pide acceso al administrador.',
+            },
+            'discord': {
+                'discord.bot_token.mode': 'disabled',
+                'discord.bot_token.value': '',
+                'discord.application_id': '',
+                'discord.mention_only': True,
+                'discord.reply_as_reply': True,
+                'discord.slash_enabled': True,
+                'discord.slash_command_name': 'miura',
+                'discord.sync_on_startup': True,
+                'discord.sync_guild_ids': [],
+                'discord.expose_native_commands': True,
+                'discord.include_attachments_in_text': True,
+                'discord.max_attachment_items': 4,
+                'discord.allowlist.enabled': False,
+                'discord.allowlist.allow_user_ids': [],
+                'discord.allowlist.allow_channel_ids': [],
+                'discord.allowlist.allow_guild_ids': [],
+                'discord.allowlist.allow_dm': True,
+                'discord.allowlist.deny_message': '⛔ No autorizado. Pide acceso al administrador.',
+            },
+        }
+        result = copy.deepcopy(defaults)
+        for channel in self._channel_wizard_channel_names():
+            values = result[channel]
+            for field in self._channel_wizard_fields(channel):
+                name = str(field['name'])
+                field_type = str(field.get('type') or 'string')
+                if name.endswith('.mode') and name[:-5] in self._secret_storage_fields():
+                    mode, _ = self._extract_secret_storage(self._config_get_path(payload, name[:-5], ''))
+                    values[name] = mode
+                    continue
+                if name.endswith('.value') and name[:-6] in self._secret_storage_fields():
+                    _, stored = self._extract_secret_storage(self._config_get_path(payload, name[:-6], ''))
+                    values[name] = stored
+                    continue
+                values[name] = self._config_get_path(payload, name, copy.deepcopy(values.get(name)))
+                if field_type in {'csv_int', 'csv_str'} and not isinstance(values[name], list):
+                    values[name] = []
+        return result
+
+    @staticmethod
+    def _coerce_channel_wizard_value(field_type: str, value: Any) -> Any:
+        if field_type == 'bool':
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+        if field_type == 'int':
+            try:
+                return int(value)
+            except Exception:
+                return 0
+        if field_type == 'float':
+            try:
+                return float(value)
+            except Exception:
+                return 0.0
+        if field_type in {'csv_int', 'csv_str'}:
+            if isinstance(value, list):
+                items = value
+            else:
+                raw = str(value or '')
+                items = [part.strip() for chunk in raw.splitlines() for part in chunk.split(',')]
+            cleaned = [item for item in items if str(item).strip()]
+            if field_type == 'csv_int':
+                numbers: list[int] = []
+                for item in cleaned:
+                    try:
+                        numbers.append(int(str(item).strip()))
+                    except Exception:
+                        continue
+                return numbers
+            return [str(item).strip() for item in cleaned if str(item).strip()]
+        return str(value or '')
+
+    def _apply_channel_wizard_values(self, base_payload: dict[str, Any], channel: str, wizard_payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_channel_name(channel)
+        merged = copy.deepcopy(base_payload) if isinstance(base_payload, dict) else {}
+        for field in self._channel_wizard_fields(normalized):
+            name = str(field['name'])
+            if name.endswith('.mode') and name[:-5] in self._secret_storage_fields():
+                secret_path = name[:-5]
+                composed = self._compose_secret_storage(
+                    wizard_payload.get(name),
+                    wizard_payload.get(f'{secret_path}.value'),
+                )
+                self._config_set_path(merged, secret_path, composed)
+                continue
+            if name.endswith('.value') and name[:-6] in self._secret_storage_fields():
+                continue
+            if name not in wizard_payload:
+                continue
+            value = self._coerce_channel_wizard_value(str(field.get('type') or 'string'), wizard_payload.get(name))
+            self._config_set_path(merged, name, value)
+        return merged
+
+    def _materialize_channel_wizard_content(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        channel: str,
+        content: str,
+        wizard_payload: dict[str, Any] | None = None,
+    ) -> str:
+        normalized = self._normalize_channel_name(channel)
+        base_raw = str(content or '')
+        if not base_raw.strip():
+            spec = self._config_section_spec(gw, 'openmiura')
+            base_path = Path(spec['path'])
+            if base_path.exists():
+                base_raw = base_path.read_text(encoding='utf-8')
+        base_payload = yaml.safe_load(base_raw) if str(base_raw or '').strip() else {}
+        if base_payload is None:
+            base_payload = {}
+        if not isinstance(base_payload, dict):
+            raise ValueError('channel_wizard_requires_mapping_yaml')
+        if not wizard_payload:
+            return yaml.safe_dump(base_payload, sort_keys=False, allow_unicode=True)
+        merged = self._apply_channel_wizard_values(base_payload, normalized, wizard_payload)
+        return yaml.safe_dump(merged, sort_keys=False, allow_unicode=True)
+
+    def _channel_wizard_status(self, channel: str, values: dict[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_channel_name(channel)
+        if normalized == 'telegram':
+            configured = str(values.get('telegram.bot_token.mode') or 'disabled') != 'disabled'
+            webhook = str(values.get('telegram.webhook_secret.mode') or 'disabled') != 'disabled'
+            return {
+                'configured': configured,
+                'transport': str(values.get('telegram.mode') or 'polling'),
+                'secret_sources': {
+                    'bot_token': values.get('telegram.bot_token.mode'),
+                    'webhook_secret': values.get('telegram.webhook_secret.mode'),
+                },
+                'allowlist_enabled': bool(values.get('telegram.allowlist.enabled')),
+                'allow_user_count': len(list(values.get('telegram.allowlist.allow_user_ids') or [])),
+                'allow_chat_count': len(list(values.get('telegram.allowlist.allow_chat_ids') or [])),
+                'webhook_secret_configured': webhook,
+            }
+        if normalized == 'slack':
+            configured = str(values.get('slack.bot_token.mode') or 'disabled') != 'disabled'
+            return {
+                'configured': configured,
+                'transport': 'events-api',
+                'secret_sources': {
+                    'bot_token': values.get('slack.bot_token.mode'),
+                    'signing_secret': values.get('slack.signing_secret.mode'),
+                },
+                'reply_in_thread': bool(values.get('slack.reply_in_thread')),
+                'allowlist_enabled': bool(values.get('slack.allowlist.enabled')),
+                'allow_team_count': len(list(values.get('slack.allowlist.allow_team_ids') or [])),
+                'allow_channel_count': len(list(values.get('slack.allowlist.allow_channel_ids') or [])),
+            }
+        configured = str(values.get('discord.bot_token.mode') or 'disabled') != 'disabled'
+        return {
+            'configured': configured,
+            'transport': 'gateway',
+            'secret_sources': {
+                'bot_token': values.get('discord.bot_token.mode'),
+            },
+            'application_id_present': bool(str(values.get('discord.application_id') or '').strip()),
+            'slash_enabled': bool(values.get('discord.slash_enabled')),
+            'allowlist_enabled': bool(values.get('discord.allowlist.enabled')),
+            'allow_guild_count': len(list(values.get('discord.allowlist.allow_guild_ids') or [])),
+            'sync_guild_count': len(list(values.get('discord.sync_guild_ids') or [])),
+        }
+
+
+    def _materialize_config_content(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        section: str,
+        content: str,
+        form_payload: dict[str, Any] | None = None,
+    ) -> str:
+        if section != 'openmiura' or not form_payload:
+            return str(content or '')
+        base_raw = str(content or '')
+        if not base_raw.strip():
+            spec = self._config_section_spec(gw, section)
+            base_path = Path(spec['path'])
+            if base_path.exists():
+                base_raw = base_path.read_text(encoding='utf-8')
+        base_payload = yaml.safe_load(base_raw) if str(base_raw or '').strip() else {}
+        if base_payload is None:
+            base_payload = {}
+        if not isinstance(base_payload, dict):
+            raise ValueError('openmiura_form_requires_mapping_yaml')
+        merged = self._apply_openmiura_form_values(base_payload, form_payload)
+        return yaml.safe_dump(merged, sort_keys=False, allow_unicode=True)
+
+    def _read_config_snapshot(self, gw: AdminGatewayLike, spec: dict[str, Any]) -> dict[str, Any]:
+        path = Path(spec['path'])
+        exists = path.exists()
+        raw = path.read_text(encoding='utf-8') if exists else ''
+        valid = True
+        parse_error = ''
+        parsed: Any = {}
+        if raw.strip():
+            try:
+                parsed = yaml.safe_load(raw)
+            except Exception as exc:
+                valid = False
+                parse_error = str(exc)
+                parsed = {}
+        elif exists:
+            parsed = {}
+        top_level_keys = [str(k) for k in parsed.keys()] if isinstance(parsed, dict) else []
+        metadata = self._file_runtime_metadata(path)
+        snapshot = {
+            'section': spec['name'],
+            'title': spec['title'],
+            'path': self._display_path(path),
+            'exists': exists,
+            'valid': valid,
+            'parse_error': parse_error,
+            'raw': raw,
+            'top_level_keys': top_level_keys,
+            'reload_supported': bool(spec['reload_supported']),
+            'restart_required': bool(spec['restart_required']),
+            'summary': self._build_config_file_summary(spec['name'], parsed),
+            'metadata': metadata,
+        }
+        if spec['name'] == 'openmiura':
+            snapshot['form_schema'] = self._openmiura_form_schema()
+            snapshot['form_values'] = self._extract_openmiura_form_values(parsed if isinstance(parsed, dict) else {})
+        return snapshot
+
+    @staticmethod
+    def _config_quick_settings(status: dict[str, Any]) -> dict[str, Any]:
+        return {
+            'llm': dict(status.get('llm') or {}),
+            'sessions': dict(status.get('sessions') or {}),
+            'memory': dict(status.get('memory') or {}),
+            'sandbox': dict(status.get('sandbox') or {}),
+            'router': dict(status.get('router') or {}),
+            'channels': dict(status.get('channels') or {}),
+            'policy': dict(status.get('policy') or {}),
+            'db': dict(status.get('db') or {}),
+        }
+
+
+    @staticmethod
+    def _restart_hook_status() -> dict[str, Any]:
+        allow_self_restart = str(os.environ.get('OPENMIURA_CONTROL_ALLOW_SELF_RESTART', '') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+        command = str(os.environ.get('OPENMIURA_CONTROL_SELF_RESTART_COMMAND', '') or '').strip()
+        configured = bool(allow_self_restart and command)
+        return {
+            'allow_self_restart': allow_self_restart,
+            'configured': configured,
+            'command': command,
+            'command_preview': command if configured else '',
+        }
+
+    def _reload_assistant_operational_state(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        config_path: Path,
+        sections: list[dict[str, Any]],
+        recent_restart_requests: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        started_at = float(getattr(gw, 'started_at', time.time()) or time.time())
+        now = time.time()
+        uptime_s = max(0.0, now - started_at)
+        latest_request = dict(recent_restart_requests[0]) if recent_restart_requests else {}
+        latest_request_ts = float(latest_request.get('ts') or 0.0)
+        latest_hook_result = dict(latest_request.get('hook') or {}) if isinstance(latest_request.get('hook'), dict) else {}
+        latest_startup_event = self._latest_startup_event(gw)
+        latest_startup_payload = dict(latest_startup_event.get('payload') or {}) if latest_startup_event else {}
+        latest_startup_started_at = float(latest_startup_payload.get('started_at') or latest_startup_event.get('ts') or 0.0) if latest_startup_event else 0.0
+        observed_new_process = bool(latest_request and max(started_at, latest_startup_started_at) > latest_request_ts > 0.0)
+        if not latest_request:
+            restart_state = 'not_requested'
+            restart_summary = 'No restart request has been recorded yet.'
+        elif observed_new_process:
+            restart_state = 'confirmed'
+            restart_summary = 'Current process started after the latest restart request.'
+        elif str(latest_request.get('status') or '') == 'queued':
+            restart_state = 'pending'
+            restart_summary = 'A restart request is queued but a newer process has not been observed yet.'
+        elif str(latest_request.get('status') or '') == 'hook_failed':
+            restart_state = 'hook_failed'
+            restart_summary = 'The latest restart hook execution failed.'
+        else:
+            restart_state = 'awaiting_observation'
+            restart_summary = 'A restart was requested, but this process has not changed since that request.'
+
+        main_config = self._file_runtime_metadata(config_path)
+        section_files = []
+        missing_files = []
+        invalid_files = []
+        for item in sections:
+            metadata = self._file_runtime_metadata(Path(str(item.get('path') or '')))
+            record = {
+                'name': item.get('name'),
+                'title': item.get('title'),
+                'reload_supported': bool(item.get('reload_supported')),
+                'restart_required': bool(item.get('restart_required')),
+                'exists': bool(item.get('exists')),
+                'valid': bool(item.get('valid', True)),
+                'metadata': metadata,
+                'summary': dict(item.get('summary') or {}),
+            }
+            if not bool(item.get('exists')):
+                missing_files.append(str(item.get('name') or ''))
+            if not bool(item.get('valid', True)) or str(item.get('parse_error') or '').strip():
+                invalid_files.append(str(item.get('name') or ''))
+            section_files.append(record)
+
+        health_checks = {
+            'gateway_loaded': True,
+            'main_config_present': bool(main_config.get('exists')),
+            'policy_engine_loaded': bool(getattr(gw, 'policy', None) is not None),
+            'router_loaded': bool(getattr(gw, 'router', None) is not None),
+            'audit_store_ready': bool(getattr(gw, 'audit', None) is not None),
+        }
+        health_status = 'healthy'
+        health_issues: list[str] = []
+        if not main_config.get('exists'):
+            health_status = 'degraded'
+            health_issues.append('main_config_missing')
+        if missing_files:
+            health_status = 'degraded'
+            health_issues.append('config_section_missing')
+        if invalid_files:
+            health_status = 'degraded'
+            health_issues.append('config_section_invalid')
+        if restart_state == 'hook_failed':
+            health_status = 'degraded'
+            health_issues.append('restart_hook_failed')
+
+        runtime_summary = self.status_snapshot(gw)
+        current_boot_id = str(getattr(gw, 'boot_instance_id', '') or '')
+        current_boot = {
+            'boot_instance_id': current_boot_id,
+            'pid': os.getpid(),
+            'service': 'openMiura',
+            'version': __version__,
+            'started_at': started_at,
+            'started_at_iso': self._iso_timestamp(started_at),
+            'uptime_s': uptime_s,
+            'uptime_human': self._format_duration(uptime_s),
+            'config_path': self._display_path(config_path),
+            'config_sha256': main_config.get('sha256'),
+        }
+        latest_boot_evidence: dict[str, Any]
+        if latest_startup_event:
+            latest_boot_instance_id = str(latest_startup_payload.get('boot_instance_id') or '')
+            latest_boot_pid = int(latest_startup_payload.get('pid') or 0) if str(latest_startup_payload.get('pid') or '').strip() else 0
+            current_process_matches = bool(
+                (current_boot_id and latest_boot_instance_id and latest_boot_instance_id == current_boot_id)
+                or (latest_boot_pid and latest_boot_pid == os.getpid() and latest_startup_started_at and abs(latest_startup_started_at - started_at) < 5.0)
+            )
+            latest_boot_evidence = {
+                'source': 'audit_event',
+                'event_id': latest_startup_event.get('id'),
+                'event_ts': float(latest_startup_event.get('ts') or 0.0),
+                'event_ts_iso': self._iso_timestamp(float(latest_startup_event.get('ts') or 0.0)),
+                'boot_instance_id': latest_boot_instance_id,
+                'pid': latest_boot_pid,
+                'started_at': latest_startup_started_at,
+                'started_at_iso': self._iso_timestamp(latest_startup_started_at),
+                'config_path': self._display_path(latest_startup_payload.get('config_path') or config_path),
+                'current_process_matches': current_process_matches,
+                'observed_after_latest_restart_request': bool(latest_request and latest_startup_started_at > latest_request_ts > 0.0),
+                'summary': 'Latest startup event matches the current running process.' if current_process_matches else 'Latest startup event differs from the current in-memory process.',
+            }
+        else:
+            latest_boot_evidence = {
+                'source': 'runtime_only',
+                'event_id': None,
+                'event_ts': None,
+                'event_ts_iso': '',
+                'boot_instance_id': current_boot_id,
+                'pid': os.getpid(),
+                'started_at': started_at,
+                'started_at_iso': self._iso_timestamp(started_at),
+                'config_path': self._display_path(config_path),
+                'current_process_matches': True,
+                'observed_after_latest_restart_request': bool(latest_request and started_at > latest_request_ts > 0.0),
+                'summary': 'No startup audit event was found; using the current runtime as the boot evidence.',
+            }
+        process = {
+            'pid': os.getpid(),
+            'service': 'openMiura',
+            'version': __version__,
+            'started_at': started_at,
+            'started_at_iso': self._iso_timestamp(started_at),
+            'uptime_s': uptime_s,
+            'uptime_human': self._format_duration(uptime_s),
+            'boot_instance_id': current_boot_id,
+        }
+        restart_hook_result = {
+            'available': bool(latest_hook_result),
+            'request_id': latest_request.get('request_id') if latest_request else None,
+            'request_status': latest_request.get('status') if latest_request else None,
+            'requested_execution': bool(latest_request.get('execute_restart_hook')) if latest_request else False,
+            'configured': bool(latest_hook_result.get('configured')) if latest_hook_result else False,
+            'executed': bool(latest_hook_result.get('executed')) if latest_hook_result else False,
+            'ok': bool(latest_hook_result.get('ok')) if latest_hook_result else False,
+            'exit_code': latest_hook_result.get('exit_code') if latest_hook_result else None,
+            'error': latest_hook_result.get('error') if latest_hook_result else '',
+            'stdout_excerpt': latest_hook_result.get('stdout_excerpt') if latest_hook_result else '',
+            'stderr_excerpt': latest_hook_result.get('stderr_excerpt') if latest_hook_result else '',
+            'started_at': latest_hook_result.get('started_at') if latest_hook_result else None,
+            'started_at_iso': self._iso_timestamp(float(latest_hook_result.get('started_at') or 0.0)) if latest_hook_result else '',
+            'finished_at': latest_hook_result.get('finished_at') if latest_hook_result else None,
+            'finished_at_iso': self._iso_timestamp(float(latest_hook_result.get('finished_at') or 0.0)) if latest_hook_result else '',
+            'summary': 'No restart hook result is available yet.',
+        }
+        if latest_hook_result:
+            if restart_hook_result['ok']:
+                restart_hook_result['summary'] = 'The latest restart hook execution completed successfully.'
+            elif restart_hook_result['executed']:
+                restart_hook_result['summary'] = 'The latest restart hook execution finished with an error.'
+            else:
+                restart_hook_result['summary'] = 'The latest restart request did not execute the restart hook.'
+        elif latest_request and not bool(latest_request.get('execute_restart_hook')):
+            restart_hook_result['summary'] = 'The latest restart request was queued without executing the external hook.'
+
+        restart_observation = {
+            'state': restart_state,
+            'summary': restart_summary,
+            'latest_request_id': latest_request.get('request_id') if latest_request else None,
+            'latest_request_status': latest_request.get('status') if latest_request else None,
+            'latest_request_ts': latest_request_ts if latest_request else None,
+            'latest_request_ts_iso': self._iso_timestamp(latest_request_ts) if latest_request else '',
+            'observed_new_process_since_request': observed_new_process,
+            'current_boot_instance_id': current_boot_id,
+            'latest_boot_instance_id': latest_boot_evidence.get('boot_instance_id'),
+        }
+        startup_config = {
+            'main_config': main_config,
+            'router': dict(runtime_summary.get('router') or {}),
+            'policy': dict(runtime_summary.get('policy') or {}),
+            'channels': dict(runtime_summary.get('channels') or {}),
+            'llm': dict(runtime_summary.get('llm') or {}),
+            'db': {'path': ((runtime_summary.get('db') or {}).get('path')), 'counts': dict(((runtime_summary.get('db') or {}).get('counts') or {}))},
+            'tenancy': dict(runtime_summary.get('tenancy') or {}),
+            'section_files': section_files,
+        }
+        return {
+            'process': process,
+            'health': {
+                'status': health_status,
+                'checked_at': now,
+                'checked_at_iso': self._iso_timestamp(now),
+                'issues': health_issues,
+                'checks': health_checks,
+            },
+            'startup_config': startup_config,
+            'current_boot': current_boot,
+            'latest_boot_evidence': latest_boot_evidence,
+            'restart_hook_result': restart_hook_result,
+            'restart_observation': restart_observation,
+        }
+
+    def _latest_startup_event(self, gw: AdminGatewayLike) -> dict[str, Any]:
+        try:
+            events = list(gw.audit.get_recent_events(limit=25, channel='system'))
+        except Exception:
+            events = []
+        for event in events:
+            payload = dict(event.get('payload') or {})
+            if str(payload.get('event') or '') == 'startup':
+                return event
+        return {}
+
+    @staticmethod
+    def _file_runtime_metadata(path: Path) -> dict[str, Any]:
+        candidate = Path(path).expanduser().resolve()
+        exists = candidate.exists()
+        metadata = {
+            'path': AdminService._display_path(candidate),
+            'exists': exists,
+            'size_bytes': int(candidate.stat().st_size) if exists else 0,
+            'mtime': float(candidate.stat().st_mtime) if exists else 0.0,
+            'mtime_iso': AdminService._iso_timestamp(float(candidate.stat().st_mtime)) if exists else '',
+            'sha256': '',
+            'parse_error': '',
+        }
+        if exists and candidate.is_file():
+            try:
+                raw = candidate.read_bytes()
+                metadata['sha256'] = hashlib.sha256(raw).hexdigest()
+            except Exception as exc:
+                metadata['parse_error'] = str(exc)
+        return metadata
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        total = max(0, int(seconds))
+        hours, remainder = divmod(total, 3600)
+        minutes, secs = divmod(remainder, 60)
+        if hours:
+            return f'{hours}h {minutes}m {secs}s'
+        if minutes:
+            return f'{minutes}m {secs}s'
+        return f'{secs}s'
+
+    @staticmethod
+    def _iso_timestamp(ts: float | None) -> str:
+        if not ts:
+            return ''
+        return datetime.fromtimestamp(float(ts), tz=timezone.utc).astimezone().isoformat(timespec='seconds')
+
+    def _execute_restart_hook(self, command: str, *, cwd: Path) -> dict[str, Any]:
+        started_at = time.time()
+        try:
+            proc = subprocess.run(
+                command,
+                cwd=str(cwd),
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            stdout = str(proc.stdout or '')
+            stderr = str(proc.stderr or '')
+            return {
+                'configured': True,
+                'executed': True,
+                'ok': proc.returncode == 0,
+                'exit_code': int(proc.returncode),
+                'stdout_excerpt': stdout[-1000:],
+                'stderr_excerpt': stderr[-1000:],
+                'started_at': started_at,
+                'finished_at': time.time(),
+            }
+        except Exception as exc:
+            return {
+                'configured': True,
+                'executed': True,
+                'ok': False,
+                'error': str(exc),
+                'started_at': started_at,
+                'finished_at': time.time(),
+            }
+
+    def _recent_restart_requests(self, gw: AdminGatewayLike, *, limit: int = 10) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        try:
+            events = list(gw.audit.get_recent_events(limit=max(50, limit * 10), channel='system'))
+        except Exception:
+            events = []
+        for event in events:
+            payload = dict(event.get('payload') or {})
+            if str(payload.get('event') or '') != 'assistant_restart_request':
+                continue
+            hook = dict(payload.get('hook') or {}) if isinstance(payload.get('hook'), dict) else {}
+            items.append(
+                {
+                    'request_id': payload.get('request_id'),
+                    'ts': float(event.get('ts') or payload.get('created_at') or 0.0),
+                    'actor': payload.get('actor') or event.get('user_id'),
+                    'sections': list(payload.get('sections') or []),
+                    'restart_required_sections': list(payload.get('restart_required_sections') or []),
+                    'status': str(payload.get('status') or 'queued'),
+                    'execute_restart_hook': bool(payload.get('execute_restart_hook')),
+                    'hook_ok': bool(hook.get('ok')) if hook else False,
+                    'hook': hook,
+                }
+            )
+            if len(items) >= limit:
+                break
+        return items
+
+    def _config_backup_root(self, gw: AdminGatewayLike, config_path: Path) -> Path:
+        backup_dir = str(getattr(getattr(getattr(gw, 'settings', None), 'storage', None), 'backup_dir', '') or 'data/backups')
+        return self._resolve_config_related_path(config_path, backup_dir) / 'ui-config'
+
+    @staticmethod
+    def _build_config_file_summary(section: str, parsed: Any) -> dict[str, Any]:
+        if not isinstance(parsed, dict):
+            return {'type': type(parsed).__name__}
+        if section == 'openmiura':
+            llm = dict(parsed.get('llm') or {})
+            memory = dict(parsed.get('memory') or {})
+            broker = dict(parsed.get('broker') or {})
+            auth = dict(parsed.get('auth') or {})
+            server = dict(parsed.get('server') or {})
+            storage = dict(parsed.get('storage') or {})
+            telegram = dict(parsed.get('telegram') or {})
+            slack = dict(parsed.get('slack') or {})
+            discord = dict(parsed.get('discord') or {})
+            return {
+                'server': {'host': server.get('host'), 'port': server.get('port')},
+                'llm': {'provider': llm.get('provider'), 'model': llm.get('model'), 'base_url': llm.get('base_url')},
+                'memory_enabled': bool(memory.get('enabled', False)),
+                'broker_enabled': bool(broker.get('enabled', False)),
+                'auth_enabled': bool(auth.get('enabled', False)),
+                'db_path': storage.get('db_path'),
+                'channels': {
+                    'telegram': {'configured': bool(str(telegram.get('bot_token') or '').strip()), 'mode': telegram.get('mode', 'polling')},
+                    'slack': {'configured': bool(str(slack.get('bot_token') or '').strip()), 'reply_in_thread': bool(slack.get('reply_in_thread', True))},
+                    'discord': {'configured': bool(str(discord.get('bot_token') or '').strip()), 'slash_enabled': bool(discord.get('slash_enabled', True))},
+                },
+            }
+        if section == 'agents':
+            raw_agents = parsed.get('agents')
+            if isinstance(raw_agents, dict):
+                agent_ids = [str(k) for k in raw_agents.keys()]
+                return {'agent_count': len(raw_agents), 'agent_ids': sorted(agent_ids)[:20], 'catalog_shape': 'mapping'}
+            if isinstance(raw_agents, list):
+                agent_ids: list[str] = []
+                for index, item in enumerate(raw_agents):
+                    if isinstance(item, dict):
+                        candidate = item.get('name') or item.get('agent_id') or item.get('id')
+                        if candidate is not None and str(candidate).strip():
+                            agent_ids.append(str(candidate))
+                            continue
+                    agent_ids.append(f'item_{index}')
+                return {'agent_count': len(raw_agents), 'agent_ids': sorted(agent_ids)[:20], 'catalog_shape': 'list'}
+            agent_ids = [str(k) for k in parsed.keys()]
+            return {'agent_count': len(agent_ids), 'agent_ids': sorted(agent_ids)[:20], 'catalog_shape': 'mapping'}
+        if section == 'policies':
+            return {
+                'tool_rules': len(list(parsed.get('tool_rules') or [])),
+                'memory_rules': len(list(parsed.get('memory_rules') or [])),
+                'secret_rules': len(list(parsed.get('secret_rules') or [])),
+                'channel_rules': len(list(parsed.get('channel_rules') or [])),
+                'approval_rules': len(list(parsed.get('approval_rules') or [])),
+            }
+        if section == 'evaluations':
+            suites = dict(parsed.get('suites') or {})
+            return {'suite_count': len(suites), 'suite_names': sorted([str(k) for k in suites.keys()])[:20]}
+        return {'keys': [str(k) for k in parsed.keys()]}
 
 
     def list_openclaw_policy_packs(
