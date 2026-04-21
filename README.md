@@ -393,6 +393,10 @@ Start here:
 - [Installation guide](docs/installation.md)
 - [Deployment guide](docs/deployment.md)
 - [Production guide](docs/production.md)
+- [Enterprise alpha guide](docs/enterprise_alpha.md)
+- [Alpha release checklist](docs/alpha_release_checklist.md)
+- [Release Candidate RC1](docs/release_candidate.md)
+- [Release support matrix](docs/release_support_matrix.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 ### Product and positioning
@@ -426,8 +430,6 @@ Start here:
 - [Approver quickstart](docs/quickstarts/approver.md)
 - [RC1 quickstart](docs/quickstarts/release_candidate.md)
 - [Alert runbook](docs/runbooks/alerts.md)
-
----
 
 ## Current status
 
