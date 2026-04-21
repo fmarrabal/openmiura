@@ -5,7 +5,7 @@
 <h1 align="center">openMiura</h1>
 
 <p align="center">
-  Governed Agent Operations Platform
+  <strong>Governed Agent Operations Platform</strong>
 </p>
 
 <p align="center">
@@ -18,18 +18,81 @@
 
 ---
 
-## What openMiura is
+## openMiura in one sentence
 
-openMiura is a **governed agent operations platform** for organizations that want to run AI agents and operational automations with **approvals, policy control, auditability, release governance, replayability, and environment isolation**.
+openMiura is a **governed agent operations platform** for organizations that need AI agents, automations, and runtime actions to operate under **policy, approvals, audit, evidence, environment isolation, and release control**.
 
-The platform is designed around a simple idea:
+---
+
+## Why openMiura exists
+
+Most agent products optimize for capability.
+
+Real organizations also need to answer questions like:
+
+- Who is allowed to execute this action?
+- In which tenant, workspace, and environment?
+- Under which policy?
+- With which approval chain?
+- With which secret or credential posture?
+- What evidence is generated afterward?
+- Can the action be inspected, replayed, rolled back, or promoted safely?
+
+openMiura focuses on those operational questions.
+
+Its core operating model is simple:
 
 - **the runtime executes**
 - **openMiura governs**
 
-That makes it useful when an organization wants to work with agents across chat, HTTP, operational workflows, or external runtimes, but cannot accept ungoverned execution.
+That makes openMiura useful when the runtime may be local, remote, external, channel-driven, workflow-driven, or specialized, but execution still needs to remain governed.
 
-## What this bundle currently contains
+---
+
+## What openMiura is
+
+openMiura is **not** just a chatbot wrapper and **not** another generic assistant shell.
+
+It is a **control plane** around runtime execution, approvals, policies, operator review, evidence, replay, packaging, and governed rollout.
+
+It is designed for teams that want to run:
+
+- AI agents
+- runtime-backed tools
+- operator actions
+- workflow steps
+- release and promotion flows
+- channel-triggered automations
+- governed interactions with external runtimes such as OpenClaw
+
+without accepting ungoverned execution.
+
+---
+
+## Current release status
+
+The project currently includes **v1.0.0-rc1**, published as the first release candidate for the current governed control-plane baseline.
+
+RC1 closes the final hygiene, packaging, and release-readiness work required for GitHub publication, including:
+
+- release candidate freeze and quality gate workflow
+- reproducible packaging outputs and manifest/checksum verification
+- Windows-safe release artifact generation
+- release documentation, checklists, and support matrix alignment
+- final UI/admin regression coverage for config center and tiny runtime surfaces
+- stabilized GitHub workflows and repository publication readiness
+
+See:
+
+- [Release Candidate RC1](docs/release_candidate.md)
+- [RC1 quickstart](docs/quickstarts/release_candidate.md)
+- [RC1 release notes](RELEASE_NOTES_RC1.md)
+- [Release support matrix](docs/release_support_matrix.md)
+- [Release quality gate](docs/release_quality_gate.md)
+
+---
+
+## What the repository already contains
 
 This repository already includes implemented surfaces for:
 
@@ -43,23 +106,11 @@ This repository already includes implemented surfaces for:
 - **voice, PWA, operator, replay, session, and cost services**
 - **HTTP broker and MCP integration surfaces**
 - **channel adapters** for Telegram, Slack, and Discord
-- **extension SDK and private registry foundations**
+- **extension SDK and registry foundations**
 
-In practice, this means openMiura is not just a chat wrapper. It is a control plane around runtime actions, policies, approvals, operational review, and governed rollout.
+In practical terms, openMiura already contains meaningful implementation across governance, operator surfaces, release flows, evidence handling, and runtime control.
 
-## Why it exists
-
-Most agent demos optimize for capability. Real deployment requires something else:
-
-- who can execute what
-- in which environment
-- under which policy
-- with which secret
-- with which approval chain
-- with what audit evidence afterward
-- and how the action can be inspected, replayed, or rolled back
-
-openMiura focuses on those operational questions.
+---
 
 ## Core capability areas
 
@@ -68,13 +119,15 @@ openMiura focuses on those operational questions.
 - policy-aware runtime dispatch
 - action gating and confirmation flows
 - role-aware control surfaces
-- environment scoping for dev, stage, and prod-like operation
+- tenant / workspace / environment scoping
+- local-first operation with governed runtime integration
 
 ### 2. Workflows and approvals
 
 - workflow creation and execution tracking
-- approval steps, assignment, claim, decision, and cancellation flows
-- operational actions exposed through admin and canvas inspectors
+- approval creation, claim, decision, and cancellation flows
+- operator-facing and admin-facing approval surfaces
+- governed progression of sensitive actions
 
 ### 3. Release governance
 
@@ -109,6 +162,8 @@ openMiura focuses on those operational questions.
 - OpenClaw runtime governance adapter
 - local-first default posture with configurable infrastructure
 
+---
+
 ## High-level architecture
 
 ```text
@@ -124,11 +179,30 @@ Channels / UI / Voice / PWA / Canvas / Broker / MCP
           Persistence / registries / artifacts / runtimes
 ```
 
+---
+
+## Product posture
+
+openMiura is designed with these priorities:
+
+- **governance before convenience**
+- **operational control before demo polish**
+- **local-first by default**
+- **extensibility without losing control-plane authority**
+- **evidence and audit as first-class concerns**
+- **multi-tenant operation as a real design constraint**
+- **runtime compatibility instead of runtime lock-in**
+
+This is why the project is positioned as a **Governed Agent Operations Platform**.
+
+---
+
 ## Repository structure
 
 ```text
 .
 ├── app.py
+├── assets/                  # branding assets
 ├── configs/                 # YAML configuration
 ├── docker/                  # container helpers
 ├── docs/                    # product, architecture, ops, and runbooks
@@ -142,12 +216,17 @@ Channels / UI / Voice / PWA / Canvas / Broker / MCP
 │   ├── tools/               # governed tool execution surfaces
 │   ├── ui/                  # UI assets
 │   └── workers/             # background workers
-├── ops/                     # observability assets
+├── ops/
+│   ├── env/                 # environment profiles and deployment defaults
+│   └── quality_gate/        # release quality-gate inputs
 ├── packaging/               # packaging scaffolds
-├── scripts/                 # operational scripts
+├── reports/                 # generated reports (when produced locally)
+├── scripts/                 # operational and release scripts
 ├── skills/                  # skill manifests
 └── tests/                   # regression and integration coverage
 ```
+
+---
 
 ## Deployment posture
 
@@ -160,6 +239,9 @@ Typical baseline:
 - Ollama-compatible LLM endpoint by default
 - channel workers enabled only when needed
 - admin and broker surfaces protected by tokens and policy controls
+- release and artifact flows validated through reproducible packaging scripts
+
+---
 
 ## Quickstart
 
@@ -247,6 +329,36 @@ Discord worker:
 python scripts/discord_worker.py
 ```
 
+---
+
+## Release and packaging workflow
+
+A typical local RC / release validation flow is:
+
+```bash
+python -m pytest -q
+python scripts/build_release_artifacts.py --dist-dir dist --tag v-ci --target desktop --strict
+python scripts/verify_release_artifacts.py --dist-dir dist
+python scripts/run_release_quality_gate.py --include-extended --output-dir reports/quality_gate
+```
+
+These flows generate and validate:
+
+- wheel and sdist
+- reproducible desktop bundle
+- release manifest
+- SHA256 checksums
+- quality-gate reports
+
+Related docs:
+
+- [Release quality gate](docs/release_quality_gate.md)
+- [Release candidate closure](docs/release_candidate_closure.md)
+- [GitHub PR / merge / publish checklist](docs/github_pr_merge_publish_checklist.md)
+- [Release support matrix](docs/release_support_matrix.md)
+
+---
+
 ## CLI surfaces included
 
 The current CLI already exposes groups for:
@@ -260,6 +372,8 @@ The current CLI already exposes groups for:
 - `openmiura sdk ...`
 - `openmiura registry ...`
 
+---
+
 ## Validation
 
 Typical local validation flow:
@@ -269,7 +383,21 @@ python -m compileall -q app.py openmiura tests
 pytest -q
 ```
 
-## Key documentation
+---
+
+## Documentation
+
+Start here:
+
+- [Documentation index](docs/README.md)
+- [Installation guide](docs/installation.md)
+- [Deployment guide](docs/deployment.md)
+- [Production guide](docs/production.md)
+- [Enterprise alpha guide](docs/enterprise_alpha.md)
+- [Alpha release checklist](docs/alpha_release_checklist.md)
+- [Release Candidate RC1](docs/release_candidate.md)
+- [Release support matrix](docs/release_support_matrix.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ### Product and positioning
 
@@ -280,14 +408,11 @@ pytest -q
 
 ### Setup and operations
 
-- [Installation](docs/installation.md)
-- [Deployment](docs/deployment.md)
-- [Production](docs/production.md)
 - [Observability](docs/observability.md)
 - [Security](docs/security.md)
 - [Backup and restore](docs/backup_restore.md)
 - [Migrations](docs/migrations.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Production](docs/production.md)
 
 ### Integrations and platform docs
 
@@ -303,18 +428,46 @@ pytest -q
 - [Admin quickstart](docs/quickstarts/admin.md)
 - [Developer quickstart](docs/quickstarts/developer.md)
 - [Approver quickstart](docs/quickstarts/approver.md)
+- [RC1 quickstart](docs/quickstarts/release_candidate.md)
 - [Alert runbook](docs/runbooks/alerts.md)
 
 ## Current status
 
-This bundle is suitable for:
+This repository is suitable for:
 
 - local development
 - controlled internal evaluation
 - private collaboration
 - staged hardening for self-hosted enterprise-style deployments
+- release-candidate level packaging and validation
 
-It already contains substantial implementation across governance, canvas operations, release flows, evidence handling, and runtime control. Production rollout still depends on your concrete identity, secret-management, infrastructure, and operating model choices.
+It already contains substantial implementation across governance, canvas operations, release flows, evidence handling, runtime control, and release engineering.
+
+Stable production rollout still depends on your concrete choices for:
+
+- identity and access management
+- secret management
+- infrastructure topology
+- artifact storage and escrow posture
+- operational ownership model
+- deployment and upgrade policy
+
+---
+
+## Who openMiura is for
+
+openMiura is especially relevant for teams that need:
+
+- AI agents under operator control
+- governed execution across environments
+- auditable automation
+- approval-backed sensitive actions
+- reproducible release and packaging discipline
+- compatibility with external runtimes without giving up control-plane governance
+
+It is a strong fit for internal platforms, innovation teams, applied AI teams, and self-hosted enterprise-style environments where governance matters as much as capability.
+
+---
 
 ## Public repository hygiene
 
@@ -325,6 +478,10 @@ Do not commit:
 - generated voice assets
 - temporary patch scripts or debug dumps
 - local sandbox outputs and generated escrow artifacts
+
+Use environment variables, `.env` templates, and governed secret-management paths instead.
+
+---
 
 ## Contributing
 
@@ -344,20 +501,7 @@ Before contributing:
 3. avoid committing secrets or generated runtime artifacts
 4. keep changes aligned with the governed-agent-operations model
 
-
-## Documentation
-
-Start here:
-
-- [Documentation index](docs/README.md)
-- [Installation guide](docs/installation.md)
-- [Production guide](docs/production.md)
-- [Enterprise alpha guide](docs/enterprise_alpha.md)
-- [Alpha release checklist](docs/alpha_release_checklist.md)
-- [Release Candidate RC1](docs/release_candidate.md)
-- [Release support matrix](docs/release_support_matrix.md)
-- [RC1 quickstart](docs/quickstarts/release_candidate.md)
-- [RC1 release notes](RELEASE_NOTES_RC1.md)
+---
 
 ## License
 
