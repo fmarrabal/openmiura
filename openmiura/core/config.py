@@ -52,6 +52,47 @@ def _as_int_list(value: Any) -> list[int]:
 
 
 
+
+
+def _parse_dotenv_line(line: str) -> tuple[str, str] | None:
+    raw = str(line or '').strip()
+    if not raw or raw.startswith('#') or '=' not in raw:
+        return None
+    key, value = raw.split('=', 1)
+    key = key.strip()
+    if not key:
+        return None
+    value = value.strip()
+    if value and value[0] == value[-1] and value[0] in {'"', "'"}:
+        value = value[1:-1]
+    return key, value
+
+
+def _load_dotenv_defaults(config_path: str | Path | None) -> None:
+    candidates: list[Path] = []
+    cwd_env = Path.cwd() / '.env'
+    candidates.append(cwd_env)
+    if config_path is not None and str(config_path).strip():
+        config_file = Path(config_path).expanduser().resolve()
+        candidates.append(config_file.parent / '.env')
+        candidates.append(config_file.parent.parent / '.env')
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        if resolved in seen or not resolved.exists() or not resolved.is_file():
+            continue
+        seen.add(resolved)
+        for raw_line in resolved.read_text(encoding='utf-8').splitlines():
+            parsed = _parse_dotenv_line(raw_line)
+            if parsed is None:
+                continue
+            key, value = parsed
+            os.environ.setdefault(key, value)
+
 def _env_bool_override(env_name: str, cfg_value: Any, default: bool = False) -> bool:
     raw = os.environ.get(env_name)
     if raw is not None:
@@ -550,6 +591,7 @@ class Settings:
 
 def load_settings(path: str) -> Settings:
     p = Path(path)
+    _load_dotenv_defaults(p)
     if not p.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 

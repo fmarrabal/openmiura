@@ -1,0 +1,7 @@
+{
+  "actor": "security-admin",
+  "reason": "approved from canonical demo canvas",
+  "payload": {
+    "approval_id": "<approval-id>"
+  }
+}

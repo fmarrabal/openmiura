@@ -42,6 +42,9 @@ class PackagingHardeningService:
     }
 
     DEFAULT_REPRO_INCLUDE = [
+        'LICENSE',
+        'MANIFEST.in',
+        '.env.example',
         'app.py',
         'README.md',
         'pyproject.toml',
@@ -49,6 +52,7 @@ class PackagingHardeningService:
         'openmiura',
         'configs',
         'docs',
+        'ops/env',
         'packaging',
         '.github/workflows',
         'scripts',
@@ -564,8 +568,8 @@ class PackagingHardeningService:
                 for path in sorted(target.rglob('*')):
                     if not path.is_file():
                         continue
-                    parts = set(path.parts)
-                    if parts & self.REPRO_EXCLUDE_PARTS or path.suffix.lower() in self.REPRO_EXCLUDE_SUFFIXES:
+                    relative_parts = set(path.relative_to(root).parts)
+                    if relative_parts & self.REPRO_EXCLUDE_PARTS or path.suffix.lower() in self.REPRO_EXCLUDE_SUFFIXES:
                         continue
                     files.append(self._file_manifest_entry(root, path))
 

@@ -1,0 +1,21 @@
+{
+  "actor": "admin",
+  "name": "canonical-governed-runtime",
+  "base_url": "simulated://openclaw",
+  "transport": "simulated",
+  "allowed_agents": ["default"],
+  "tenant_id": "tenant-a",
+  "workspace_id": "ws-a",
+  "environment": "prod",
+  "metadata": {
+    "runtime_class": "incident",
+    "allowed_actions": ["chat"],
+    "governance_release_policy": {
+      "approval_required": true,
+      "requested_role": "security",
+      "ttl_s": 1800,
+      "require_signature": true,
+      "signer_key_id": "governance-ci"
+    }
+  }
+}

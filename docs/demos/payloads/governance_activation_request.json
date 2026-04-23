@@ -1,0 +1,18 @@
+{
+  "actor": "platform-admin",
+  "reason": "activate governed quiet-hours policy for incident runtime",
+  "tenant_id": "tenant-a",
+  "workspace_id": "ws-a",
+  "environment": "prod",
+  "candidate_policy": {
+    "default_timezone": "UTC",
+    "quiet_hours": {
+      "enabled": true,
+      "timezone": "UTC",
+      "weekdays": [0],
+      "start_time": "00:00",
+      "end_time": "23:59",
+      "action": "schedule"
+    }
+  }
+}

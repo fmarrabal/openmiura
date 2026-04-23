@@ -51,5 +51,7 @@ def test_ci_and_release_reuse_same_local_setup_contract() -> None:
         setup_step = next(step for step in steps if step.get('name') == 'Set up Python and install local package')
         assert setup_step['uses'] == './.github/actions/setup-openmiura'
 
-    release_upload = next(step for step in release_steps if step.get('name') == 'Upload release artifacts')
+    release_upload = next(step for step in release_steps if step.get('name') == 'Upload workflow artifacts')
     assert str(release_upload['uses']).startswith('actions/upload-artifact@')
+    release_publish = next(step for step in release_steps if step.get('name') == 'Upload official assets to GitHub Release')
+    assert 'gh release upload' in release_publish['run']

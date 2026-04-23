@@ -20,12 +20,14 @@ Se ejecuta en `push`, `pull_request` y manualmente:
 
 ### Release (`.github/workflows/release.yml`)
 
-Se ejecuta al publicar tags `v*.*.*` o manualmente:
+Se ejecuta al publicar una GitHub Release o manualmente:
 
-- build de `sdist` y `wheel`
-- validación con `twine check`
-- subida de artefactos de `dist/`
-- creación automática de GitHub Release con los artefactos adjuntos
+- resuelve el tag objetivo y si la publicación es estable o RC
+- ejecuta el release quality gate
+- genera `wheel`, `sdist`, bundle reproducible y manifiestos
+- verifica `RELEASE_MANIFEST.json` y `SHA256SUMS.txt`
+- sube artefactos del workflow para auditoría
+- adjunta los artefactos oficiales a la GitHub Release solo cuando la release es estable
 
 ### Security (`.github/workflows/security.yml`)
 
