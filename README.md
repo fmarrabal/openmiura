@@ -238,3 +238,9 @@ Before contributing:
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+## Release and profile references
+
+- Configuration profiles guide: `docs/configuration_profiles.md`
+- Baseline secure profile: `ops/env/secure-default.env`
+- RC1 checkpoint notes: `RELEASE_NOTES_RC1.md`
