@@ -40,7 +40,7 @@ Mark any deviation explicitly in the PR description.
 
 - [ ] `.github/workflows/ci.yml` was reviewed for current branch protection expectations.
 - [ ] `.github/workflows/package-reproducible.yml` is still aligned with local packaging commands.
-- [ ] `.github/workflows/release.yml` uploads the intended artifacts.
+- [ ] `.github/workflows/release.yml` uploads workflow artifacts and attaches official assets on stable releases.
 - [ ] `.github/workflows/security.yml` still reflects the intended security posture.
 - [ ] Required GitHub checks for `main` are known before opening the PR.
 
@@ -102,7 +102,7 @@ Immediately after merge:
 
 - [ ] Pull `main` and verify the merge commit locally.
 - [ ] Re-run the release workflow or tag workflow from the merged commit if required.
-- [ ] Download the generated artifacts from GitHub Actions.
+- [ ] Download the generated workflow artifacts from GitHub Actions if deeper inspection is needed.
 - [ ] Verify checksums against `SHA256SUMS.txt`.
 - [ ] Confirm the release manifest matches the expected commit and version.
 - [ ] Archive `reports/quality_gate/` with the release evidence.
@@ -115,7 +115,8 @@ Use this section for the first external or semi-external publication.
 ### 6.1 GitHub release
 
 - [ ] Create or verify the GitHub Release entry.
-- [ ] Attach the intended artifacts only.
+- [ ] For RC/pre-release checkpoints, keep the GitHub Release focused on notes, source archives and validation posture.
+- [ ] For stable releases, confirm that the workflow attached the official wheel/sdist/bundle/manifest/checksum assets.
 - [ ] Include `RELEASE_NOTES_RC1.md` content or an equivalent summary.
 - [ ] State the support boundary clearly.
 
@@ -124,7 +125,7 @@ Use this section for the first external or semi-external publication.
 - [ ] Position openMiura as a governed agent operations platform.
 - [ ] Emphasize approvals, policies, evidence, rollout governance and operator control.
 - [ ] Avoid chatbot-style positioning.
-- [ ] Describe the current state as controlled release / RC / pilot as appropriate.
+- [ ] Describe RC entries as validation checkpoints and stable entries as the official downloadable artifact line.
 
 ### 6.3 Operational handoff
 

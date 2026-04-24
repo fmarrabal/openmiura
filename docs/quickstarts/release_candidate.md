@@ -87,3 +87,5 @@ The distribution handoff should include:
 - `RELEASE_NOTES_RC1.md`
 - `docs/release_support_matrix.md`
 - `docs/alpha_release_checklist.md`
+
+RC1 is the validation checkpoint, not the canonical GitHub Release asset line. The stable `v1.0.0` publication path is defined in `docs/release_publication.md`.

@@ -35,6 +35,12 @@ Compatibility-friendly local profile for fast laptop setup. Similar to `insecure
 ### `ops/env/local-secure.env`
 Compatibility-friendly local secure profile. Similar to `secure-default.env` but tuned for a single node.
 
+### `ops/env/canonical-demo.env`
+
+Use this when you want to run the public canonical governance demo against a live local server.
+
+It enables the admin and broker surfaces required for the governed runtime approval flow while keeping the rest of the profile conservative for local demonstration.
+
 ### `ops/env/demo.env`
 Demo profile for screenshots or guided trials. Keeps the system locked down while still being easy to boot.
 
@@ -46,17 +52,17 @@ Single-node or small-server baseline intended to sit behind TLS and a reverse pr
 ### Linux/macOS
 
 ```bash
-cp ops/env/secure-default.env .env
-python -m openmiura doctor --config configs/openmiura.yaml
-python app.py
+cp ops/env/local-secure.env .env
+openmiura doctor --config configs/openmiura.yaml
+openmiura run --config configs/openmiura.yaml
 ```
 
 ### Windows PowerShell
 
 ```powershell
-Copy-Item ops\env\secure-default.env .env
-python -m openmiura doctor --config configs/openmiura.yaml
-python app.py
+Copy-Item ops\env\local-secure.env .env
+openmiura doctor --config configs/openmiura.yaml
+openmiura run --config configs/openmiura.yaml
 ```
 
 ## Critical variables to review

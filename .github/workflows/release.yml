@@ -2,6 +2,22 @@ name: release
 
 'on':
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Stable tag to record in release artifacts and optionally publish to GitHub Release.
+        required: false
+        type: string
+      publish_to_release:
+        description: Attach official assets to an existing stable GitHub Release.
+        required: false
+        default: false
+        type: boolean
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
 
 jobs:
   build-release:
@@ -13,6 +29,88 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_PUBLISH_TO_RELEASE: ${{ inputs.publish_to_release }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EVENT_RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            tag="$EVENT_RELEASE_TAG"
+            prerelease="$EVENT_RELEASE_PRERELEASE"
+            publish_requested="true"
+          else
+            tag="$INPUT_RELEASE_TAG"
+            if [[ -z "$tag" ]]; then
+              tag="$GITHUB_REF_NAME"
+            fi
+            if [[ -z "$tag" ]]; then
+              tag="v-local"
+            fi
+            prerelease="false"
+            publish_requested="$INPUT_PUBLISH_TO_RELEASE"
+          fi
+
+          stable="false"
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            stable="true"
+          fi
+
+          publish_release="false"
+          if [[ "$publish_requested" == "true" && "$stable" == "true" ]]; then
+            publish_release="true"
+          fi
+
+          if [[ "$EVENT_NAME" == "release" && "$prerelease" == "true" ]]; then
+            publish_release="false"
+          fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$publish_requested" == "true" && "$stable" != "true" ]]; then
+            echo "Manual publication requires an explicit stable tag such as v1.0.0." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "publish_release=$publish_release" >> "$GITHUB_OUTPUT"
+
+      - name: Check stable tag and package version alignment
+        if: steps.meta.outputs.publish_release == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import tomllib
+
+          root = pathlib.Path('.').resolve()
+          tag = '${{ steps.meta.outputs.tag }}'
+          expected = tag.removeprefix('v')
+
+          pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+          package_version = pyproject['project']['version']
+          init_text = (root / 'openmiura' / '__init__.py').read_text(encoding='utf-8')
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', init_text)
+          if match is None:
+            raise SystemExit('Could not find __version__ in openmiura/__init__.py')
+          init_version = match.group(1)
+
+          if package_version != expected or init_version != expected:
+            raise SystemExit(
+                f'Stable release tag {tag} must match pyproject/openmiura package version {package_version}/{init_version}'
+            )
+          PY
 
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
@@ -28,17 +126,33 @@ jobs:
       - name: Build release artifacts
         shell: bash
         run: |
-          python scripts/build_release_artifacts.py --dist-dir dist --tag v-release --target desktop --strict
+          python scripts/build_release_artifacts.py --dist-dir dist --tag "${{ steps.meta.outputs.tag }}" --target desktop --strict
 
       - name: Verify release artifacts
         shell: bash
         run: |
           python scripts/verify_release_artifacts.py --dist-dir dist
 
-      - name: Upload release artifacts
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openmiura-release
+          name: openmiura-release-${{ steps.meta.outputs.tag }}
           path: |
             dist/**
             reports/quality_gate/**
+
+      - name: Upload official assets to GitHub Release
+        if: steps.meta.outputs.publish_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            dist/*.whl \
+            dist/*.tar.gz \
+            dist/*.zip \
+            dist/*.manifest.json \
+            dist/RELEASE_MANIFEST.json \
+            dist/SHA256SUMS.txt \
+            --clobber

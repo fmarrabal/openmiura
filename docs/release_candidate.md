@@ -56,9 +56,12 @@ RC1 includes:
 
 Use RC1 for controlled pilots, demos and technical evaluation. Keep it behind intentional auth, reverse proxy and environment-specific configuration.
 
+RC1 remains the validation checkpoint for the `1.0.0` line. The first GitHub Release that should carry the official downloadable wheel/sdist/bundle assets is the stable `v1.0.0` release described in [Stable release publication policy](release_publication.md).
+
 ## Related material
 
 - [Release support matrix](release_support_matrix.md)
+- [Stable release publication policy](release_publication.md)
 - [Release-candidate quickstart](quickstarts/release_candidate.md)
 - [Release quality gate](release_quality_gate.md)
 - [Enterprise alpha guide](enterprise_alpha.md)

@@ -1,153 +1,204 @@
-# Guía de instalación limpia
+# Installation
 
-Esta guía está pensada para una instalación desde cero, sin residuos previos, tanto en un portátil personal como en un servidor pequeño.
+This guide defines the **official minimum adoption path** for openMiura `1.0.0`. It is written for an external evaluator who wants to reach a serious first boot quickly and then run the canonical governed-runtime demo.
 
-## 1. Requisitos
+## Official route
 
-- Python 3.10, 3.11 o 3.12
+**Recommended for first-time users, especially on Windows:**
+
+1. download the **reproducible bundle zip** from the stable GitHub Release;
+2. extract it to a short path such as `C:\openmiura` or `~/openmiura`;
+3. create a virtual environment;
+4. install with `pip install .` from the extracted bundle root;
+5. copy `ops/env/local-secure.env` to `.env`;
+6. run `openmiura doctor --config configs/openmiura.yaml`;
+7. run `openmiura run --config configs/openmiura.yaml`;
+8. verify `/health` and `/ui`.
+
+This route is the most coherent one for external adoption because it ships the Python package **plus** the config files, environment profiles, and operational docs needed for a real first start. It is also the route used by the public narrative and media pack.
+
+## Why this is the primary path
+
+- the **wheel** is best for Python/package consumers, but it does not carry the full working tree layout used by `configs/openmiura.yaml`;
+- the **sdist** is source-oriented and valid for reproducible Python packaging flows;
+- the **reproducible bundle** is the cleanest external handoff for a governed local-first pilot.
+
+
+## What this install path is preparing you for
+
+The goal of the first install is not only to get `/health` running. It is to prepare you for the [canonical demo](demos/canonical_demo.md), where a sensitive runtime action is blocked by policy, approved by a human, and left behind as evidence.
+
+If you want the shortest public evaluation path, follow this order:
+
+1. install from the bundle;
+2. validate with `openmiura doctor`;
+3. start the service;
+4. run the canonical demo;
+5. inspect the walkthrough and screenshot plan.
+
+## 1. Requirements
+
+- Python 3.10, 3.11 or 3.12
 - `pip`
-- Git
-- Opcionalmente Docker y Docker Compose
-- Opcionalmente Ollama, o claves API de OpenAI / Anthropic / Kimi
+- enough permission to bind to `127.0.0.1:8081`
+- optional: Ollama running locally if you want a working local LLM immediately
 
-## 2. Clonar el proyecto
+## 2. Windows-first quickstart
 
-```bash
-git clone <tu-repo-openmiura>
-cd openMiura
+### 2.1 Extract to a short path
+
+Use a short folder to avoid path-length problems in Windows Explorer, for example:
+
+```text
+C:\openmiura
 ```
 
-## 3. Crear entorno virtual
-
-### Linux / macOS
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### Windows PowerShell
+### 2.2 Create the virtual environment
 
 ```powershell
+cd C:\openmiura
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install .
 ```
 
-## 4. Instalar openMiura
+### 2.3 Choose the recommended first-start profile
 
-Instalación mínima:
-
-```bash
-pip install -e .
+```powershell
+Copy-Item ops\env\local-secure.env .env
 ```
 
-Instalación con soporte PostgreSQL:
+### 2.4 Validate the install
 
-```bash
-pip install -e .[postgres]
-```
-
-Instalación con utilidades de desarrollo:
-
-```bash
-pip install -e .[dev]
-```
-
-## 5. Preparar configuración
-
-Para arranque rápido local:
-
-```bash
-cp ops/env/secure-default.env .env
-```
-
-Si prefieres revisar el catálogo completo de variables antes de elegir perfil, usa `.env.example` como referencia y consulta `docs/configuration_profiles.md`.
-
-Revisa al menos:
-
-- `OPENMIURA_ADMIN_TOKEN`
-- `OPENMIURA_UI_ADMIN_USERNAME`
-- `OPENMIURA_UI_ADMIN_PASSWORD`
-- proveedor LLM elegido
-- canales que realmente vayas a activar
-
-La configuración principal está en:
-
-- `configs/openmiura.yaml`
-- `configs/agents.yaml`
-- `configs/policies.yaml`
-
-## 6. Verificación inicial
-
-```bash
+```powershell
 openmiura doctor --config configs/openmiura.yaml
 ```
 
-Comprueba que el doctor informa correctamente de:
+Expected minimum outcome:
 
-- config cargada
-- backend de almacenamiento
-- directorio sandbox
-- provider LLM
-- skills
-- broker/MCP si están activados
+- config file found
+- gateway initializes
+- SQLite is writable
+- sandbox dir is writable
+- `/health` can be served after startup
+- an Ollama warning is acceptable if no local model server is running yet
 
-## 7. Arranque
+### 2.5 Start the service
 
-```bash
+```powershell
 openmiura run --config configs/openmiura.yaml
 ```
 
-Interfaz web:
+### 2.6 Confirm the key surfaces
 
-- `http://localhost:8081/ui`
+- health: `http://127.0.0.1:8081/health`
+- UI: `http://127.0.0.1:8081/ui`
+- metrics: `http://127.0.0.1:8081/metrics`
 
-Healthcheck:
+## 3. Linux / macOS quickstart
 
-- `http://localhost:8081/health`
+```bash
+cd ~/openmiura
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install .
+cp ops/env/local-secure.env .env
+openmiura doctor --config configs/openmiura.yaml
+openmiura run --config configs/openmiura.yaml
+```
 
-Metrics:
+## 4. Secondary artifact routes
 
-- `http://localhost:8081/metrics`
+### 4.1 Wheel
 
-## 8. Instalación con Docker
+Use the wheel when you already manage your own config file and want a standard Python install.
+
+```bash
+python -m pip install openmiura-1.0.0-py3-none-any.whl
+openmiura version
+```
+
+For wheel-based installs you must provide your own config path, for example:
+
+```bash
+openmiura doctor --config /path/to/openmiura.yaml
+openmiura run --config /path/to/openmiura.yaml
+```
+
+### 4.2 sdist
+
+Use the sdist when you want a source-oriented Python packaging path.
+
+```bash
+python -m pip install openmiura-1.0.0.tar.gz
+openmiura version
+```
+
+As with the wheel route, you must provide your own config file or work from an extracted source tree.
+
+## 5. Recommended first-start profile
+
+`ops/env/local-secure.env` is the recommended profile for first-time external validation.
+
+It keeps:
+
+- local SQLite storage
+- secure-by-default tool posture
+- auth/admin/broker complexity out of the way for the first boot
+- a clean path to validating `doctor`, `/health` and `/ui`
+
+Other shipped profiles:
+
+- `ops/env/insecure-dev.env`
+- `ops/env/secure-default.env`
+- `ops/env/local-dev.env`
+- `ops/env/demo.env`
+- `ops/env/production-like.env`
+
+For the governed secure baseline used after first-start validation:
 
 ```bash
 cp ops/env/secure-default.env .env
-docker compose up --build
 ```
 
-Con observabilidad:
+## 6. Minimal success checklist
 
-```bash
-docker compose --profile observability up --build
-```
+A clean installation is considered successful when all of these are true:
 
-## 9. Instalación limpia recomendada antes de release
+- `openmiura version` prints `1.0.0`
+- `openmiura doctor --config configs/openmiura.yaml` exits without critical errors
+- `openmiura run --config configs/openmiura.yaml` starts the service
+- `GET /health` returns `{"ok": true, ...}`
+- `/ui` responds
 
-Antes de generar un artefacto público, asegúrate de que no se empaquetan:
+## 7. Basic failure handling
 
-- `data/audit.db`
-- `__pycache__/`
-- `.pytest_cache/`
-- `.env`
-- claves privadas o tokens
+If `doctor` fails:
 
-## 10. Checklist mínima post-instalación
+- confirm you extracted the full bundle and are running from its root;
+- confirm `.env` exists;
+- confirm `configs/openmiura.yaml` exists;
+- confirm Python can write to `data/` and `data/sandbox/`;
+- if the only warning is that Ollama is unreachable, the install path is still valid.
 
-- `openmiura version`
-- `openmiura doctor --config configs/openmiura.yaml`
-- acceso a `/ui`
-- login admin bootstrap
-- una conversación de prueba
-- una tool sencilla como `time_now`
-- una búsqueda de memoria
+## 8. Release linkage
 
+For stable artifact publication rules, see [Stable release publication policy](release_publication.md).
 
-## Referencias alpha
+## 9. Related public docs
+
+- [Public narrative](public_narrative.md)
+- [Canonical demo](demos/canonical_demo.md)
+- [Canonical walkthrough](walkthroughs/canonical_runtime_governance_walkthrough.md)
+- [Screenshot plan](media/screenshot_plan.md)
+
+## 10. Related release docs
 
 - [Self-hosted Enterprise Alpha](enterprise_alpha.md)
-- [Enterprise Alpha release checklist](alpha_release_checklist.md)
+- [Alpha release checklist](alpha_release_checklist.md)
 - [Release Candidate RC1](release_candidate.md)
 - [Release support matrix](release_support_matrix.md)
 - [RC1 quickstart](quickstarts/release_candidate.md)
+- [Stable release publication policy](release_publication.md)
