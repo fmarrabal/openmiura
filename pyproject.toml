@@ -47,7 +47,7 @@ dev = [
   "pytest>=8.0",
   "build>=1.2",
   "twine>=5.1",
-  "pip-audit>=2.8",
+  "pip-audit>=2.10.0",
 ]
 
 [project.urls]
