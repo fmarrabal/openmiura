@@ -45,7 +45,7 @@ postgres = [
 ]
 dev = [
   "pytest>=8.0",
-  "build>=1.2",
+  "build>=1.4.3",
   "twine>=5.1",
   "pip-audit>=2.8",
 ]
