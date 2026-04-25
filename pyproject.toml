@@ -44,7 +44,7 @@ postgres = [
   "psycopg[binary]>=3.2",
 ]
 dev = [
-  "pytest>=8.0",
+  "pytest>=9.0.3",
   "build>=1.2",
   "twine>=5.1",
   "pip-audit>=2.8",
