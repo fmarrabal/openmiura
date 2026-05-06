@@ -6,7 +6,7 @@ The product thesis stays the same in this alpha:
 
 > Bring your runtime. openMiura governs it.
 
-This means the alpha is oriented to governed execution, approvals, auditability, scoped operations and OpenClaw runtime compatibility. It is **not** positioned as a general-purpose personal assistant.
+This means the alpha is oriented to governed execution, approvals, auditability, scoped operations and external runtime adapter compatibility. It is **not** positioned as a general-purpose personal assistant.
 
 ## 1. Scope of this alpha
 
@@ -27,7 +27,7 @@ The current alpha installation includes the foundations implemented in the roadm
 - RBAC and policy enforcement
 - approvals and audit foundations
 - Secret Broker v1
-- OpenClaw adapter v1
+- External runtime adapter v1
 - operations canvas with operator actions
 - reproducible packaging and release manifests
 
@@ -201,7 +201,7 @@ Perform a minimal governed-flow validation:
 4. inspect audit or operator view
 5. verify memory can be searched
 6. verify approvals appear when expected for sensitive flows
-7. if OpenClaw runtime is configured, validate a governed dispatch path
+7. if an external runtime is configured, validate a governed dispatch path
 
 ## 8. Recommended reverse-proxy posture
 
@@ -245,9 +245,9 @@ Do not grant operator-like permissions broadly just because the installation is 
 
 Treat the Secret Broker as governance infrastructure, not as a convenience feature. Do not embed long-lived secrets directly in prompts or notebooks. Prefer secret references and keep vault/passphrase handling out of version control.
 
-### OpenClaw runtime usage
+### External runtime usage
 
-Use OpenClaw as a governed runtime target. Register runtimes intentionally, keep allowed agents narrow and validate dispatch with audit and canvas visibility.
+Use external runtimes as governed runtime targets. Register runtimes intentionally, keep allowed agents narrow and validate dispatch with audit and canvas visibility.
 
 ## 10. Known risks and residual limitations
 
@@ -259,7 +259,7 @@ The alpha is installable and demonstrable, but there are still residual risks yo
 - default deployments may still use SQLite, which is good for pilots but not the final answer for heavier multi-user production
 - some enterprise-grade controls are present in v1 form and should be treated as governed foundations, not final maturity
 - external channel integrations may require additional environment-specific hardening before wider exposure
-- runtime health, callbacks and dispatch governance around OpenClaw are usable but still early-stage compared with a future hardened release train
+- runtime health, callbacks and dispatch governance around external runtimes are usable but still early-stage compared with a future hardened release train
 
 ### Limitations
 
@@ -302,7 +302,7 @@ That means the most important discipline at this stage is:
 
 - keep distribution narrow
 - validate artifacts before every handoff
-- treat roles, secrets and OpenClaw runtimes as governed surfaces from day one
+- treat roles, secrets and external runtimes as governed surfaces from day one
 - document limitations honestly
 
 If you follow that discipline, this alpha is strong enough to support internal validation, demos and early design-partner conversations.

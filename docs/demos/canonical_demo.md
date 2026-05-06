@@ -33,7 +33,7 @@ Apply a sensitive quiet-hours governance policy to a governed runtime. The chang
 
 - **Requester**: `platform-admin`
 - **Approver**: `security-admin`
-- **Governed runtime**: simulated OpenClaw-compatible runtime
+- **Governed runtime**: simulated external runtime adapter
 - **Operator surface**: canvas runtime inspector
 
 ## Preconditions

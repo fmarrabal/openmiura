@@ -40,7 +40,7 @@ Use this checklist before distributing a self-hosted Enterprise Alpha build of o
 - [ ] At least one approval-requiring flow was exercised.
 - [ ] At least one audit trail / operator timeline was inspected.
 - [ ] Secret references were tested without exposing cleartext secrets in prompts or logs.
-- [ ] If OpenClaw is part of the pilot, one governed runtime dispatch was validated.
+- [ ] If an external runtime is part of the pilot, one governed runtime dispatch was validated.
 
 ## 5. Security and operations checks
 

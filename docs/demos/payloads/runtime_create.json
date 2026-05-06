@@ -1,7 +1,7 @@
 {
   "actor": "admin",
   "name": "canonical-governed-runtime",
-  "base_url": "simulated://openclaw",
+  "base_url": "simulated://external-runtime",
   "transport": "simulated",
   "allowed_agents": ["default"],
   "tenant_id": "tenant-a",

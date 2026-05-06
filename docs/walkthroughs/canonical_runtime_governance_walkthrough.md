@@ -25,7 +25,7 @@ The goal is not to show that a model can answer a prompt. The goal is to show th
 
 - **Requester**: `platform-admin`
 - **Approver**: `security-admin`
-- **Governed runtime**: simulated OpenClaw-compatible runtime
+- **Governed runtime**: simulated external runtime adapter
 - **Operator surface**: canvas runtime inspector
 
 ## Preconditions
