@@ -142,6 +142,9 @@ notes-local/
 # Local canonical demo / sample run outputs
 demo_artifacts/
 
+# Personal / per-user config overrides (system prompts, personas, etc.)
+configs/personal/
+
 # committed environment profile templates
 !ops/
 !ops/env/
