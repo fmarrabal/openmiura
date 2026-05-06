@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import app as app_module
-from openmiura.application.openclaw.scheduler import OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external.scheduler import OpenClawRecoverySchedulerService
 from openmiura.gateway import Gateway
 from tests.test_openclaw_portfolio_environment_envelopes_conformance_v2 import _approve_all_portfolio_approvals
 from tests.test_openclaw_portfolio_environment_tiered_governance_v2 import (

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 from openmiura.application.canvas.service import LiveCanvasService
-from openmiura.application.openclaw.scheduler import OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external.scheduler import OpenClawRecoverySchedulerService
 from openmiura.gateway import Gateway
 from tests.test_openclaw_portfolio_baseline_catalog_promotion_v2 import (
     _create_baseline_catalog,

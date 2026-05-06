@@ -12,7 +12,7 @@ from typing import Any
 class OpenClawRuntimeAlertNotificationsMixin:
     @staticmethod
     def _notification_urlopen(req, timeout: float = 10.0):
-        scheduler_module = sys.modules.get('openmiura.application.openclaw.scheduler')
+        scheduler_module = sys.modules.get('openmiura.application.runtime_adapters.external.scheduler')
         if scheduler_module is not None:
             scheduler_urllib = getattr(scheduler_module, 'urllib', None)
             if scheduler_urllib is not None and hasattr(getattr(scheduler_urllib, 'request', None), 'urlopen'):

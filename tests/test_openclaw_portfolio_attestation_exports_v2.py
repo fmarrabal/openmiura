@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 import app as app_module
 from openmiura.gateway import Gateway
 import openmiura.application.jobs.service as job_service_mod
-import openmiura.application.openclaw.scheduler as scheduler_mod
-import openmiura.application.openclaw.service as openclaw_service_mod
+import openmiura.application.runtime_adapters.external.scheduler as scheduler_mod
+import openmiura.application.runtime_adapters.external.service as openclaw_service_mod
 
 
 def _write_config(path: Path) -> None:

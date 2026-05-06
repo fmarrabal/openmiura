@@ -89,7 +89,7 @@ def test_runtime_alert_escalation_dispatches_real_targets_and_surfaces_them_in_c
         return _FakeWebhookResponse({'accepted': True}, status=202)
 
     monkeypatch.setattr(SlackClient, 'post_message', _fake_post_message)
-    monkeypatch.setattr('openmiura.application.openclaw.scheduler.urllib.request.urlopen', _fake_urlopen)
+    monkeypatch.setattr('openmiura.application.runtime_adapters.external.scheduler.urllib.request.urlopen', _fake_urlopen)
 
     with TestClient(app) as client:
         client.app.state.gw.mailer = _FakeMailer()

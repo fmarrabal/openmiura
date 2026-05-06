@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 from openmiura.gateway import Gateway
-import openmiura.application.openclaw.scheduler as scheduler_mod
+import openmiura.application.runtime_adapters.external.scheduler as scheduler_mod
 from tests.test_openclaw_portfolio_evidence_artifact_restore_v2 import _tamper_artifact_content
 from tests.test_openclaw_portfolio_evidence_packaging_v2 import (
     _create_runtime,

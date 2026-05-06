@@ -14,8 +14,8 @@ from openmiura.application.canvas.helpers import (
     sanitize_scope,
 )
 from openmiura.application.canvas.service import LiveCanvasService
-from openmiura.application.openclaw.scheduler import OpenClawRecoverySchedulerService
-from openmiura.application.openclaw.scheduler_primitives import (
+from openmiura.application.runtime_adapters.external.scheduler import OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external.scheduler_primitives import (
     alert_delivery_job_definition,
     baseline_simulation_custody_job_definition,
     baseline_simulation_custody_job_id,
