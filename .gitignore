@@ -136,6 +136,12 @@ notes-local/
 # GitHub Actions local runner temp
 .runner/
 
+# Claude Code local state (worktrees, settings, session data)
+.claude/
+
+# Local canonical demo / sample run outputs
+demo_artifacts/
+
 # committed environment profile templates
 !ops/
 !ops/env/
