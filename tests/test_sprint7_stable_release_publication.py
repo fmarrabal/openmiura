@@ -32,13 +32,13 @@ def test_release_workflow_supports_stable_publication_to_github_release() -> Non
 
 
 def test_stable_release_publication_docs_are_linked_and_define_rc_vs_stable_policy() -> None:
-    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
     docs_index = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
     publication = (ROOT / 'docs' / 'release_publication.md').read_text(encoding='utf-8')
     checklist = (ROOT / 'docs' / 'github_pr_merge_publish_checklist.md').read_text(encoding='utf-8')
     rc = (ROOT / 'docs' / 'release_candidate.md').read_text(encoding='utf-8')
 
-    assert 'docs/release_publication.md' in readme
+    # Phase 0: release-publication policy link lives in docs/README.md,
+    # not in the top-level README.md.
     assert 'release_publication.md' in docs_index
     assert 'RC / pre-release' in publication
     assert 'Stable releases are the first GitHub Releases that carry the official downloadable artifact set.' in publication

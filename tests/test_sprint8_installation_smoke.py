@@ -106,12 +106,12 @@ def test_reproducible_manifest_keeps_files_when_root_path_contains_data(tmp_path
 
 
 def test_installation_docs_define_bundle_as_official_route() -> None:
-    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
     install = (ROOT / 'docs' / 'installation.md').read_text(encoding='utf-8')
     publication = (ROOT / 'docs' / 'release_publication.md').read_text(encoding='utf-8')
 
-    assert 'stable reproducible bundle' in readme
-    assert 'ops/env/local-secure.env' in readme
+    # Phase 0: README is the short hype-free entry point. The phrasing
+    # "stable reproducible bundle" / per-profile env paths live in
+    # docs/installation.md and docs/release_publication.md.
     assert 'official minimum adoption path' in install
     assert 'reproducible bundle zip' in install
     assert 'wheel' in install and 'sdist' in install

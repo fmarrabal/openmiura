@@ -20,7 +20,7 @@ def test_enterprise_alpha_docs_cover_installation_risks_limitations_and_checklis
     assert 'openmiura doctor --config configs/openmiura.yaml' in guide
     assert 'scripts/build_release_artifacts.py' in guide
     assert 'scripts/verify_release_artifacts.py' in guide
-    assert 'OpenClaw' in guide
+    # Phase 0: "OpenClaw" replaced with "external runtime" terminology.
 
     assert 'Enterprise Alpha release checklist' in checklist
     assert 'SHA256SUMS.txt' in checklist
@@ -33,7 +33,6 @@ def test_docs_index_and_primary_guides_link_to_enterprise_alpha_material() -> No
     docs_index = (ROOT / 'docs/README.md').read_text(encoding='utf-8')
     installation = (ROOT / 'docs/installation.md').read_text(encoding='utf-8')
     production = (ROOT / 'docs/production.md').read_text(encoding='utf-8')
-    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
 
     assert 'enterprise_alpha.md' in docs_index
     assert 'alpha_release_checklist.md' in docs_index
@@ -47,6 +46,5 @@ def test_docs_index_and_primary_guides_link_to_enterprise_alpha_material() -> No
     assert 'alpha_release_checklist.md' in production
     assert 'release_candidate.md' in production
     assert 'release_support_matrix.md' in production
-    assert 'docs/enterprise_alpha.md' in readme
-    assert 'docs/release_candidate.md' in readme
-    assert 'docs/release_support_matrix.md' in readme
+    # Phase 0: README is the short, hype-free entry point. Specific
+    # release/alpha doc links live in docs/README.md, not in README.md.
