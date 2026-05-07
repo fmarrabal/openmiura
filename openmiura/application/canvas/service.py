@@ -20,7 +20,7 @@ from openmiura.application.canvas.helpers import (
 )
 from openmiura.application.costs import CostGovernanceService
 from openmiura.application.operator import OperatorConsoleService
-from openmiura.application.openclaw import OpenClawAdapterService, OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external import OpenClawAdapterService, OpenClawRecoverySchedulerService
 from openmiura.application.secrets import SecretGovernanceService
 from openmiura.core.contracts import AdminGatewayLike
 

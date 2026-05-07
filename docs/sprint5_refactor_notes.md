@@ -4,7 +4,7 @@ This sprint reduces maintenance pressure on three high-risk service modules with
 
 - `openmiura/application/admin/service.py`
 - `openmiura/application/canvas/service.py`
-- `openmiura/application/openclaw/scheduler.py`
+- `openmiura/application/runtime_adapters/external/scheduler.py`
 
 ## What was extracted
 
@@ -16,8 +16,8 @@ This sprint reduces maintenance pressure on three high-risk service modules with
 - `openmiura/application/canvas/helpers.py`
 - isolates payload sizing, scope normalization, limit enforcement, safe calls, toggle normalization, and redaction helpers
 
-### OpenClaw scheduler
-- `openmiura/application/openclaw/scheduler_primitives.py`
+### External runtime scheduler
+- `openmiura/application/runtime_adapters/external/scheduler_primitives.py`
 - isolates workflow job descriptors, lease/idempotency keys, worker lease decoration, and scheduler policy normalization
 
 ## Goal

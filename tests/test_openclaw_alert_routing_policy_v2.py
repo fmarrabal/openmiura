@@ -265,7 +265,7 @@ def test_alert_routing_retry_job_runs_due_and_delivers_on_second_attempt(tmp_pat
             raise urllib.error.URLError('temporary-failure')
         return _FakeWebhookResponse({'accepted': True}, status=202)
 
-    monkeypatch.setattr('openmiura.application.openclaw.scheduler.urllib.request.urlopen', _fake_urlopen)
+    monkeypatch.setattr('openmiura.application.runtime_adapters.external.scheduler.urllib.request.urlopen', _fake_urlopen)
 
     with TestClient(app) as client:
         headers = {'Authorization': 'Bearer secret-admin'}

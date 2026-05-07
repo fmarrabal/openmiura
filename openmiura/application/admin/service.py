@@ -16,7 +16,7 @@ import yaml
 from openmiura.application.costs import CostGovernanceService
 from openmiura.application.evaluations import EvaluationService
 from openmiura.application.memory import MemoryService
-from openmiura.application.openclaw import OpenClawAdapterService, OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external import OpenClawAdapterService, OpenClawRecoverySchedulerService
 from openmiura.application.operator import OperatorConsoleService
 from openmiura.application.replay import ReplayService
 from openmiura.application.releases import ReleaseService

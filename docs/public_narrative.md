@@ -32,7 +32,7 @@ Avoid these framings:
 - “another AI assistant”
 - “the best chatbot for enterprises”
 - “a universal autonomous agent”
-- “a replacement for OpenClaw”
+- “a replacement for an external agent runtime”
 - any claim that implies fully autonomous operation without governance boundaries
 
 ## Canonical proof point
@@ -52,12 +52,12 @@ That case shows a single operational story:
 
 This is the shortest serious explanation of why openMiura exists.
 
-## OpenClaw framing
+## External runtime framing
 
-Use this exact framing publicly:
+Use this framing publicly when external agent runtimes come up:
 
-- **OpenClaw is one governed runtime that openMiura can supervise.**
-- **OpenClaw is not the product identity of openMiura.**
+- **An external runtime is one governed runtime that openMiura can supervise.**
+- **The external runtime is not the product identity of openMiura.**
 - **openMiura does not need to replace the runtime to govern it.**
 
 That keeps the product thesis intact:

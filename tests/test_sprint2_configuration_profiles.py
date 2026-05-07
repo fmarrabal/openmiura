@@ -59,13 +59,13 @@ def test_profile_templates_exist_and_stay_consistent() -> None:
 
 
 def test_configuration_profile_docs_reference_precedence_and_profiles() -> None:
-    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
     installation = (ROOT / 'docs' / 'installation.md').read_text(encoding='utf-8')
     production = (ROOT / 'docs' / 'production.md').read_text(encoding='utf-8')
     profile_doc = (ROOT / 'docs' / 'configuration_profiles.md').read_text(encoding='utf-8')
 
-    assert 'ops/env/secure-default.env' in readme
-    assert 'docs/configuration_profiles.md' in readme
+    # Phase 0: README is intentionally short. Per-profile env paths and
+    # links to configuration_profiles.md live in installation.md /
+    # production.md / configuration_profiles.md, not in README.md.
     assert 'cp ops/env/secure-default.env .env' in installation
     assert 'cp ops/env/production-like.env .env' in production
     assert 'env:NOMBRE_VARIABLE|valor_por_defecto' in profile_doc

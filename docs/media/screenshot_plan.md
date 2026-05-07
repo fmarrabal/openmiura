@@ -100,12 +100,6 @@ Read from report:
 
 - `steps.pending_approvals_before_decision`
 
-Or query the live endpoint:
-
-```text
-/admin/openclaw/alert-governance-promotion-approvals
-```
-
 ### 05 · `05-canvas-inspector-action.png`
 
 **What to capture**

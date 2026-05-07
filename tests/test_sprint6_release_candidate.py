@@ -6,7 +6,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_candidate_docs_exist_and_are_linked() -> None:
-    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
     docs_index = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
     installation = (ROOT / 'docs' / 'installation.md').read_text(encoding='utf-8')
     production = (ROOT / 'docs' / 'production.md').read_text(encoding='utf-8')
@@ -15,9 +14,8 @@ def test_release_candidate_docs_exist_and_are_linked() -> None:
     assert (ROOT / 'docs' / 'release_candidate.md').exists()
     assert (ROOT / 'docs' / 'release_support_matrix.md').exists()
     assert (ROOT / 'docs' / 'quickstarts' / 'release_candidate.md').exists()
-    assert 'docs/release_candidate.md' in readme
-    assert 'docs/release_support_matrix.md' in readme
-    assert 'RELEASE_NOTES_RC1.md' in readme
+    # Phase 0: release-candidate links live in docs/README.md,
+    # docs/installation.md and docs/production.md, not in README.md.
     assert 'release_candidate.md' in docs_index
     assert 'release_support_matrix.md' in docs_index
     assert 'quickstarts/release_candidate.md' in installation

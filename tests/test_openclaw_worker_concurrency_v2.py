@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import app as app_module
-from openmiura.application.openclaw import OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external import OpenClawRecoverySchedulerService
 from openmiura.gateway import Gateway
 
 

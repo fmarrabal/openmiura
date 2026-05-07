@@ -103,7 +103,7 @@ Contains the internal foundations:
 
 ### Extensions/runtime layer
 
-Contains tools, providers, skills, channels, and future runtime integrations such as OpenClaw compatibility.
+Contains tools, providers, skills, channels, and external runtime adapters.
 
 ## Recommended first developer tasks
 
@@ -190,7 +190,7 @@ The most valuable tests are often not purely functional. They check guarantees s
 - relying on local assumptions that break in CI or self-hosted deployments;
 - adding new runtime power without adding audit evidence.
 
-## If you are implementing OpenClaw compatibility
+## If you are implementing an external runtime adapter
 
 The right mental model is:
 

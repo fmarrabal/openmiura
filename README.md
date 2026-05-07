@@ -5,242 +5,113 @@
 <h1 align="center">openMiura</h1>
 
 <p align="center">
-  Governed Agent Operations Platform
+  Open governance plane for LLM agents, with a focus on auditable, regulated environments.
 </p>
 
 <p align="center">
-  Bring your runtime. openMiura governs it.
-</p>
-
-<p align="center">
-  Local-first • Multi-tenant • Policy-driven • Auditable • Extensible
+  <strong>Status:</strong> experimental
 </p>
 
 ---
 
-## What openMiura is
+## What it is
 
-openMiura is a **governed agent operations platform**: a control plane that sits in front of agent runtimes and operational automations to enforce **policy, approvals, evidence, auditability, and operator visibility**.
+openMiura is an open-source governance layer that sits in front of
+LLM-driven agent runtimes. It evaluates each action against policy,
+gates sensitive operations behind human approvals, records every step
+in an append-only audit trail, and emits tamper-evident evidence
+packs. The target use case is environments where the audit trail is
+itself part of the deliverable — biomedical research, regulated
+laboratories, scientific computing under quality systems.
 
-The product thesis is deliberately simple:
+The core primitives are:
 
-- **the runtime executes**
-- **openMiura governs**
+- **policy engine** — declarative rules over actions and contexts;
+- **approval gates** — human-in-the-loop with signer, meaning, and timestamp;
+- **evidence packs** — signed exports linking decisions to underlying records;
+- **scope isolation** — `tenant / workspace / environment` partitioning.
 
-That makes openMiura useful when an organization wants to run agentic systems across HTTP, channels, workflows, or external runtimes, but cannot accept ungoverned execution.
+## What it is not
 
-## What problem it solves
+- Not a chatbot or a thin wrapper around a model API.
+- Not a replacement for an agent runtime; it supervises one.
+- Not a certified compliance product. It maps to regulatory controls
+  (21 CFR Part 11, EU GMP Annex 11, GAMP 5, ALCOA+); certification
+  remains the responsibility of the operating organization.
+- Not stable. Most components are `experimental`; a few are `beta`.
+  None are `stable` yet.
 
-Most agent demos optimize for capability. Production teams usually need answers to different questions:
+## What works today
 
-- who can execute what;
-- in which tenant, workspace, and environment;
-- under which policy;
-- with which approval chain;
-- with what evidence afterward;
-- and how the action can be inspected, replayed, or rolled back.
+Verifiable on a local clone:
 
-openMiura focuses on those operational questions.
+- A canonical end-to-end demo runs locally and produces a real audit
+  trail with policy evaluation, human approval, signed release
+  evidence, and a reviewable canvas inspector:
+  ```bash
+  python scripts/run_canonical_demo.py --output /tmp/demo.json
+  ```
+  Returns `success=True`.
+- The unit test suite passes:
+  ```bash
+  pytest -q --tb=no -p no:cacheprovider tests/unit
+  ```
+- A FastAPI HTTP application exposing health, UI, and metrics surfaces.
+- Adapters for Telegram, Slack, and Discord channels.
+- An MCP integration surface for tool brokering.
+- An `openmiura doctor` CLI command that validates a configuration.
 
-## Why it is not another assistant
+Internal patterns (god-object persistence layer, large auto-generated
+modules) are being refactored. See the master plan for the schedule.
 
-openMiura is **not** positioned as:
-
-- a general-purpose chatbot;
-- a thin wrapper around LLM APIs;
-- a replacement identity for external runtimes such as OpenClaw.
-
-It is the governance layer around runtime actions and agentic operations.
-
-## The quickest serious evaluation path
-
-For a first external evaluation, use this route:
-
-1. install from the **stable reproducible bundle** using the [installation guide](docs/installation.md);
-2. validate the install with `openmiura doctor --config configs/openmiura.yaml`;
-3. run the [canonical public demo](docs/demos/canonical_demo.md);
-4. inspect the [public walkthrough](docs/walkthroughs/canonical_runtime_governance_walkthrough.md).
-
-Recommended first-start profile:
-
-```text
-ops/env/local-secure.env
-```
-
-## Canonical public demo
-
-The recommended public demo is **Governed runtime alert policy activation**.
-
-Run it in self-contained mode:
+## Quick start
 
 ```bash
-python scripts/run_canonical_demo.py --output demo_artifacts/canonical-demo-report.json
-```
-
-That single case demonstrates:
-
-- a sensitive operational change request over HTTP;
-- policy evaluation and approval gating;
-- operator review through a canvas runtime inspector;
-- execution only after human approval;
-- signed release evidence and audit trail.
-
-See these companion docs:
-
-- [Canonical demo](docs/demos/canonical_demo.md)
-- [Canonical walkthrough](docs/walkthroughs/canonical_runtime_governance_walkthrough.md)
-- [Screenshot plan](docs/media/screenshot_plan.md)
-
-## OpenClaw in this story
-
-OpenClaw is one **governed runtime** that openMiura can supervise. It is not the product identity of openMiura and it is not the conceptual replacement for openMiura.
-
-The public framing is:
-
-- **OpenClaw executes runtime work**
-- **openMiura governs the operation around it**
-
-## Core capability areas
-
-### Governed execution
-
-- policy-aware runtime dispatch
-- action gating and confirmation flows
-- tenant / workspace / environment scoping
-- role-aware control surfaces
-
-### Workflows and approvals
-
-- approval steps, decision, cancellation, and assignment flows
-- gated operational actions exposed through admin and canvas inspectors
-- human-in-the-loop governance for sensitive changes
-
-### Evidence and audit
-
-- audit-first persistence model
-- evidence package generation and export flows
-- release signatures and traceability surfaces
-- replay-oriented operational records
-
-### Operator visibility
-
-- live operational canvas documents and nodes
-- inspectors with contextual actions
-- runtime timelines and governance-oriented views
-- observable review surfaces for operators and approvers
-
-### Integrations and runtime posture
-
-- FastAPI HTTP application
-- HTTP broker surface
-- MCP server integration
-- Telegram, Slack, and Discord channel adapters
-- OpenClaw governance adapter
-- local-first default posture with configurable infrastructure
-
-## Installation and validation
-
-The recommended path for external users is the **stable reproducible bundle** from the GitHub Release, not an editable developer checkout.
-
-Validation flow:
-
-```bash
+git clone https://github.com/fmarrabal/openmiura.git
+cd openmiura
+pip install -e .[dev]
 openmiura doctor --config configs/openmiura.yaml
-openmiura run --config configs/openmiura.yaml
+python scripts/run_canonical_demo.py --output /tmp/demo.json
 ```
 
-Key surfaces:
+Requires Python ≥ 3.10.
 
-- health: `http://127.0.0.1:8081/health`
-- UI: `http://127.0.0.1:8081/ui`
-- metrics: `http://127.0.0.1:8081/metrics`
+## Architecture
 
-Use the detailed guide here:
-
-- [Installation](docs/installation.md)
-- [Stable release publication policy](docs/release_publication.md)
-
-## Public documentation map
-
-### Start here
-
-- [Public narrative](docs/public_narrative.md)
-- [Installation](docs/installation.md)
-- [Canonical demo](docs/demos/canonical_demo.md)
-- [Canonical walkthrough](docs/walkthroughs/canonical_runtime_governance_walkthrough.md)
-- [Stable release publication policy](docs/release_publication.md)
-- [Enterprise alpha guide](docs/enterprise_alpha.md)
-- [Release Candidate RC1](docs/release_candidate.md)
-- [Release support matrix](docs/release_support_matrix.md)
-
-### Public-facing media pack
-
-- [Screenshot plan](docs/media/screenshot_plan.md)
-- [Medium article outline](docs/media/medium_article_outline.md)
-- [Medium article final](docs/media/medium_article_final.md)
-- [Medium article publication pack](docs/media/medium_article_publication_pack.md)
-- [Stable release final pack](docs/release/stable_release_final_pack.md)
-- [Publication reuse note](docs/media/publication_reuse_note.md)
-
-### Product and platform docs
-
-- [Documentation index](docs/README.md)
-- [Deployment](docs/deployment.md)
-- [Production](docs/production.md)
-- [Observability](docs/observability.md)
-- [Security](docs/security.md)
-- [Backup and restore](docs/backup_restore.md)
-- [Migrations](docs/migrations.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [LLM providers](docs/llm_providers.md)
-- [MCP broker integration](docs/mcp_broker_integration.md)
-- [Extension SDK](docs/extensions_sdk.md)
-- [Extension registry](docs/extensions_registry.md)
-
-## Current status
-
-This bundle is suitable for:
-
-- local development;
-- controlled internal evaluation;
-- private collaboration;
-- staged hardening for self-hosted enterprise-style deployments.
-
-It already contains substantial implementation across governance, approvals, canvas operations, release flows, evidence handling, and runtime control. Stable external use still depends on your concrete identity, secret-management, infrastructure, and operating model choices.
-
-## Validation
-
-Typical local validation flow:
-
-```bash
-python -m compileall -q app.py openmiura tests
-pytest -q
+```
+        +------------------+
+        |  agent runtime   |   any LLM-driven runtime
+        +---------+--------+
+                  |
+                  v
+        +---------+--------+        +------------------+
+        | openMiura plane  +------->|  evidence pack   |
+        |  policy / gates  |        |  (signed export) |
+        |  audit / scope   |        +------------------+
+        +---------+--------+
+                  |
+                  v
+        +------------------+
+        | persistence + UI |
+        +------------------+
 ```
 
-## Contributing
+The control plane intercepts agent actions, applies policy, requests
+approvals when required, records every step in an append-only audit
+trail, and emits evidence packs that link decisions to underlying
+records. Scope (`tenant / workspace / environment`) is enforced at the
+persistence layer so multi-context deployments stay isolated.
 
-Contributions are especially valuable in:
+## Roadmap
 
-- runtime adapters;
-- policy and approval features;
-- canvas and operator experience;
-- security and evidence hardening;
-- documentation and deployment workflows;
-- tests and regression coverage.
-
-Before contributing:
-
-1. read the relevant docs in `docs/`;
-2. run the validation steps locally;
-3. avoid committing secrets or generated runtime artifacts;
-4. keep changes aligned with the governed-agent-operations model.
+The 4-week working plan and the long-term direction are tracked in
+`docs/STRATEGY.md` (to be added in a later phase of the master plan).
 
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
-## Release and profile references
+## Disclosure
 
-- Configuration profiles guide: `docs/configuration_profiles.md`
-- Baseline secure profile: `ops/env/secure-default.env`
-- RC1 checkpoint notes: `RELEASE_NOTES_RC1.md`
+This repository has been developed with LLM assistance under
+continuous human review. See [AGENTS.md](AGENTS.md).

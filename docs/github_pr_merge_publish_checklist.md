@@ -56,7 +56,7 @@ Mark any deviation explicitly in the PR description.
 
 - [ ] The PR is framed as release-readiness / controlled-publication work, not a new macro-phase.
 - [ ] Product thesis remains stable: openMiura is a governed agent operations platform / control plane.
-- [ ] OpenClaw is still described as a governed runtime, not as the product identity.
+- [ ] External runtimes are still described as governed runtimes, not as the product identity.
 
 ## 3. Final PR checklist
 

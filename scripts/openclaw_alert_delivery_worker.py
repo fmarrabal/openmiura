@@ -4,7 +4,7 @@ import os
 import random
 import time
 
-from openmiura.application.openclaw import OpenClawRecoverySchedulerService
+from openmiura.application.runtime_adapters.external import OpenClawRecoverySchedulerService
 from openmiura.core.config import load_settings
 from openmiura.gateway import Gateway
 
