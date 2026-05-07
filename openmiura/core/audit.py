@@ -10,6 +10,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from .db import DBConnection, CompatRow
 from .migrations import apply_migrations
 from .tenancy.scope import assert_scope_match, normalize_scope
+from openmiura.persistence.base import row_scope as _row_scope_fn
+from openmiura.persistence.base import scope_payload as _scope_payload_fn
+from openmiura.persistence.base import scope_where as _scope_where_fn
 
 
 class AuditStore:
@@ -37,34 +40,14 @@ class AuditStore:
 
     @staticmethod
     def _scope_payload(*, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
-        return {
-            "tenant_id": str(tenant_id).strip() if tenant_id is not None else None,
-            "workspace_id": str(workspace_id).strip() if workspace_id is not None else None,
-            "environment": str(environment).strip() if environment is not None else None,
-        }
+        return _scope_payload_fn(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     @staticmethod
     def _row_scope(row: Any) -> dict[str, Any]:
-        scope: dict[str, Any] = {}
-        for key in ("tenant_id", "workspace_id", "environment"):
-            try:
-                scope[key] = row[key]
-            except Exception:
-                scope[key] = None
-        return scope
+        return _row_scope_fn(row)
 
     def _scope_where(self, clauses: list[str], params: list[Any], *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None, prefix: str = "") -> tuple[list[str], list[Any]]:
-        lead = f"{prefix}." if prefix else ""
-        if tenant_id is not None:
-            clauses.append(f"{lead}tenant_id=?")
-            params.append(tenant_id)
-        if workspace_id is not None:
-            clauses.append(f"{lead}workspace_id=?")
-            params.append(workspace_id)
-        if environment is not None:
-            clauses.append(f"{lead}environment=?")
-            params.append(environment)
-        return clauses, params
+        return _scope_where_fn(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment, prefix=prefix)
 
     def _infer_scope_from_session(self, session_id: str) -> dict[str, Any]:
         if not session_id:
