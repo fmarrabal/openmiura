@@ -16,6 +16,7 @@ from openmiura.persistence.base import scope_payload as _scope_payload_fn
 from openmiura.persistence.base import scope_where as _scope_where_fn
 from openmiura.persistence.apps_repo import AppsRepo
 from openmiura.persistence.auth_repo import AuthRepo
+from openmiura.persistence.canvas_repo import CanvasRepo
 from openmiura.persistence.evaluations_repo import EvaluationsRepo
 from openmiura.persistence.memory_repo import MemoryRepo
 from openmiura.persistence.tools_repo import ToolsRepo
@@ -40,6 +41,7 @@ class AuditStore:
         self._conn = DBConnection(backend=self.backend, db_path=self.db_path, database_url=self.database_url)
         self._apps = AppsRepo(self._conn)
         self._auth = AuthRepo(self._conn)
+        self._canvas = CanvasRepo(self._conn)
         self._evaluations = EvaluationsRepo(self._conn)
         self._memory = MemoryRepo(self._conn)
         self._tools = ToolsRepo(self._conn)
@@ -2362,203 +2364,34 @@ class AuditStore:
 
 
     def _canvas_document_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'canvas_id': row['canvas_id'],
-            'title': row['title'],
-            'description': row['description'] or '',
-            'status': row['status'],
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'metadata': metadata,
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_document_row_to_dict(row)
 
     def _canvas_node_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            data = json.loads(row['data_json'] or '{}')
-        except Exception:
-            data = {}
-        return {
-            'node_id': row['node_id'],
-            'canvas_id': row['canvas_id'],
-            'node_type': row['node_type'],
-            'label': row['label'] or '',
-            'position_x': float(row['position_x']),
-            'position_y': float(row['position_y']),
-            'width': float(row['width']),
-            'height': float(row['height']),
-            'data': data,
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_node_row_to_dict(row)
 
     def _canvas_edge_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            data = json.loads(row['data_json'] or '{}')
-        except Exception:
-            data = {}
-        return {
-            'edge_id': row['edge_id'],
-            'canvas_id': row['canvas_id'],
-            'source_node_id': row['source_node_id'],
-            'target_node_id': row['target_node_id'],
-            'label': row['label'] or '',
-            'edge_type': row['edge_type'] or 'default',
-            'data': data,
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_edge_row_to_dict(row)
 
     def _canvas_view_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            layout = json.loads(row['layout_json'] or '{}')
-        except Exception:
-            layout = {}
-        try:
-            filters = json.loads(row['filters_json'] or '{}')
-        except Exception:
-            filters = {}
-        return {
-            'view_id': row['view_id'],
-            'canvas_id': row['canvas_id'],
-            'name': row['name'] or '',
-            'layout': layout,
-            'filters': filters,
-            'is_default': bool(row['is_default']),
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_view_row_to_dict(row)
 
     def _canvas_presence_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'presence_id': row['presence_id'],
-            'canvas_id': row['canvas_id'],
-            'user_key': row['user_key'],
-            'cursor_x': float(row['cursor_x']),
-            'cursor_y': float(row['cursor_y']),
-            'selected_node_id': row['selected_node_id'] or '',
-            'status': row['status'],
-            'metadata': metadata,
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_presence_row_to_dict(row)
 
     def _canvas_overlay_state_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            toggles = json.loads(row['toggles_json'] or '{}')
-        except Exception:
-            toggles = {}
-        try:
-            inspector = json.loads(row['inspector_json'] or '{}')
-        except Exception:
-            inspector = {}
-        return {
-            'overlay_state_id': row['overlay_state_id'],
-            'canvas_id': row['canvas_id'],
-            'state_key': row['state_key'] or 'default',
-            'toggles': toggles,
-            'inspector': inspector,
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_overlay_state_row_to_dict(row)
 
     def _canvas_comment_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'comment_id': row['comment_id'],
-            'canvas_id': row['canvas_id'],
-            'node_id': row['node_id'] or '',
-            'body': row['body'] or '',
-            'author': row['author'] or '',
-            'status': row['status'] or 'active',
-            'metadata': metadata,
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_comment_row_to_dict(row)
 
     def _canvas_snapshot_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            snapshot = json.loads(row['snapshot_json'] or '{}')
-        except Exception:
-            snapshot = {}
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'snapshot_id': row['snapshot_id'],
-            'canvas_id': row['canvas_id'],
-            'snapshot_kind': row['snapshot_kind'] or 'manual',
-            'label': row['label'] or '',
-            'view_id': row['view_id'] or '',
-            'share_token': row['share_token'] or '',
-            'snapshot': snapshot,
-            'metadata': metadata,
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_snapshot_row_to_dict(row)
 
     def _canvas_presence_event_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            payload = json.loads(row['payload_json'] or '{}')
-        except Exception:
-            payload = {}
-        return {
-            'presence_event_id': row['presence_event_id'],
-            'canvas_id': row['canvas_id'],
-            'user_key': row['user_key'] or '',
-            'event_type': row['event_type'] or 'presence',
-            'payload': payload,
-            'created_at': float(row['created_at']),
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._canvas._canvas_presence_event_row_to_dict(row)
 
     def count_canvas_overlay_states(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_overlay_states'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_overlay_states(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def upsert_canvas_overlay_state(
         self,
@@ -2572,66 +2405,25 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now = time.time()
-        existing = cur.execute('SELECT overlay_state_id, created_at FROM canvas_overlay_states WHERE canvas_id=? AND state_key=? LIMIT 1', (canvas_id, state_key)).fetchone()
-        if existing is None:
-            overlay_state_id = str(uuid.uuid4())
-            created_at = now
-            cur.execute('INSERT INTO canvas_overlay_states(overlay_state_id, canvas_id, state_key, toggles_json, inspector_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (overlay_state_id, canvas_id, state_key, json.dumps(toggles or {}, ensure_ascii=False), json.dumps(inspector or {}, ensure_ascii=False), created_by, created_at, now, tenant_id, workspace_id, environment))
-        else:
-            overlay_state_id = existing['overlay_state_id']
-            created_at = float(existing['created_at'])
-            cur.execute('UPDATE canvas_overlay_states SET toggles_json=?, inspector_json=?, created_by=?, created_at=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE overlay_state_id=?', (json.dumps(toggles or {}, ensure_ascii=False), json.dumps(inspector or {}, ensure_ascii=False), created_by, created_at, now, tenant_id, workspace_id, environment, overlay_state_id))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_overlay_states(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['overlay_state_id']==overlay_state_id), {'overlay_state_id': overlay_state_id})
+        return self._canvas.upsert_canvas_overlay_state(canvas_id=canvas_id, state_key=state_key, toggles=toggles, inspector=inspector, created_by=created_by, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_overlay_states(self, *, canvas_id: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT overlay_state_id, canvas_id, state_key, toggles_json, inspector_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM canvas_overlay_states WHERE ' + ' AND '.join(clauses) + ' ORDER BY updated_at DESC'
-        return [self._canvas_overlay_state_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_overlay_states(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_documents(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_documents'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_documents(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_nodes(self, *, canvas_id: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        if canvas_id is not None:
-            clauses.append('canvas_id=?'); params.append(canvas_id)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_nodes'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_nodes(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_edges(self, *, canvas_id: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        if canvas_id is not None:
-            clauses.append('canvas_id=?'); params.append(canvas_id)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_edges'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_edges(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_views(self, *, canvas_id: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        if canvas_id is not None:
-            clauses.append('canvas_id=?'); params.append(canvas_id)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_views'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_views(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_presence(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_presence'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_presence(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def create_canvas_document(
         self,
@@ -2645,31 +2437,13 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        canvas_id = str(uuid.uuid4())
-        now = time.time()
-        cur = self._conn.cursor()
-        cur.execute(
-            'INSERT INTO canvas_documents(canvas_id, title, description, status, created_by, created_at, updated_at, metadata_json, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-            (canvas_id, title, description, status, created_by, now, now, json.dumps(metadata or {}, ensure_ascii=False), tenant_id, workspace_id, environment),
-        )
-        self._conn.commit()
-        return self.get_canvas_document(canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) or {'canvas_id': canvas_id}
+        return self._canvas.create_canvas_document(title=title, description=description, status=status, created_by=created_by, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_documents(self, *, limit: int = 50, status: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        if status is not None:
-            clauses.append('status=?'); params.append(status)
-        sql='SELECT canvas_id, title, description, status, created_by, created_at, updated_at, metadata_json, tenant_id, workspace_id, environment FROM canvas_documents'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY updated_at DESC LIMIT ?'; params.append(int(limit))
-        return [self._canvas_document_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_documents(limit=limit, status=status, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def get_canvas_document(self, canvas_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        row = cur.execute('SELECT canvas_id, title, description, status, created_by, created_at, updated_at, metadata_json, tenant_id, workspace_id, environment FROM canvas_documents WHERE ' + ' AND '.join(clauses) + ' LIMIT 1', tuple(params)).fetchone()
-        return self._canvas_document_row_to_dict(row) if row is not None else None
+        return self._canvas.get_canvas_document(canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def upsert_canvas_node(
         self,
@@ -2688,21 +2462,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); next_id = str(node_id or uuid.uuid4())
-        existing = cur.execute('SELECT node_id FROM canvas_nodes WHERE node_id=? LIMIT 1', (next_id,)).fetchone()
-        if existing is None:
-            cur.execute('INSERT INTO canvas_nodes(node_id, canvas_id, node_type, label, position_x, position_y, width, height, data_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (next_id, canvas_id, node_type, label, float(position_x), float(position_y), float(width), float(height), json.dumps(data or {}, ensure_ascii=False), created_by, now, now, tenant_id, workspace_id, environment))
-        else:
-            cur.execute('UPDATE canvas_nodes SET canvas_id=?, node_type=?, label=?, position_x=?, position_y=?, width=?, height=?, data_json=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE node_id=?', (canvas_id, node_type, label, float(position_x), float(position_y), float(width), float(height), json.dumps(data or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment, next_id))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_nodes(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['node_id']==next_id), {'node_id': next_id})
+        return self._canvas.upsert_canvas_node(canvas_id=canvas_id, node_id=node_id, node_type=node_type, label=label, position_x=position_x, position_y=position_y, width=width, height=height, data=data, created_by=created_by, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_nodes(self, *, canvas_id: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT node_id, canvas_id, node_type, label, position_x, position_y, width, height, data_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM canvas_nodes WHERE ' + ' AND '.join(clauses) + ' ORDER BY updated_at ASC'
-        return [self._canvas_node_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_nodes(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def upsert_canvas_edge(
         self,
@@ -2719,21 +2482,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); next_id = str(edge_id or uuid.uuid4())
-        existing = cur.execute('SELECT edge_id FROM canvas_edges WHERE edge_id=? LIMIT 1', (next_id,)).fetchone()
-        if existing is None:
-            cur.execute('INSERT INTO canvas_edges(edge_id, canvas_id, source_node_id, target_node_id, label, edge_type, data_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)', (next_id, canvas_id, source_node_id, target_node_id, label, edge_type, json.dumps(data or {}, ensure_ascii=False), created_by, now, now, tenant_id, workspace_id, environment))
-        else:
-            cur.execute('UPDATE canvas_edges SET canvas_id=?, source_node_id=?, target_node_id=?, label=?, edge_type=?, data_json=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE edge_id=?', (canvas_id, source_node_id, target_node_id, label, edge_type, json.dumps(data or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment, next_id))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_edges(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['edge_id']==next_id), {'edge_id': next_id})
+        return self._canvas.upsert_canvas_edge(canvas_id=canvas_id, edge_id=edge_id, source_node_id=source_node_id, target_node_id=target_node_id, label=label, edge_type=edge_type, data=data, created_by=created_by, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_edges(self, *, canvas_id: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT edge_id, canvas_id, source_node_id, target_node_id, label, edge_type, data_json, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM canvas_edges WHERE ' + ' AND '.join(clauses) + ' ORDER BY updated_at ASC'
-        return [self._canvas_edge_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_edges(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def save_canvas_view(
         self,
@@ -2749,23 +2501,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); next_id=str(view_id or uuid.uuid4())
-        if is_default:
-            cur.execute('UPDATE canvas_views SET is_default=0 WHERE canvas_id=?', (canvas_id,))
-        existing = cur.execute('SELECT view_id FROM canvas_views WHERE view_id=? LIMIT 1', (next_id,)).fetchone()
-        if existing is None:
-            cur.execute('INSERT INTO canvas_views(view_id, canvas_id, name, layout_json, filters_json, is_default, created_by, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (next_id, canvas_id, name, json.dumps(layout or {}, ensure_ascii=False), json.dumps(filters or {}, ensure_ascii=False), 1 if is_default else 0, created_by, now, now, tenant_id, workspace_id, environment))
-        else:
-            cur.execute('UPDATE canvas_views SET canvas_id=?, name=?, layout_json=?, filters_json=?, is_default=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE view_id=?', (canvas_id, name, json.dumps(layout or {}, ensure_ascii=False), json.dumps(filters or {}, ensure_ascii=False), 1 if is_default else 0, now, tenant_id, workspace_id, environment, next_id))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_views(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['view_id']==next_id), {'view_id': next_id})
+        return self._canvas.save_canvas_view(canvas_id=canvas_id, name=name, layout=layout, filters=filters, is_default=is_default, created_by=created_by, view_id=view_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_views(self, *, canvas_id: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT view_id, canvas_id, name, layout_json, filters_json, is_default, created_by, created_at, updated_at, tenant_id, workspace_id, environment FROM canvas_views WHERE ' + ' AND '.join(clauses) + ' ORDER BY is_default DESC, updated_at DESC'
-        return [self._canvas_view_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_views(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def upsert_canvas_presence(
         self,
@@ -2781,46 +2520,22 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); presence_id=f"{canvas_id}:{user_key}"
-        existing = cur.execute('SELECT presence_id FROM canvas_presence WHERE presence_id=? LIMIT 1', (presence_id,)).fetchone()
-        if existing is None:
-            cur.execute('INSERT INTO canvas_presence(presence_id, canvas_id, user_key, cursor_x, cursor_y, selected_node_id, status, metadata_json, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (presence_id, canvas_id, user_key, float(cursor_x), float(cursor_y), selected_node_id, status, json.dumps(metadata or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment))
-        else:
-            cur.execute('UPDATE canvas_presence SET cursor_x=?, cursor_y=?, selected_node_id=?, status=?, metadata_json=?, updated_at=?, tenant_id=?, workspace_id=?, environment=? WHERE presence_id=?', (float(cursor_x), float(cursor_y), selected_node_id, status, json.dumps(metadata or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment, presence_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_presence(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['presence_id']==presence_id), {'presence_id': presence_id})
+        return self._canvas.upsert_canvas_presence(canvas_id=canvas_id, user_key=user_key, cursor_x=cursor_x, cursor_y=cursor_y, selected_node_id=selected_node_id, status=status, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_presence(self, *, canvas_id: str, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT presence_id, canvas_id, user_key, cursor_x, cursor_y, selected_node_id, status, metadata_json, updated_at, tenant_id, workspace_id, environment FROM canvas_presence WHERE ' + ' AND '.join(clauses) + ' ORDER BY updated_at DESC'
-        return [self._canvas_presence_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_presence(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_events(self, *, canvas_id: str, limit: int = 50, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        items = self.get_recent_events(limit=max(int(limit or 50), 1) * 3, channel='canvas', tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        filtered = [item for item in items if str(item.get('session_id') or '') == str(canvas_id)]
-        return filtered[: int(limit or 50)]
+        return self._canvas.list_canvas_events(canvas_id=canvas_id, limit=limit, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_comments(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_comments'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_comments(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_snapshots(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_snapshots'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_snapshots(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_canvas_presence_events(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor(); clauses=[]; params=[]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT COUNT(*) FROM canvas_presence_events'
-        if clauses: sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._canvas.count_canvas_presence_events(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def create_canvas_comment(
         self,
@@ -2835,20 +2550,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); comment_id=str(uuid.uuid4())
-        cur.execute('INSERT INTO canvas_comments(comment_id, canvas_id, node_id, body, author, status, metadata_json, created_at, updated_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (comment_id, canvas_id, node_id, body, author, status, json.dumps(metadata or {}, ensure_ascii=False), now, now, tenant_id, workspace_id, environment))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_comments(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['comment_id']==comment_id), {'comment_id': comment_id})
+        return self._canvas.create_canvas_comment(canvas_id=canvas_id, body=body, author=author, node_id=node_id, status=status, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_comments(self, *, canvas_id: str, limit: int = 50, status: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        if status is not None:
-            clauses.append('status=?'); params.append(status)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT comment_id, canvas_id, node_id, body, author, status, metadata_json, created_at, updated_at, tenant_id, workspace_id, environment FROM canvas_comments WHERE ' + ' AND '.join(clauses) + ' ORDER BY updated_at DESC LIMIT ?'
-        params.append(max(int(limit or 50), 1))
-        return [self._canvas_comment_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_comments(canvas_id=canvas_id, limit=limit, status=status, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def create_canvas_snapshot(
         self,
@@ -2865,26 +2570,13 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); snapshot_id=str(uuid.uuid4())
-        cur.execute('INSERT INTO canvas_snapshots(snapshot_id, canvas_id, snapshot_kind, label, view_id, share_token, snapshot_json, metadata_json, created_by, created_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)', (snapshot_id, canvas_id, snapshot_kind, label, view_id, share_token, json.dumps(snapshot or {}, ensure_ascii=False), json.dumps(metadata or {}, ensure_ascii=False), created_by, now, tenant_id, workspace_id, environment))
-        cur.execute('UPDATE canvas_documents SET updated_at=? WHERE canvas_id=?', (now, canvas_id))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_snapshots(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['snapshot_id']==snapshot_id), {'snapshot_id': snapshot_id})
+        return self._canvas.create_canvas_snapshot(canvas_id=canvas_id, snapshot_kind=snapshot_kind, label=label, snapshot=snapshot, metadata=metadata, created_by=created_by, view_id=view_id, share_token=share_token, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_snapshots(self, *, canvas_id: str, limit: int = 50, snapshot_kind: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        if snapshot_kind is not None:
-            clauses.append('snapshot_kind=?'); params.append(snapshot_kind)
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT snapshot_id, canvas_id, snapshot_kind, label, view_id, share_token, snapshot_json, metadata_json, created_by, created_at, tenant_id, workspace_id, environment FROM canvas_snapshots WHERE ' + ' AND '.join(clauses) + ' ORDER BY created_at DESC LIMIT ?'
-        params.append(max(int(limit or 50), 1))
-        return [self._canvas_snapshot_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_snapshots(canvas_id=canvas_id, limit=limit, snapshot_kind=snapshot_kind, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def get_canvas_snapshot(self, snapshot_id: str, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any] | None:
-        cur = self._conn.cursor(); clauses=['snapshot_id=?']; params=[snapshot_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        row = cur.execute('SELECT snapshot_id, canvas_id, snapshot_kind, label, view_id, share_token, snapshot_json, metadata_json, created_by, created_at, tenant_id, workspace_id, environment FROM canvas_snapshots WHERE ' + ' AND '.join(clauses) + ' LIMIT 1', tuple(params)).fetchone()
-        return self._canvas_snapshot_row_to_dict(row) if row is not None else None
+        return self._canvas.get_canvas_snapshot(snapshot_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def record_canvas_presence_event(
         self,
@@ -2897,17 +2589,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        cur = self._conn.cursor(); now=time.time(); presence_event_id=str(uuid.uuid4())
-        cur.execute('INSERT INTO canvas_presence_events(presence_event_id, canvas_id, user_key, event_type, payload_json, created_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?)', (presence_event_id, canvas_id, user_key, event_type, json.dumps(payload or {}, ensure_ascii=False), now, tenant_id, workspace_id, environment))
-        self._conn.commit()
-        return next((item for item in self.list_canvas_presence_events(canvas_id=canvas_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment) if item['presence_event_id']==presence_event_id), {'presence_event_id': presence_event_id})
+        return self._canvas.record_canvas_presence_event(canvas_id=canvas_id, user_key=user_key, event_type=event_type, payload=payload, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_canvas_presence_events(self, *, canvas_id: str, limit: int = 50, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor(); clauses=['canvas_id=?']; params=[canvas_id]
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql='SELECT presence_event_id, canvas_id, user_key, event_type, payload_json, created_at, tenant_id, workspace_id, environment FROM canvas_presence_events WHERE ' + ' AND '.join(clauses) + ' ORDER BY created_at DESC LIMIT ?'
-        params.append(max(int(limit or 50), 1))
-        return [self._canvas_presence_event_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._canvas.list_canvas_presence_events(canvas_id=canvas_id, limit=limit, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_package_builds(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
         cur = self._conn.cursor()
