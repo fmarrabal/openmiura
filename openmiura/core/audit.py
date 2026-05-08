@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from .db import DBConnection, CompatRow
 from .migrations import apply_migrations
 from .tenancy.scope import assert_scope_match, normalize_scope
+from openmiura.persistence.base import infer_scope_from_session as _infer_scope_from_session_fn
 from openmiura.persistence.base import row_scope as _row_scope_fn
 from openmiura.persistence.base import scope_payload as _scope_payload_fn
 from openmiura.persistence.base import scope_where as _scope_where_fn
@@ -56,13 +57,7 @@ class AuditStore:
         return _scope_where_fn(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment, prefix=prefix)
 
     def _infer_scope_from_session(self, session_id: str) -> dict[str, Any]:
-        if not session_id:
-            return {"tenant_id": None, "workspace_id": None, "environment": None}
-        cur = self._conn.cursor()
-        row = cur.execute("SELECT tenant_id, workspace_id, environment FROM sessions WHERE session_id=?", (session_id,)).fetchone()
-        if row is None:
-            return {"tenant_id": None, "workspace_id": None, "environment": None}
-        return self._row_scope(row)
+        return _infer_scope_from_session_fn(self._conn, session_id)
 
     def get_session_scope(self, session_id: str) -> dict[str, Any] | None:
         if not session_id:

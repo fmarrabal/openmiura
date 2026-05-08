@@ -16,7 +16,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
-from openmiura.persistence.base import row_scope, scope_payload, scope_where
+from openmiura.persistence.base import (
+    infer_scope_from_session,
+    row_scope,
+    scope_payload,
+    scope_where,
+)
 
 
 class ToolsRepo:
@@ -33,6 +38,9 @@ class ToolsRepo:
 
     def _scope_where(self, clauses: list[str], params: list[Any], *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None, prefix: str = "") -> tuple[list[str], list[Any]]:
         return scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment, prefix=prefix)
+
+    def _infer_scope_from_session(self, session_id: str) -> dict[str, Any]:
+        return infer_scope_from_session(self._conn, session_id)
 
     def log_tool_call(self, session_id: str, user_key: str, agent_id: str, tool_name: str, args_json: str, ok: bool, result_excerpt: str, error: str, duration_ms: float, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> None:
         if tenant_id is None and workspace_id is None and environment is None:

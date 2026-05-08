@@ -60,3 +60,17 @@ def scope_where(
         clauses.append(f"{lead}environment=?")
         params.append(environment)
     return clauses, params
+
+
+def infer_scope_from_session(conn: Any, session_id: str) -> dict[str, Any]:
+    """Look up tenant/workspace/environment for a given session_id."""
+    if not session_id:
+        return {"tenant_id": None, "workspace_id": None, "environment": None}
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT tenant_id, workspace_id, environment FROM sessions WHERE session_id=?",
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return {"tenant_id": None, "workspace_id": None, "environment": None}
+    return row_scope(row)
