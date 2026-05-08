@@ -14,6 +14,7 @@ from openmiura.persistence.base import infer_scope_from_session as _infer_scope_
 from openmiura.persistence.base import row_scope as _row_scope_fn
 from openmiura.persistence.base import scope_payload as _scope_payload_fn
 from openmiura.persistence.base import scope_where as _scope_where_fn
+from openmiura.persistence.apps_repo import AppsRepo
 from openmiura.persistence.auth_repo import AuthRepo
 from openmiura.persistence.evaluations_repo import EvaluationsRepo
 from openmiura.persistence.memory_repo import MemoryRepo
@@ -36,6 +37,7 @@ class AuditStore:
         self.backend = str(backend or "sqlite").strip().lower()
         self.database_url = database_url
         self._conn = DBConnection(backend=self.backend, db_path=self.db_path, database_url=self.database_url)
+        self._apps = AppsRepo(self._conn)
         self._auth = AuthRepo(self._conn)
         self._evaluations = EvaluationsRepo(self._conn)
         self._memory = MemoryRepo(self._conn)
@@ -2673,76 +2675,13 @@ class AuditStore:
     # pwa foundation
 
     def _app_installation_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'installation_id': row['installation_id'],
-            'user_key': row['user_key'] or '',
-            'platform': row['platform'] or 'pwa',
-            'device_label': row['device_label'] or '',
-            'status': row['status'] or 'active',
-            'push_capable': bool(row['push_capable']),
-            'notification_permission': row['notification_permission'] or 'default',
-            'deep_link_base': row['deep_link_base'] or '/ui/',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'last_seen_at': float(row['last_seen_at']) if row['last_seen_at'] is not None else None,
-            'metadata': metadata,
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._apps._app_installation_row_to_dict(row)
 
     def _app_notification_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'notification_id': row['notification_id'],
-            'installation_id': row['installation_id'] or '',
-            'category': row['category'] or 'operator',
-            'title': row['title'] or '',
-            'body': row['body'] or '',
-            'target_path': row['target_path'] or '/ui/?tab=operator',
-            'status': row['status'] or 'ready',
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'delivered_at': float(row['delivered_at']) if row['delivered_at'] is not None else None,
-            'metadata': metadata,
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._apps._app_notification_row_to_dict(row)
 
     def _app_deep_link_row_to_dict(self, row: Any) -> dict[str, Any]:
-        try:
-            params = json.loads(row['target_params_json'] or '{}')
-        except Exception:
-            params = {}
-        try:
-            metadata = json.loads(row['metadata_json'] or '{}')
-        except Exception:
-            metadata = {}
-        return {
-            'link_token': row['link_token'],
-            'view': row['view'] or 'operator',
-            'target_type': row['target_type'] or 'record',
-            'target_id': row['target_id'] or '',
-            'target_params': params,
-            'status': row['status'] or 'active',
-            'created_by': row['created_by'] or '',
-            'created_at': float(row['created_at']),
-            'updated_at': float(row['updated_at']),
-            'expires_at': float(row['expires_at']) if row['expires_at'] is not None else None,
-            'resolved_at': float(row['resolved_at']) if row['resolved_at'] is not None else None,
-            'metadata': metadata,
-            'tenant_id': row['tenant_id'],
-            'workspace_id': row['workspace_id'],
-            'environment': row['environment'],
-        }
+        return self._apps._app_deep_link_row_to_dict(row)
 
 
     def _canvas_document_row_to_dict(self, row: Any) -> dict[str, Any]:
@@ -3347,34 +3286,13 @@ class AuditStore:
         return [self._package_build_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
 
     def count_app_installations(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql = 'SELECT COUNT(*) FROM app_installations'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._apps.count_app_installations(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_app_notifications(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql = 'SELECT COUNT(*) FROM app_notifications'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._apps.count_app_notifications(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def count_app_deep_links(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        sql = 'SELECT COUNT(*) FROM app_deep_links'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        return int(cur.execute(sql, tuple(params)).fetchone()[0])
+        return self._apps.count_app_deep_links(tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def register_app_installation(
         self,
@@ -3391,31 +3309,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        installation_id = str(uuid.uuid4())
-        now = time.time()
-        cur = self._conn.cursor()
-        cur.execute(
-            'INSERT INTO app_installations(installation_id, user_key, platform, device_label, status, push_capable, notification_permission, deep_link_base, created_at, updated_at, last_seen_at, metadata_json, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (installation_id, user_key, platform, device_label, status, 1 if push_capable else 0, notification_permission, deep_link_base, now, now, now, json.dumps(metadata or {}, ensure_ascii=False), tenant_id, workspace_id, environment),
-        )
-        self._conn.commit()
-        row = cur.execute('SELECT installation_id, user_key, platform, device_label, status, push_capable, notification_permission, deep_link_base, created_at, updated_at, last_seen_at, metadata_json, tenant_id, workspace_id, environment FROM app_installations WHERE installation_id=?', (installation_id,)).fetchone()
-        return self._app_installation_row_to_dict(row)
+        return self._apps.register_app_installation(user_key=user_key, platform=platform, device_label=device_label, status=status, push_capable=push_capable, notification_permission=notification_permission, deep_link_base=deep_link_base, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_app_installations(self, *, limit: int = 50, status: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        if status is not None:
-            clauses.append('status=?')
-            params.append(status)
-        sql = 'SELECT installation_id, user_key, platform, device_label, status, push_capable, notification_permission, deep_link_base, created_at, updated_at, last_seen_at, metadata_json, tenant_id, workspace_id, environment FROM app_installations'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY updated_at DESC LIMIT ?'
-        params.append(int(limit))
-        return [self._app_installation_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._apps.list_app_installations(limit=limit, status=status, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def create_app_notification(
         self,
@@ -3432,31 +3329,10 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        notification_id = str(uuid.uuid4())
-        now = time.time()
-        cur = self._conn.cursor()
-        cur.execute(
-            'INSERT INTO app_notifications(notification_id, installation_id, category, title, body, target_path, status, created_by, created_at, delivered_at, metadata_json, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (notification_id, installation_id, category, title, body, target_path, status, created_by, now, None, json.dumps(metadata or {}, ensure_ascii=False), tenant_id, workspace_id, environment),
-        )
-        self._conn.commit()
-        row = cur.execute('SELECT notification_id, installation_id, category, title, body, target_path, status, created_by, created_at, delivered_at, metadata_json, tenant_id, workspace_id, environment FROM app_notifications WHERE notification_id=?', (notification_id,)).fetchone()
-        return self._app_notification_row_to_dict(row)
+        return self._apps.create_app_notification(installation_id=installation_id, category=category, title=title, body=body, target_path=target_path, status=status, created_by=created_by, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_app_notifications(self, *, limit: int = 50, installation_id: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        if installation_id is not None:
-            clauses.append('installation_id=?')
-            params.append(installation_id)
-        sql = 'SELECT notification_id, installation_id, category, title, body, target_path, status, created_by, created_at, delivered_at, metadata_json, tenant_id, workspace_id, environment FROM app_notifications'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY created_at DESC LIMIT ?'
-        params.append(int(limit))
-        return [self._app_notification_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._apps.list_app_notifications(limit=limit, installation_id=installation_id, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def create_app_deep_link(
         self,
@@ -3473,49 +3349,16 @@ class AuditStore:
         workspace_id: str | None = None,
         environment: str | None = None,
     ) -> dict[str, Any]:
-        link_token = secrets.token_urlsafe(18)
-        now = time.time()
-        cur = self._conn.cursor()
-        cur.execute(
-            'INSERT INTO app_deep_links(link_token, view, target_type, target_id, target_params_json, status, created_by, created_at, updated_at, expires_at, resolved_at, metadata_json, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (link_token, view, target_type, target_id, json.dumps(target_params or {}, ensure_ascii=False), status, created_by, now, now, expires_at, None, json.dumps(metadata or {}, ensure_ascii=False), tenant_id, workspace_id, environment),
-        )
-        self._conn.commit()
-        row = cur.execute('SELECT link_token, view, target_type, target_id, target_params_json, status, created_by, created_at, updated_at, expires_at, resolved_at, metadata_json, tenant_id, workspace_id, environment FROM app_deep_links WHERE link_token=?', (link_token,)).fetchone()
-        return self._app_deep_link_row_to_dict(row)
+        return self._apps.create_app_deep_link(view=view, target_type=target_type, target_id=target_id, target_params=target_params, status=status, created_by=created_by, expires_at=expires_at, metadata=metadata, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_app_deep_links(self, *, limit: int = 50, status: str | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]:
-        cur = self._conn.cursor()
-        clauses: list[str] = []
-        params: list[Any] = []
-        self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
-        if status is not None:
-            clauses.append('status=?')
-            params.append(status)
-        sql = 'SELECT link_token, view, target_type, target_id, target_params_json, status, created_by, created_at, updated_at, expires_at, resolved_at, metadata_json, tenant_id, workspace_id, environment FROM app_deep_links'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY updated_at DESC LIMIT ?'
-        params.append(int(limit))
-        return [self._app_deep_link_row_to_dict(row) for row in cur.execute(sql, tuple(params)).fetchall()]
+        return self._apps.list_app_deep_links(limit=limit, status=status, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def get_app_deep_link(self, link_token: str) -> dict[str, Any] | None:
-        cur = self._conn.cursor()
-        row = cur.execute('SELECT link_token, view, target_type, target_id, target_params_json, status, created_by, created_at, updated_at, expires_at, resolved_at, metadata_json, tenant_id, workspace_id, environment FROM app_deep_links WHERE link_token=? LIMIT 1', (link_token,)).fetchone()
-        return self._app_deep_link_row_to_dict(row) if row is not None else None
+        return self._apps.get_app_deep_link(link_token)
 
     def resolve_app_deep_link(self, link_token: str) -> dict[str, Any] | None:
-        current = self.get_app_deep_link(link_token)
-        if current is None:
-            return None
-        now = time.time()
-        next_status = current.get('status') or 'active'
-        if current.get('expires_at') is not None and float(current['expires_at']) < now:
-            next_status = 'expired'
-        cur = self._conn.cursor()
-        cur.execute('UPDATE app_deep_links SET status=?, updated_at=?, resolved_at=? WHERE link_token=?', (next_status, now, now if next_status != 'expired' else current.get('resolved_at'), link_token))
-        self._conn.commit()
-        return self.get_app_deep_link(link_token)
+        return self._apps.resolve_app_deep_link(link_token)
 
 
     def _voice_audio_asset_row_to_dict(self, row: Any) -> dict[str, Any]:
