@@ -1,0 +1,67 @@
+name: sop_review
+version: "1.0"
+description: >
+  Two-party approval for Standard Operating Procedure (SOP)
+  authoring and revision. Aligns with 21 CFR Part 11 §11.10(k)
+  ("appropriate controls over systems documentation") and
+  ISO 13485 §4.2.4 (control of documents). Drafting may be
+  agent-assisted; publication requires both author and QA
+  signatures.
+
+applies_to:
+  workflows:
+    - workflows.sop.draft
+    - workflows.sop.publish
+    - workflows.sop.retire
+  scope:
+    environment: ["production", "staging"]
+
+rules:
+  - id: author_self_attestation
+    on_action: workflows.sop.publish
+    require_approval:
+      role: sop_author
+      meaning: "draft is complete and ready for QA review"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: qa_independent_review
+    on_action: workflows.sop.publish
+    require_approval:
+      role: qa_documentation
+      meaning: "SOP draft reviewed and approved for publication"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: retirement_requires_replacement_or_justification
+    on_action: workflows.sop.retire
+    require_payload_fields:
+      - replacement_sop_id_or_justification
+      - retirement_reason
+    require_approval:
+      role: qa_documentation
+      meaning: "SOP retirement approved"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: evidence_pack_includes_diff
+    on_action: workflows.sop.publish
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - sop_diff
+        - prior_version_hash
+        - new_version_hash
+
+  - id: scope_isolation
+    on_action: "workflows.sop.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true

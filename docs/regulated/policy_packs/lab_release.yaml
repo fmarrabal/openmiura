@@ -1,0 +1,66 @@
+name: lab_release
+version: "1.0"
+description: >
+  Pharmaceutical batch release with Qualified Person signature.
+  Implements the EU GMP Annex 11 control 15 ("Batch release") and the
+  21 CFR Part 11 §11.50 / §11.70 signature manifestation and linking
+  requirements.
+
+applies_to:
+  workflows:
+    - release.bundle.submit
+    - release.bundle.approve
+    - release.bundle.promote
+    - release.bundle.publish
+    - release.bundle.rollback
+  scope:
+    environment: ["production"]
+
+rules:
+  - id: qp_signature_required
+    on_action: release.bundle.promote
+    require_approval:
+      role: qp_release
+      meaning: "approved for QP release"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: independent_review_for_high_risk
+    on_action: release.bundle.publish
+    require_approval:
+      role: qa_independent_reviewer
+      meaning: "independent QA review of the QP-released batch"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: rollback_requires_capa
+    on_action: release.bundle.rollback
+    require_approval:
+      role: qp_release
+      meaning: "rollback authorised; CAPA reference attached"
+      multi_party: false
+    require_payload_fields:
+      - capa_reference
+      - rollback_reason
+    deny_without_approval: true
+
+  - id: evidence_pack_mandatory
+    on_action: release.bundle.publish
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - signer_identity
+        - policy_snapshot
+
+  - id: scope_isolation_strict
+    on_action: "release.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true
