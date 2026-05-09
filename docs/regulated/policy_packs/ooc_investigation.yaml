@@ -1,0 +1,66 @@
+name: ooc_investigation
+version: "1.0"
+description: >
+  Out-of-specification (OOS) and out-of-trend (OOT) investigation
+  closure. Aligns with FDA Guidance for Industry "Investigating
+  Out-of-Specification (OOS) Test Results for Pharmaceutical
+  Production" (2006) and the corresponding EU GMP procedural
+  expectations. Investigation may be agent-assisted; closure
+  requires a designated investigator signature with mandatory CAPA
+  reference.
+
+applies_to:
+  workflows:
+    - workflows.investigation.open
+    - workflows.investigation.update
+    - workflows.investigation.close
+  scope:
+    environment: ["production"]
+
+rules:
+  - id: closure_requires_investigator_signature
+    on_action: workflows.investigation.close
+    require_approval:
+      role: oos_investigator
+      meaning: "investigation closure with documented root cause and CAPA"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: closure_requires_root_cause_or_indeterminate
+    on_action: workflows.investigation.close
+    require_payload_fields:
+      - root_cause_or_indeterminate
+      - capa_reference
+      - affected_batches
+      - basis_for_closure
+
+  - id: agent_recommendations_recorded
+    on_action: workflows.investigation.update
+    require_evidence:
+      include:
+        - audit_trail
+        - tool_calls
+        - hypothesis_list
+        - investigator_interventions
+
+  - id: closure_evidence_pack
+    on_action: workflows.investigation.close
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - investigation_tree
+        - hypothesis_history
+        - closure_record
+
+  - id: scope_isolation
+    on_action: "workflows.investigation.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true

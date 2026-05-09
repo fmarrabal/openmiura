@@ -1,0 +1,83 @@
+name: deviation_report
+version: "1.0"
+description: >
+  GMP deviation report lifecycle. Aligns with EU GMP Chapter 1 and
+  Annex 11 control 13 (incident management). Deviation drafting may
+  be agent-assisted; classification, impact assessment and closure
+  each require explicit human signatures.
+
+applies_to:
+  workflows:
+    - workflows.deviation.open
+    - workflows.deviation.classify
+    - workflows.deviation.impact_assessment
+    - workflows.deviation.close
+  scope:
+    environment: ["production"]
+
+rules:
+  - id: classification_requires_qa_signature
+    on_action: workflows.deviation.classify
+    require_approval:
+      role: qa_deviation
+      meaning: "deviation classified (minor / major / critical)"
+      multi_party: false
+    require_payload_fields:
+      - classification
+      - rationale
+    deny_without_approval: true
+
+  - id: impact_assessment_requires_independent_review
+    on_action: workflows.deviation.impact_assessment
+    require_approval:
+      role: qa_independent_reviewer
+      meaning: "impact assessment independently reviewed"
+      multi_party: false
+    require_payload_fields:
+      - product_quality_impact
+      - patient_safety_impact
+      - regulatory_impact
+    deny_without_approval: true
+
+  - id: closure_requires_capa_and_qa_signature
+    on_action: workflows.deviation.close
+    require_approval:
+      role: qa_deviation
+      meaning: "deviation closed with documented CAPA"
+      multi_party: false
+    require_payload_fields:
+      - capa_reference
+      - effectiveness_check_due_date
+    deny_without_approval: true
+
+  - id: critical_deviation_requires_two_party
+    on_action: workflows.deviation.close
+    when_payload_matches:
+      classification: "critical"
+    require_approval:
+      role: qa_deviation_director
+      meaning: "critical deviation closure approved at director level"
+      multi_party: true
+    deny_without_approval: true
+
+  - id: evidence_pack_full_lifecycle
+    on_action: workflows.deviation.close
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - classification_history
+        - impact_assessment
+        - capa_record
+
+  - id: scope_isolation
+    on_action: "workflows.deviation.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true

@@ -1,0 +1,75 @@
+name: analytical_interpretation
+version: "1.0"
+description: >
+  Agent-assisted interpretation of analytical signals (NMR, HPLC,
+  GC-MS, IR, UV-Vis, etc.) under QA approval before the result
+  enters the laboratory notebook. Aligns with ALCOA+ principles
+  (Attributable / Original / Accurate) and Annex 11 controls 5
+  (data accuracy checks) and 6 (manual entry checks).
+
+applies_to:
+  workflows:
+    - workflows.analysis.draft
+    - workflows.analysis.review
+    - workflows.analysis.publish
+  scope:
+    environment: ["production", "staging"]
+
+rules:
+  - id: spectrum_hash_recorded
+    on_action: workflows.analysis.draft
+    require_payload_fields:
+      - spectrum_sha256
+      - instrument_id
+      - acquisition_timestamp
+
+  - id: model_version_pinned
+    on_action: workflows.analysis.draft
+    require_payload_fields:
+      - model_name
+      - model_version
+      - prompt_hash
+
+  - id: unknown_impurity_triggers_approval
+    on_action: workflows.analysis.publish
+    when_payload_matches:
+      contains_unknown_impurity_above_threshold: true
+    require_approval:
+      role: qa_analytical
+      meaning: "analytical assignment approved for laboratory notebook"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: routine_assignment_requires_review
+    on_action: workflows.analysis.publish
+    when_payload_matches:
+      contains_unknown_impurity_above_threshold: false
+    require_approval:
+      role: analyst_reviewer
+      meaning: "analytical assignment reviewed and accepted"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: evidence_pack_with_full_chain
+    on_action: workflows.analysis.publish
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - spectrum_hash
+        - prompt_and_completion
+        - model_identifier
+        - tool_calls
+        - reviewer_identity
+
+  - id: scope_isolation
+    on_action: "workflows.analysis.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true
