@@ -1,0 +1,95 @@
+name: nmr_interpretation
+version: "1.0"
+description: >
+  NMR-specific extension of the analytical_interpretation pack
+  used by the UAL NMR pilot of openMiura. Governs ¹H / ¹³C NMR
+  assignments of organometallic catalytic compounds inside the
+  `ual / nmrmbc / research` scope. Unknown-impurity flag and
+  new-ligand identification trigger an additional approval step
+  above the routine reviewer attestation.
+
+applies_to:
+  workflows:
+    - workflows.analysis.nmr.draft
+    - workflows.analysis.nmr.review
+    - workflows.analysis.nmr.publish
+  scope:
+    environment: ["research"]
+
+rules:
+  - id: spectrum_hash_recorded
+    on_action: workflows.analysis.nmr.draft
+    require_payload_fields:
+      - spectrum_sha256
+      - instrument_id
+      - acquisition_timestamp
+      - solvent
+      - reference_compound
+
+  - id: model_version_pinned
+    on_action: workflows.analysis.nmr.draft
+    require_payload_fields:
+      - model_name
+      - model_version
+      - prompt_sha256
+
+  - id: routine_assignment_requires_reviewer
+    on_action: workflows.analysis.nmr.publish
+    when_payload_matches:
+      contains_unknown_impurity_above_threshold: false
+      contains_new_ligand_identification: false
+    require_approval:
+      role: nmr_reviewer
+      meaning: "reviewed; assignments match spectrum and known chemistry"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: unknown_impurity_requires_pi_approval
+    on_action: workflows.analysis.nmr.publish
+    when_payload_matches:
+      contains_unknown_impurity_above_threshold: true
+    require_approval:
+      role: pi_approver
+      meaning: "approved for laboratory notebook despite unknown impurity flag"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: new_ligand_requires_pi_approval
+    on_action: workflows.analysis.nmr.publish
+    when_payload_matches:
+      contains_new_ligand_identification: true
+    require_approval:
+      role: pi_approver
+      meaning: "approved for laboratory notebook with new ligand identification"
+      multi_party: false
+    deny_without_approval: true
+
+  - id: paramagnetic_compounds_out_of_scope
+    on_action: workflows.analysis.nmr.publish
+    when_payload_matches:
+      sample_paramagnetic: true
+    deny_without_approval: true
+
+  - id: evidence_pack_with_full_chain
+    on_action: workflows.analysis.nmr.publish
+    require_evidence:
+      include:
+        - audit_trail
+        - approvals
+        - signed_manifest
+        - spectrum_hash
+        - prompt_and_completion
+        - model_identifier
+        - tool_calls
+        - reviewer_identity
+
+  - id: scope_isolation
+    on_action: "workflows.analysis.nmr.*"
+    enforce_scope_match:
+      tenant: required
+      workspace: required
+      environment: required
+
+audit:
+  log_decisions: true
+  log_overrides: true

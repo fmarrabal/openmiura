@@ -28,6 +28,7 @@ EXPECTED_PACKS = {
     "ooc_investigation",
     "deviation_report",
     "analytical_interpretation",
+    "nmr_interpretation",
 }
 
 
@@ -202,3 +203,41 @@ def test_analytical_interpretation_pins_model_version() -> None:
         if "model_version" in r.get("require_payload_fields", [])
     ]
     assert pinned, "analytical_interpretation must pin model_version on draft"
+
+
+def test_nmr_interpretation_separates_routine_from_pi_approval_paths() -> None:
+    pack = _load_pack("nmr_interpretation")
+    publish_rules = [r for r in pack["rules"] if r["on_action"] == "workflows.analysis.nmr.publish"]
+    approver_roles = {
+        r["require_approval"]["role"]
+        for r in publish_rules
+        if "require_approval" in r
+    }
+    assert "nmr_reviewer" in approver_roles, (
+        "nmr_interpretation must allow routine paths through nmr_reviewer alone"
+    )
+    assert "pi_approver" in approver_roles, (
+        "nmr_interpretation must escalate unknown impurity / new ligand to pi_approver"
+    )
+
+
+def test_nmr_interpretation_pins_spectrum_and_model() -> None:
+    pack = _load_pack("nmr_interpretation")
+    draft_rules = [r for r in pack["rules"] if r["on_action"] == "workflows.analysis.nmr.draft"]
+    pinned_fields: set[str] = set()
+    for rule in draft_rules:
+        for field in rule.get("require_payload_fields", []):
+            pinned_fields.add(field)
+    for required in ("spectrum_sha256", "model_name", "model_version", "prompt_sha256"):
+        assert required in pinned_fields, (
+            f"nmr_interpretation draft must pin {required}"
+        )
+
+
+def test_nmr_interpretation_excludes_paramagnetic_samples() -> None:
+    pack = _load_pack("nmr_interpretation")
+    para_rules = [
+        r for r in pack["rules"]
+        if r.get("when_payload_matches", {}).get("sample_paramagnetic") is True
+    ]
+    assert para_rules, "nmr_interpretation must explicitly exclude paramagnetic samples"
