@@ -119,3 +119,31 @@ class LiveCanvasService(
         self.openclaw_adapter_service = openclaw_adapter_service or OpenClawAdapterService()
         self.openclaw_recovery_scheduler_service = openclaw_recovery_scheduler_service or OpenClawRecoverySchedulerService(openclaw_adapter_service=self.openclaw_adapter_service)
 
+
+# Late-bind the class name into each mixin module so the
+# `@staticmethod`s that internally call `LiveCanvasService.foo(...)`
+# (162 such call sites at the time of the split) can resolve the
+# reference at call time without circular imports.
+from openmiura.application.canvas.service import (  # noqa: E402
+    _baseline_promotion_catalog_a_mixin as _m_bp_cat_a,
+    _baseline_promotion_catalog_b_mixin as _m_bp_cat_b,
+    _baseline_promotion_compactors_mixin as _m_bp_compactors,
+    _baseline_promotion_exports_mixin as _m_bp_exports,
+    _baseline_promotion_other_mixin as _m_bp_other,
+    _baseline_promotion_state_mixin as _m_bp_state,
+    _board_mixin as _m_board,
+    _data_mixin as _m_data,
+    _helpers_mixin as _m_helpers,
+    _node_actions_mixin as _m_node_actions,
+    _node_data_mixin as _m_node_data,
+    _node_inspector_mixin as _m_node_inspector,
+    _timeline_mixin as _m_timeline,
+)
+for _mod in (
+    _m_bp_cat_a, _m_bp_cat_b, _m_bp_compactors, _m_bp_exports,
+    _m_bp_other, _m_bp_state, _m_board, _m_data, _m_helpers,
+    _m_node_actions, _m_node_data, _m_node_inspector, _m_timeline,
+):
+    _mod.LiveCanvasService = LiveCanvasService
+del _mod
+

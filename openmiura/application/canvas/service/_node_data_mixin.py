@@ -30,6 +30,8 @@ from openmiura.application.packaging import PackagingHardeningService
 from openmiura.core.contracts import AdminGatewayLike
 
 
+LiveCanvasService: type | None = None  # late-bound by service/__init__.py
+
 class _LiveCanvasNodeDataMixin:
     """Mixin: node data methods on LiveCanvasService."""
 
