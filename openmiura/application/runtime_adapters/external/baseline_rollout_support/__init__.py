@@ -14,11 +14,16 @@ OpenClawBaselineRolloutSupportMixin``.
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
+import io
 import json
 import time
 import uuid
+import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from ._alerts_a_mixin import _OpenClawBaselineRolloutSupportAlertsAMixin
