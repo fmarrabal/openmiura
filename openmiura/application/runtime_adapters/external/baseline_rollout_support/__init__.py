@@ -28,9 +28,11 @@ from typing import Any
 
 from ._alerts_a_mixin import _OpenClawBaselineRolloutSupportAlertsAMixin
 from ._alerts_b_mixin import _OpenClawBaselineRolloutSupportAlertsBMixin
-from ._core_mixin import _OpenClawBaselineRolloutSupportCoreMixin
+from ._core_mixin_a import _OpenClawBaselineRolloutSupportCoreMixinA
+from ._core_mixin_b import _OpenClawBaselineRolloutSupportCoreMixinB
 from ._custody_mixin import _OpenClawBaselineRolloutSupportCustodyMixin
-from ._evidence_mixin import _OpenClawBaselineRolloutSupportEvidenceMixin
+from ._evidence_mixin_a import _OpenClawBaselineRolloutSupportEvidenceMixinA
+from ._evidence_mixin_b import _OpenClawBaselineRolloutSupportEvidenceMixinB
 from ._monitoring_a_mixin import _OpenClawBaselineRolloutSupportMonitoringAMixin
 from ._monitoring_b_mixin import _OpenClawBaselineRolloutSupportMonitoringBMixin
 from ._policy_overrides_mixin import _OpenClawBaselineRolloutSupportPolicyOverridesMixin
@@ -40,9 +42,11 @@ from ._rollout_plan_mixin import _OpenClawBaselineRolloutSupportRolloutPlanMixin
 class OpenClawBaselineRolloutSupportMixin(
     _OpenClawBaselineRolloutSupportAlertsAMixin,
     _OpenClawBaselineRolloutSupportAlertsBMixin,
-    _OpenClawBaselineRolloutSupportCoreMixin,
+    _OpenClawBaselineRolloutSupportCoreMixinA,
+    _OpenClawBaselineRolloutSupportCoreMixinB,
     _OpenClawBaselineRolloutSupportCustodyMixin,
-    _OpenClawBaselineRolloutSupportEvidenceMixin,
+    _OpenClawBaselineRolloutSupportEvidenceMixinA,
+    _OpenClawBaselineRolloutSupportEvidenceMixinB,
     _OpenClawBaselineRolloutSupportMonitoringAMixin,
     _OpenClawBaselineRolloutSupportMonitoringBMixin,
     _OpenClawBaselineRolloutSupportPolicyOverridesMixin,
@@ -55,9 +59,11 @@ class OpenClawBaselineRolloutSupportMixin(
 
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _alerts_a_mixin
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _alerts_b_mixin
-from openmiura.application.runtime_adapters.external.baseline_rollout_support import _core_mixin
+from openmiura.application.runtime_adapters.external.baseline_rollout_support import _core_mixin_a
+from openmiura.application.runtime_adapters.external.baseline_rollout_support import _core_mixin_b
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _custody_mixin
-from openmiura.application.runtime_adapters.external.baseline_rollout_support import _evidence_mixin
+from openmiura.application.runtime_adapters.external.baseline_rollout_support import _evidence_mixin_a
+from openmiura.application.runtime_adapters.external.baseline_rollout_support import _evidence_mixin_b
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _monitoring_a_mixin
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _monitoring_b_mixin
 from openmiura.application.runtime_adapters.external.baseline_rollout_support import _policy_overrides_mixin
@@ -69,9 +75,11 @@ from openmiura.application.runtime_adapters.external.baseline_rollout_support im
 for _mod in (
     _alerts_a_mixin,
     _alerts_b_mixin,
-    _core_mixin,
+    _core_mixin_a,
+    _core_mixin_b,
     _custody_mixin,
-    _evidence_mixin,
+    _evidence_mixin_a,
+    _evidence_mixin_b,
     _monitoring_a_mixin,
     _monitoring_b_mixin,
     _policy_overrides_mixin,
