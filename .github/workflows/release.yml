@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -134,7 +134,7 @@ jobs:
           python scripts/verify_release_artifacts.py --dist-dir dist
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openmiura-release-${{ steps.meta.outputs.tag }}
           path: |

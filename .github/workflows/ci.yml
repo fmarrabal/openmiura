@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
@@ -61,7 +61,7 @@ jobs:
           python scripts/run_release_quality_gate.py --include-extended --output-dir reports/quality_gate
 
       - name: Upload quality gate reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openmiura-quality-gate
           path: reports/quality_gate/**
@@ -71,7 +71,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python and install local package
         uses: ./.github/actions/setup-openmiura
