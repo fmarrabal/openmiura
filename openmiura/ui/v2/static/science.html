@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openMiura — Science workspace</title>
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/web/jetbrains-mono.css" />
+  <link rel="stylesheet" href="./openmiura.css" />
+  <script src="./js/theme.js"></script>
+  <script src="./js/shell.js"></script>
+  <script defer src="./js/alpine.min.js"></script>
+</head>
+<body class="font-sans" x-data="omShell({
+  profile: 'science',
+  activeId: 'chat',
+  breadcrumbs: [
+    { label: 'Science', href: './science.html' },
+    { label: 'Chat with agent' }
+  ]
+})">
+
+  <div class="om-shell">
+
+    <aside class="om-sidebar bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 flex flex-col"
+           :class="{ 'hidden md:flex': !mobileMenuOpen, 'flex': mobileMenuOpen }">
+      <div class="px-4 py-4 border-b border-surface-200 dark:border-surface-700 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-md bg-primary-900 dark:bg-primary-700 flex items-center justify-center text-surface-0 font-bold text-sm">oM</div>
+        <div class="min-w-0">
+          <p class="text-sm font-semibold tracking-tight truncate" x-text="profileTitle"></p>
+          <p class="text-xs text-surface-500 dark:text-surface-400 truncate" x-text="profileTagline"></p>
+        </div>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto py-3 space-y-4">
+        <template x-for="group in groups" :key="group.title">
+          <div>
+            <p class="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400" x-text="group.title"></p>
+            <ul>
+              <template x-for="item in group.items" :key="item.id">
+                <li>
+                  <button type="button"
+                          class="w-full flex items-center gap-2 px-4 py-2 text-sm transition text-left"
+                          :class="isActive(item.id)
+                            ? 'bg-primary-50 dark:bg-primary-900/40 text-primary-900 dark:text-accent-300 font-medium border-l-2 border-primary-900 dark:border-accent-400'
+                            : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 border-l-2 border-transparent'"
+                          @click="setActive(item.id)">
+                    <span class="inline-block w-4 h-4 rounded-sm bg-current opacity-60 shrink-0"></span>
+                    <span x-text="item.label" class="truncate"></span>
+                  </button>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </template>
+      </nav>
+
+      <div class="px-4 py-3 border-t border-surface-200 dark:border-surface-700 text-xs text-surface-500 dark:text-surface-400">
+        <p>openMiura UI v2</p>
+        <p class="font-mono">phase/ui-a2</p>
+      </div>
+    </aside>
+
+    <header class="om-topbar bg-surface-0 dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700 flex items-center px-4 gap-3">
+      <button type="button"
+              class="md:hidden p-1.5 rounded-md text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800"
+              @click="toggleMobileMenu()" aria-label="Toggle menu">
+        <span class="block w-5 h-0.5 bg-current mb-1"></span>
+        <span class="block w-5 h-0.5 bg-current mb-1"></span>
+        <span class="block w-5 h-0.5 bg-current"></span>
+      </button>
+
+      <nav aria-label="Breadcrumb" class="flex-1 overflow-x-auto min-w-0">
+        <ol class="flex items-center gap-2 text-sm whitespace-nowrap">
+          <template x-for="(crumb, i) in breadcrumbs" :key="i">
+            <li class="flex items-center gap-2">
+              <span x-show="i > 0" class="text-surface-400 dark:text-surface-600">/</span>
+              <template x-if="crumb.href">
+                <a :href="crumb.href" class="text-accent-700 dark:text-accent-300 hover:underline" x-text="crumb.label"></a>
+              </template>
+              <template x-if="!crumb.href">
+                <span class="text-surface-700 dark:text-surface-200" :class="i === breadcrumbs.length - 1 ? 'font-medium' : ''" x-text="crumb.label"></span>
+              </template>
+            </li>
+          </template>
+        </ol>
+      </nav>
+
+      <button type="button"
+              class="p-1.5 rounded-md text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800"
+              @click="toggleTheme()" :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+        <span x-show="theme === 'dark'" class="text-base">☀</span>
+        <span x-show="theme === 'light'" class="text-base">☾</span>
+      </button>
+    </header>
+
+    <main class="om-main bg-surface-50 dark:bg-surface-950 overflow-y-auto">
+      <div class="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <header>
+          <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Phase A2 placeholder</p>
+          <h1 class="text-2xl font-semibold tracking-tight">Science workspace — shell wired up</h1>
+          <p class="mt-2 text-surface-600 dark:text-surface-300 max-w-2xl">
+            The functional science surfaces (Chat with agent, Upload spectrum & review,
+            Pending approvals, Evidence history) land in Phase C (PRs C1–C4).
+            This page exists to validate the science-profile sidebar grouping.
+          </p>
+        </header>
+
+        <section class="om-card">
+          <h2 class="text-base font-semibold mb-3">Two intentional groups for the operator</h2>
+          <p class="text-sm text-surface-600 dark:text-surface-300">
+            The science profile separates the daily <em>workspace</em> (chat, upload, review)
+            from the governance trail (approvals + evidence) — so an operator
+            focused on the bench is not distracted by audit-style surfaces.
+          </p>
+        </section>
+
+        <section>
+          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./index.html">← Design tokens preview</a>
+          ·
+          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./admin.html">Admin console →</a>
+          ·
+          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./interview.html">Interview demo →</a>
+        </section>
+      </div>
+    </main>
+
+  </div>
+
+</body>
+</html>

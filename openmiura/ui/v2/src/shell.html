@@ -1,0 +1,105 @@
+<!--
+  Shell template — duplicated verbatim inside admin.html / science.html /
+  interview.html. The single source of truth lives here; if you change
+  the shell, update the three entry points and re-run the smoke tests
+  under tests/unit/test_ui_v2_assets.py.
+
+  Server-side templating is intentionally avoided in Phase A: the
+  FastAPI app serves the static files as-is, with no Jinja rendering.
+  Phase E (or earlier, if duplication bites) can introduce a build
+  step that materialises the shell from this file. Until then,
+  honesty wins over magic.
+
+  Usage:
+    <body x-data="omShell({ profile: 'admin', activeId: 'dashboard', breadcrumbs: [...] })">
+      <!-- paste the snippet below as the immediate child of <body> -->
+    </body>
+-->
+<div class="om-shell" :class="{ 'om-shell--collapsed': sidebarCollapsed }">
+
+  <!-- Sidebar -->
+  <aside class="om-sidebar bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 flex flex-col"
+         :class="{ 'hidden md:flex': !mobileMenuOpen, 'flex': mobileMenuOpen }">
+    <div class="px-4 py-4 border-b border-surface-200 dark:border-surface-700 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-md bg-primary-900 dark:bg-primary-700 flex items-center justify-center text-surface-0 font-bold text-sm">oM</div>
+      <div class="min-w-0">
+        <p class="text-sm font-semibold tracking-tight truncate" x-text="profileTitle"></p>
+        <p class="text-xs text-surface-500 dark:text-surface-400 truncate" x-text="profileTagline"></p>
+      </div>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto py-3 space-y-4">
+      <template x-for="group in groups" :key="group.title">
+        <div>
+          <p class="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400"
+             x-text="group.title"></p>
+          <ul>
+            <template x-for="item in group.items" :key="item.id">
+              <li>
+                <button type="button"
+                        class="w-full flex items-center gap-2 px-4 py-2 text-sm transition"
+                        :class="isActive(item.id)
+                          ? 'bg-primary-50 dark:bg-primary-900/40 text-primary-900 dark:text-accent-300 font-medium border-l-2 border-primary-900 dark:border-accent-400'
+                          : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 border-l-2 border-transparent'"
+                        @click="setActive(item.id)">
+                  <span class="inline-block w-4 h-4 rounded-sm bg-current opacity-60"></span>
+                  <span x-text="item.label"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </template>
+    </nav>
+
+    <div class="px-4 py-3 border-t border-surface-200 dark:border-surface-700 text-xs text-surface-500 dark:text-surface-400">
+      <p>openMiura UI v2</p>
+      <p class="font-mono">phase/ui-a2</p>
+    </div>
+  </aside>
+
+  <!-- Topbar -->
+  <header class="om-topbar bg-surface-0 dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700 flex items-center px-4 gap-3">
+
+    <button type="button"
+            class="md:hidden p-1.5 rounded-md text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800"
+            @click="toggleMobileMenu()" aria-label="Toggle menu">
+      <span class="block w-5 h-0.5 bg-current mb-1"></span>
+      <span class="block w-5 h-0.5 bg-current mb-1"></span>
+      <span class="block w-5 h-0.5 bg-current"></span>
+    </button>
+
+    <nav aria-label="Breadcrumb" class="flex-1 overflow-x-auto">
+      <ol class="flex items-center gap-2 text-sm">
+        <template x-for="(crumb, i) in breadcrumbs" :key="i">
+          <li class="flex items-center gap-2">
+            <span x-show="i > 0" class="text-surface-400 dark:text-surface-600">/</span>
+            <template x-if="crumb.href">
+              <a :href="crumb.href" class="text-accent-700 dark:text-accent-300 hover:underline" x-text="crumb.label"></a>
+            </template>
+            <template x-if="!crumb.href">
+              <span class="text-surface-700 dark:text-surface-200" :class="i === breadcrumbs.length - 1 ? 'font-medium' : ''" x-text="crumb.label"></span>
+            </template>
+          </li>
+        </template>
+      </ol>
+    </nav>
+
+    <button type="button"
+            class="p-1.5 rounded-md text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800"
+            @click="toggleTheme()" :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+      <span x-show="theme === 'dark'" class="text-base">☀</span>
+      <span x-show="theme === 'light'" class="text-base">☾</span>
+    </button>
+
+    <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-accent-50 text-accent-700 dark:bg-accent-950 dark:text-accent-300">
+      not authenticated
+    </span>
+  </header>
+
+  <!-- Main outlet — page-specific content goes here -->
+  <main class="om-main bg-surface-50 dark:bg-surface-950 overflow-y-auto">
+    <slot></slot>
+  </main>
+
+</div>

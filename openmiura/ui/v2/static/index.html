@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/web/jetbrains-mono.css" />
   <link rel="stylesheet" href="./openmiura.css" />
+  <script src="./js/theme.js"></script>
 </head>
 <body class="font-sans">
 
@@ -21,6 +22,9 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <a class="text-sm px-3 py-1.5 rounded-md bg-primary-900 text-surface-0 hover:bg-primary-800 transition" href="./admin.html">Admin console</a>
+        <a class="text-sm px-3 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition" href="./science.html">Science</a>
+        <a class="text-sm px-3 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition" href="./interview.html">Interview</a>
         <button id="themeToggle" type="button"
           class="text-sm px-3 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition">
           Toggle theme
@@ -184,17 +188,8 @@ timestamp   = 1778694972.708638</code></pre>
   </footer>
 
   <script>
-    (function () {
-      const root = document.documentElement;
-      const saved = localStorage.getItem('openmiura.v2.theme');
-      const initial = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      root.setAttribute('data-theme', initial);
-      document.getElementById('themeToggle').addEventListener('click', () => {
-        const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        root.setAttribute('data-theme', next);
-        localStorage.setItem('openmiura.v2.theme', next);
-      });
-    })();
+    // Theme is wired up in ./js/theme.js (loaded in <head>).
+    document.getElementById('themeToggle').addEventListener('click', () => window.omTheme.toggle());
   </script>
 
 </body>
