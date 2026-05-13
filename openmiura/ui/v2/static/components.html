@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openMiura UI v2 — component gallery</title>
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/web/jetbrains-mono.css" />
+  <link rel="stylesheet" href="./openmiura.css" />
+  <script src="./js/theme.js"></script>
+  <script src="./js/icons.js"></script>
+  <script src="./js/components.js"></script>
+  <script defer src="./js/alpine.min.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="font-sans bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-100">
+
+  <header class="border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-primary-900 dark:bg-primary-700 flex items-center justify-center text-surface-0 font-bold">oM</div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight">openMiura UI v2 — component gallery</h1>
+          <p class="text-xs text-surface-500 dark:text-surface-400">Phase A4 · base primitives ready for B/C/D</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="om-btn om-btn--ghost" onclick="window.omTheme.toggle()">Toggle theme</button>
+        <a class="om-btn om-btn--ghost" href="./index.html">← Tokens</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-10 space-y-10">
+
+    <!-- Buttons -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Buttons (.om-btn)</h2>
+      <div class="flex flex-wrap gap-2 mb-2">
+        <button class="om-btn om-btn--primary">Primary</button>
+        <button class="om-btn om-btn--accent">Accent</button>
+        <button class="om-btn om-btn--ghost">Ghost</button>
+        <button class="om-btn om-btn--danger">Destructive</button>
+        <button class="om-btn om-btn--primary" disabled>Disabled</button>
+      </div>
+      <div class="flex flex-wrap items-end gap-2">
+        <button class="om-btn om-btn--primary om-btn--sm">Small</button>
+        <button class="om-btn om-btn--primary">Default</button>
+        <button class="om-btn om-btn--primary om-btn--lg">Large</button>
+        <button class="om-btn om-btn--ghost" x-data x-html="omIcon('log-in', 'w-4 h-4') + '<span>With icon</span>'"></button>
+      </div>
+    </section>
+
+    <!-- Badges -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Badges (.om-badge)</h2>
+      <div class="flex flex-wrap gap-2">
+        <span class="om-badge om-badge--neutral">neutral</span>
+        <span class="om-badge om-badge--info">info</span>
+        <span class="om-badge om-badge--success">stable</span>
+        <span class="om-badge om-badge--warning">partial</span>
+        <span class="om-badge om-badge--danger">denied</span>
+      </div>
+    </section>
+
+    <!-- Tables -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Table (.om-table)</h2>
+      <div class="overflow-x-auto">
+        <table class="om-table">
+          <thead>
+            <tr>
+              <th>Runtime</th>
+              <th>Environment</th>
+              <th>Status</th>
+              <th>Last dispatch</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-mono text-xs">runtime-baseline-prod-a</td>
+              <td>prod</td>
+              <td><span class="om-badge om-badge--success">healthy</span></td>
+              <td>3 min ago</td>
+            </tr>
+            <tr>
+              <td class="font-mono text-xs">runtime-baseline-staging-a</td>
+              <td>staging</td>
+              <td><span class="om-badge om-badge--warning">drifting</span></td>
+              <td>17 min ago</td>
+            </tr>
+            <tr>
+              <td class="font-mono text-xs">runtime-baseline-dev-z</td>
+              <td>dev</td>
+              <td><span class="om-badge om-badge--danger">failed</span></td>
+              <td>2 h ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Toasts -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Toasts</h2>
+      <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+        Programmatic. Trigger from any code path via <code class="font-mono text-xs">window.omToasts.*</code>. Auto-dismiss after 4 s by default.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button class="om-btn om-btn--ghost" onclick="omToasts.info('Info: runtime healthy.')">Info</button>
+        <button class="om-btn om-btn--ghost" onclick="omToasts.success('Approval signed by qa_analytical@uam.es')">Success</button>
+        <button class="om-btn om-btn--ghost" onclick="omToasts.warning('Drift detected on staging baseline')">Warning</button>
+        <button class="om-btn om-btn--ghost" onclick="omToasts.danger('Policy denied: missing approval gate')">Danger</button>
+      </div>
+    </section>
+
+    <!-- Modal -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Modal</h2>
+      <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+        Opens via <code class="font-mono text-xs">window.omModal.open('demo-modal')</code>. Esc closes the topmost. Backdrop click closes too.
+      </p>
+      <button class="om-btn om-btn--primary" onclick="omModal.open('demo-modal')">Open modal</button>
+    </section>
+
+    <!-- Icons -->
+    <section class="om-card">
+      <h2 class="text-lg font-semibold mb-4">Icons (Lucide subset)</h2>
+      <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+        Self-hosted via <code class="font-mono text-xs">omIcon('name', 'extra classes')</code>. Adds new icon files from <a class="underline" href="https://lucide.dev" target="_blank" rel="noopener">lucide.dev</a> to <code class="font-mono text-xs">js/icons.js</code>.
+      </p>
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3" x-data>
+        <template x-for="name in omIconNames" :key="name">
+          <div class="flex flex-col items-center gap-1.5 p-3 border border-surface-200 dark:border-surface-700 rounded-md">
+            <span x-html="omIcon(name, 'w-5 h-5 text-primary-900 dark:text-accent-300')"></span>
+            <span class="text-[10px] font-mono text-surface-600 dark:text-surface-300" x-text="name"></span>
+          </div>
+        </template>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal instance -->
+  <div x-data="omModalFor('demo-modal')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+    <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+      <div class="om-modal__header">
+        <h3 id="demo-modal-title" class="text-base font-semibold">Demo modal</h3>
+        <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+          <span x-html="omIcon('x', 'w-4 h-4')"></span>
+        </button>
+      </div>
+      <div class="om-modal__body space-y-2 text-sm text-surface-700 dark:text-surface-200">
+        <p>This is the base modal primitive that admin / science / interview pages will compose.</p>
+        <p>Esc closes the top-most modal. The overlay click also closes. Programmatic open/close via the global <code class="font-mono text-xs">omModal</code> manager.</p>
+      </div>
+      <div class="om-modal__footer">
+        <button class="om-btn om-btn--ghost" @click="close()">Cancel</button>
+        <button class="om-btn om-btn--primary" @click="omToasts.success('Confirmed'); close()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast tray -->
+  <div x-data="omToastTray()" class="om-toast-tray" aria-live="polite" aria-atomic="false">
+    <template x-for="t in items" :key="t.id">
+      <div class="om-toast" :class="'om-toast--' + t.type" role="status">
+        <span class="shrink-0 mt-0.5"
+              :class="t.type === 'success' ? 'text-success-500'
+                    : t.type === 'warning' ? 'text-warning-500'
+                    : t.type === 'danger'  ? 'text-danger-500'
+                    : 'text-info-500'"
+              x-html="omIcon(iconFor(t.type), 'w-4 h-4')"></span>
+        <div class="flex-1 min-w-0" x-text="t.message"></div>
+        <button class="text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 shrink-0" @click="dismiss(t.id)" aria-label="Dismiss">
+          <span x-html="omIcon('x', 'w-4 h-4')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+
+</body>
+</html>

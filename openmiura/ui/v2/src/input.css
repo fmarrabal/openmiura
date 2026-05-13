@@ -201,4 +201,175 @@
     background: var(--color-surface-900);
     border-color: var(--color-surface-700);
   }
+
+  /* Button primitives (A4). Tailwind utilities handle the
+     fine-grained styles; these classes carry the base + variants. */
+  .om-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    border-radius: var(--radius-input);
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .om-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .om-btn--sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+  .om-btn--lg { padding: 0.5rem 1rem; font-size: 1rem; }
+
+  .om-btn--primary { background: var(--color-primary-900); color: var(--color-surface-0); }
+  .om-btn--primary:hover:not(:disabled) { background: var(--color-primary-800); }
+
+  .om-btn--accent { background: var(--color-accent-600); color: var(--color-surface-0); }
+  .om-btn--accent:hover:not(:disabled) { background: var(--color-accent-700); }
+
+  .om-btn--ghost {
+    background: transparent;
+    border-color: var(--color-surface-300);
+    color: var(--color-surface-700);
+  }
+  html[data-theme="dark"] .om-btn--ghost {
+    border-color: var(--color-surface-600);
+    color: var(--color-surface-200);
+  }
+  .om-btn--ghost:hover:not(:disabled) { background: var(--color-surface-100); }
+  html[data-theme="dark"] .om-btn--ghost:hover:not(:disabled) { background: var(--color-surface-800); }
+
+  .om-btn--danger { background: var(--color-danger-600); color: var(--color-surface-0); }
+  .om-btn--danger:hover:not(:disabled) { background: var(--color-danger-700); }
+
+  /* Badges (status pills). The colour is set via om-badge--<variant>. */
+  .om-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1rem;
+  }
+  .om-badge--neutral  { background: color-mix(in srgb, var(--color-surface-500)  15%, transparent); color: var(--color-surface-700); }
+  .om-badge--info     { background: color-mix(in srgb, var(--color-info-500)    15%, transparent); color: var(--color-info-700); }
+  .om-badge--success  { background: color-mix(in srgb, var(--color-success-500) 15%, transparent); color: var(--color-success-700); }
+  .om-badge--warning  { background: color-mix(in srgb, var(--color-warning-500) 15%, transparent); color: var(--color-warning-700); }
+  .om-badge--danger   { background: color-mix(in srgb, var(--color-danger-500)  15%, transparent); color: var(--color-danger-700); }
+  html[data-theme="dark"] .om-badge--neutral { color: var(--color-surface-300); }
+  html[data-theme="dark"] .om-badge--info    { color: var(--color-info-500); }
+  html[data-theme="dark"] .om-badge--success { color: var(--color-success-500); }
+  html[data-theme="dark"] .om-badge--warning { color: var(--color-warning-500); }
+  html[data-theme="dark"] .om-badge--danger  { color: var(--color-danger-500); }
+
+  /* Table primitive: zebra-free, clear horizontal dividers, sortable header support. */
+  .om-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.875rem; }
+  .om-table thead th {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-surface-500);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-surface-200);
+    background: var(--color-surface-50);
+  }
+  html[data-theme="dark"] .om-table thead th {
+    color: var(--color-surface-400);
+    background: var(--color-surface-900);
+    border-bottom-color: var(--color-surface-700);
+  }
+  .om-table tbody td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-surface-200);
+    vertical-align: top;
+  }
+  html[data-theme="dark"] .om-table tbody td { border-bottom-color: var(--color-surface-800); }
+  .om-table tbody tr:hover td { background: var(--color-surface-50); }
+  html[data-theme="dark"] .om-table tbody tr:hover td { background: var(--color-surface-900); }
+  .om-table--compact thead th { padding: 0.375rem 0.5rem; }
+  .om-table--compact tbody td { padding: 0.375rem 0.5rem; }
+
+  /* Toast tray + items */
+  .om-toast-tray {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 60;
+    width: min(360px, calc(100vw - 2rem));
+    pointer-events: none;
+  }
+  .om-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius-input);
+    background: var(--color-surface-0);
+    border: 1px solid var(--color-surface-200);
+    box-shadow: var(--shadow-overlay);
+    font-size: 0.875rem;
+    color: var(--color-surface-800);
+  }
+  html[data-theme="dark"] .om-toast {
+    background: var(--color-surface-900);
+    border-color: var(--color-surface-700);
+    color: var(--color-surface-100);
+  }
+  .om-toast--success { border-left: 3px solid var(--color-success-500); }
+  .om-toast--warning { border-left: 3px solid var(--color-warning-500); }
+  .om-toast--danger  { border-left: 3px solid var(--color-danger-500); }
+  .om-toast--info    { border-left: 3px solid var(--color-info-500); }
+
+  /* Modals */
+  .om-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgb(2 6 23 / 0.5);
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+  .om-modal {
+    background: var(--color-surface-0);
+    border: 1px solid var(--color-surface-200);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-overlay);
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  html[data-theme="dark"] .om-modal {
+    background: var(--color-surface-900);
+    border-color: var(--color-surface-700);
+  }
+  .om-modal__header {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--color-surface-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  html[data-theme="dark"] .om-modal__header { border-bottom-color: var(--color-surface-700); }
+  .om-modal__body { padding: 1rem; overflow-y: auto; }
+  .om-modal__footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--color-surface-200);
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+  html[data-theme="dark"] .om-modal__footer { border-top-color: var(--color-surface-700); }
 }
