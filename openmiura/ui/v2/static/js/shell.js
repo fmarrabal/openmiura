@@ -112,11 +112,36 @@
       mobileMenuOpen: false,
       theme: (window.omTheme && window.omTheme.current()) || 'light',
 
+      auth: window.omAuth ? window.omAuth.snapshot() : null,
+
       init() {
         // Reflect external theme changes (system flips, other tabs)
         document.addEventListener('om:theme', (event) => {
           this.theme = event.detail.theme;
         });
+        // Mirror omAuth state so the topbar badge is reactive.
+        if (window.omAuth) {
+          document.addEventListener('om:auth:changed', (event) => {
+            this.auth = event.detail;
+          });
+        }
+      },
+
+      isAuthenticated() {
+        return !!(this.auth && this.auth.token && this.auth.me);
+      },
+
+      authStatusLabel() {
+        const a = this.auth || {};
+        if (!a.token) return 'not authenticated';
+        if (a.status === 'connecting') return 'connecting…';
+        if (a.status === 'error') return 'auth error';
+        if (a.me) {
+          const role = a.me.role || a.me.auth_mode || 'connected';
+          const who = a.me.username || a.me.principal_id || a.me.user_key || '';
+          return who ? `${who} · ${role}` : role;
+        }
+        return 'token set';
       },
 
       isActive(itemId) {
@@ -144,6 +169,70 @@
     };
   }
 
+  /**
+   * Alpine data factory for the auth panel embedded in the topbar.
+   * Drives the connect form (token | username+password), reflects
+   * omAuth.state and emits no events of its own — all writes go
+   * through `window.omAuth.*`.
+   */
+  function omAuthPanel() {
+    const snap = window.omAuth
+      ? window.omAuth.snapshot()
+      : { baseUrl: '', mode: 'token', token: '', username: '', me: null, status: 'idle', error: '' };
+    return {
+      open: false,
+      baseUrl: snap.baseUrl,
+      mode: snap.mode,
+      token: snap.token,
+      username: snap.username,
+      password: '',
+      status: snap.status,
+      error: snap.error,
+      me: snap.me,
+      busy: false,
+
+      init() {
+        document.addEventListener('om:auth:changed', (event) => {
+          const a = event.detail || {};
+          this.baseUrl = a.baseUrl;
+          this.mode = a.mode;
+          this.token = a.token;
+          this.username = a.username;
+          this.status = a.status;
+          this.error = a.error;
+          this.me = a.me;
+        });
+      },
+
+      toggle() { this.open = !this.open; },
+      close()  { this.open = false; },
+
+      async connect() {
+        if (!window.omAuth) { this.error = 'auth module not loaded'; return; }
+        this.busy = true;
+        window.omAuth.setBaseUrl(this.baseUrl);
+        window.omAuth.setMode(this.mode);
+        let ok = false;
+        if (this.mode === 'token') {
+          ok = await window.omAuth.connectWithToken(this.token);
+        } else {
+          ok = await window.omAuth.connectWithLogin(this.username, this.password);
+          this.password = ''; // never keep the password in component state
+        }
+        this.busy = false;
+        if (ok) this.open = false;
+      },
+
+      async disconnect() {
+        if (!window.omAuth) return;
+        this.busy = true;
+        await window.omAuth.logout();
+        this.busy = false;
+      },
+    };
+  }
+
   window.omShell = omShell;
+  window.omAuthPanel = omAuthPanel;
   window.omNavGroups = NAV_GROUPS; // exposed for tests + future debug pane
 })();
