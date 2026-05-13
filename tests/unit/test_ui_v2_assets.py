@@ -31,6 +31,9 @@ JS_THEME = UI_V2 / "static" / "js" / "theme.js"
 JS_SHELL = UI_V2 / "static" / "js" / "shell.js"
 JS_API = UI_V2 / "static" / "js" / "api.js"
 JS_AUTH = UI_V2 / "static" / "js" / "auth.js"
+JS_ICONS = UI_V2 / "static" / "js" / "icons.js"
+JS_COMPONENTS = UI_V2 / "static" / "js" / "components.js"
+COMPONENTS_HTML = UI_V2 / "static" / "components.html"
 
 REQUIRED_TOKENS = (
     "--color-primary-900",
@@ -217,6 +220,89 @@ def test_entry_point_loads_auth_modules(path: Path) -> None:
     assert 'x-data="omAuthPanel()"' in html
 
 
+# --------------------------------------------------------------------
+# Phase A4 — icon stack + base components
+# --------------------------------------------------------------------
+
+
+_REQUIRED_ICONS = (
+    # used by the admin sidebar
+    "gauge", "cpu", "send", "shield-check", "scroll-text", "circle-check",
+    "key", "users", "plug", "workflow", "settings", "list", "terminal",
+    # science sidebar
+    "message-circle", "upload-cloud", "file-search", "history",
+    # interview sidebar
+    "layout-dashboard", "play-circle",
+    # toasts + modal close
+    "x", "info", "triangle-alert", "circle-alert",
+)
+
+
+def test_icons_module_exposes_required_set() -> None:
+    assert JS_ICONS.exists()
+    text = JS_ICONS.read_text(encoding="utf-8")
+    assert "window.omIcon" in text
+    assert "window.omIconNames" in text
+    for name in _REQUIRED_ICONS:
+        # The registry entries look like `'gauge': `<svg ...>...</svg>`,`.
+        assert f"'{name}':" in text, f"icons.js missing required icon: {name}"
+
+
+def test_components_module_exposes_toast_and_modal_managers() -> None:
+    assert JS_COMPONENTS.exists()
+    text = JS_COMPONENTS.read_text(encoding="utf-8")
+    for name in (
+        "window.omToasts",
+        "window.omToastTray",
+        "window.omModal",
+        "window.omModalFor",
+    ):
+        assert name in text, f"components.js must expose {name}"
+    # Toast helpers per type.
+    for fn in ("info(", "success(", "warning(", "danger("):
+        assert fn in text
+    # Escape key closes the topmost modal.
+    assert "Escape" in text
+
+
+def test_components_gallery_page_exists_and_loads_modules() -> None:
+    assert COMPONENTS_HTML.exists()
+    html = COMPONENTS_HTML.read_text(encoding="utf-8")
+    assert "./openmiura.css" in html
+    assert "./js/icons.js" in html
+    assert "./js/components.js" in html
+    assert 'x-data="omToastTray()"' in html
+    assert "omModal.open" in html
+
+
+def test_input_css_declares_component_primitives() -> None:
+    text = INPUT_CSS.read_text(encoding="utf-8")
+    for cls in (
+        ".om-btn",
+        ".om-btn--primary",
+        ".om-btn--accent",
+        ".om-btn--ghost",
+        ".om-btn--danger",
+        ".om-badge",
+        ".om-table",
+        ".om-toast",
+        ".om-modal",
+        ".om-modal-overlay",
+    ):
+        assert cls in text, f"input.css must declare {cls} (A4 components)"
+
+
+@pytest.mark.parametrize("path", [ADMIN_HTML, SCIENCE_HTML, INTERVIEW_HTML])
+def test_entry_point_loads_icons_components_and_renders_tray(path: Path) -> None:
+    html = path.read_text(encoding="utf-8")
+    assert "./js/icons.js" in html
+    assert "./js/components.js" in html
+    # Sidebar items now render an icon via omIcon(item.icon, ...)
+    assert "omIcon(item.icon" in html
+    # Toast tray placed once per page.
+    assert 'x-data="omToastTray()"' in html
+
+
 def test_index_uses_extracted_theme_module() -> None:
     """The Phase A1 inline theme bootstrap moved into js/theme.js."""
     html = PREVIEW_HTML.read_text(encoding="utf-8")
@@ -280,6 +366,9 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/shell.js",
             "/ui/v2/js/api.js",
             "/ui/v2/js/auth.js",
+            "/ui/v2/js/icons.js",
+            "/ui/v2/js/components.js",
+            "/ui/v2/components.html",
         ):
             r = client.get(sub)
             assert r.status_code == 200, f"{sub} not served (got {r.status_code})"
