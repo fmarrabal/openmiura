@@ -114,7 +114,70 @@ Esto es el "audit trail" del propio proyecto sobre sí mismo, y servirá de mate
 
 ---
 
+## 3.5 Estado del master plan (live)
+
+> Para no perder de vista qué está hecho y qué queda, mantén esta
+> sección actualizada al cerrar cada fase. El plan literal de la
+> sección 4 se conserva como referencia histórica; este resumen es
+> el que una sesión nueva debe leer primero.
+
+**Master plan literal: cerrado**. Las 5 fases del CLAUDE.md
+están todas mergeadas en `main`.
+
+| Fase | Estado | PR | Workjournal | Resultado |
+|---|---|---|---|---|
+| 0 — Limpieza y verdad | ✅ closed | [#16](https://github.com/fmarrabal/openmiura/pull/16) | [2026-05-06-2259](docs/_workjournal/2026-05-06-2259.md) | AGENTS.md, README rewrite, OpenClaw narrative archived, system prompt neutralized |
+| 1 — Refactor persistence layer | ✅ closed | [#17](https://github.com/fmarrabal/openmiura/pull/17) | [2026-05-08-1946](docs/_workjournal/2026-05-08-1946.md) | 12 repositories under `openmiura/persistence/` behind the `AuditStore` facade |
+| 1.1 — SessionsRepo + delegator compaction | ✅ closed | [#18](https://github.com/fmarrabal/openmiura/pull/18) | [2026-05-09-0115](docs/_workjournal/2026-05-09-0115.md) | `audit.py` 2,145 → 755 lines |
+| 1.2 — admin.py split | ✅ closed | [#19](https://github.com/fmarrabal/openmiura/pull/19) | [2026-05-09-1252](docs/_workjournal/2026-05-09-1252.md) | 16 sub-routers under `interfaces/http/routes/admin/` |
+| 2 — Whitepaper + GxP mappings | ✅ closed | [#20](https://github.com/fmarrabal/openmiura/pull/20) | [2026-05-09-1336](docs/_workjournal/2026-05-09-1336.md) | Whitepaper + Part 11 / Annex 11 / GAMP 5 / ALCOA+ + 5 policy packs + 3 use cases |
+| 3 — Discovery + UAL NMR pilot | ✅ closed | [#21](https://github.com/fmarrabal/openmiura/pull/21) | [2026-05-09-1954](docs/_workjournal/2026-05-09-1954.md) | Discovery kit + executable pilot policy pack + smoke-test script |
+| 4 — Strategy + paper + teaching | ✅ closed | [#22](https://github.com/fmarrabal/openmiura/pull/22) | [2026-05-09-2040](docs/_workjournal/2026-05-09-2040.md) | `STRATEGY.md` (3 routes) + 3,013-word IMRaD paper + 36-entry .bib + 5 TFG/TFM + 90-min lecture |
+
+**Residual debt cleanup: closed**. The 9 production files
+flagged at the end of Phase 1.2 as still exceeding 1,500 lines
+have all been split. After PRs #23-#32 and #34, the DoD literal
+`find openmiura -name '*.py' ... | awk '$1 > 1500'` returns
+empty. Full session log: [`docs/_workjournal/2026-05-11-2354.md`](docs/_workjournal/2026-05-11-2354.md).
+
+**DoD global (sección 5)**:
+
+| # | Criterio | Estado |
+|---|---|---|
+| 1 | Ningún `.py` de producción supera 1.500 líneas | ✅ |
+| 2 | `pytest -q` pasa al 100% | ✅ |
+| 3 | Demo canónico pasa | ✅ |
+| 4 | `git grep -i 'openclaw'` en `README.md` + docs vivos = 0 | ✅ |
+| 5 | `AGENTS.md` existe y enlazado desde `README.md` | ✅ |
+| 6 | `docs/regulated/whitepaper.md` ≥ 8 páginas | ✅ 4,028 palabras |
+| 7 | 3 mapping tables rellenadas y honestas | ✅ |
+| 8 | `docs/STRATEGY.md` existe con las 3 rutas | ✅ |
+| 9 | `docs/academic/paper_draft.md` ≥ 6 páginas | ✅ 3,013 palabras |
+| 10 | System prompt público sin "Curro" ni "MiuraBot" | ✅ |
+
+**10/10**.
+
+**Qué queda fuera del repo automático** (trabajo de Curro):
+
+- Conducir 5-10 entrevistas de discovery y loggearlas bajo
+  `docs/_workjournal/discovery/`.
+- Operar el pilot UAL NMR sobre 3 espectros reales × 3
+  preparadores × 3 días + 1 negative test.
+- Enviar el paper a un venue (sugerencia: *Computers in Industry*),
+  reformatear según normas.
+- Ofrecer TFG-01 o TFG-02 a un estudiante.
+
+Cualquier cosa adicional dentro del repo (cobertura, observability,
+nuevos policy packs, nuevos refactors) **no está en el master
+plan literal**. Hay que tomarla como ampliación, no como cierre.
+
+---
+
 ## 4. Plan de trabajo en 4 fases (≈ 4 semanas + horizonte)
+
+> **Estado**: cerrado. El contenido de esta sección se conserva
+> como referencia histórica del plan original. Para el estado
+> live ver la sección 3.5 inmediatamente arriba.
 
 ### Fase 0 — Limpieza y verdad (Semana 1, días 1-2)
 
