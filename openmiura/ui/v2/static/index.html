@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openMiura UI v2 — design tokens preview</title>
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/web/jetbrains-mono.css" />
+  <link rel="stylesheet" href="./openmiura.css" />
+</head>
+<body class="font-sans">
+
+  <header class="border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-primary-900 dark:bg-primary-700 flex items-center justify-center text-surface-0 font-bold">oM</div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight">openMiura</h1>
+          <p class="text-xs text-surface-500 dark:text-surface-400">UI v2 — design tokens preview</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" type="button"
+          class="text-sm px-3 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition">
+          Toggle theme
+        </button>
+        <a class="text-sm px-3 py-1.5 rounded-md text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950 transition" href="/ui/">← Legacy UI</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-10 space-y-12">
+
+    <section>
+      <h2 class="text-2xl font-semibold tracking-tight mb-2">openMiura UI v2 — Phase A1 ships the foundations</h2>
+      <p class="text-surface-600 dark:text-surface-300 max-w-3xl">
+        This is the entry point of the new UI. It is intentionally a
+        <em>design-tokens preview</em>, not yet a functional console — the
+        functional surfaces (admin / science / interview) land in subsequent
+        PRs. Use this page to validate the colour palette, the typography
+        and the base components before they propagate everywhere.
+      </p>
+    </section>
+
+    <section>
+      <h3 class="text-lg font-semibold mb-4">Colour palette</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="om-card">
+          <h4 class="font-semibold text-sm mb-3 text-surface-700 dark:text-surface-200">Primary (navy)</h4>
+          <div class="grid grid-cols-11 gap-1">
+            <div class="aspect-square rounded bg-primary-50  flex items-end justify-center text-[10px] pb-1 text-surface-700">50</div>
+            <div class="aspect-square rounded bg-primary-100 flex items-end justify-center text-[10px] pb-1 text-surface-700">100</div>
+            <div class="aspect-square rounded bg-primary-200 flex items-end justify-center text-[10px] pb-1 text-surface-700">200</div>
+            <div class="aspect-square rounded bg-primary-300 flex items-end justify-center text-[10px] pb-1 text-surface-700">300</div>
+            <div class="aspect-square rounded bg-primary-400 flex items-end justify-center text-[10px] pb-1 text-surface-0">400</div>
+            <div class="aspect-square rounded bg-primary-500 flex items-end justify-center text-[10px] pb-1 text-surface-0">500</div>
+            <div class="aspect-square rounded bg-primary-600 flex items-end justify-center text-[10px] pb-1 text-surface-0">600</div>
+            <div class="aspect-square rounded bg-primary-700 flex items-end justify-center text-[10px] pb-1 text-surface-0">700</div>
+            <div class="aspect-square rounded bg-primary-800 flex items-end justify-center text-[10px] pb-1 text-surface-0">800</div>
+            <div class="aspect-square rounded bg-primary-900 flex items-end justify-center text-[10px] pb-1 text-surface-0">900</div>
+            <div class="aspect-square rounded bg-primary-950 flex items-end justify-center text-[10px] pb-1 text-surface-0">950</div>
+          </div>
+        </div>
+
+        <div class="om-card">
+          <h4 class="font-semibold text-sm mb-3 text-surface-700 dark:text-surface-200">Accent (cyan)</h4>
+          <div class="grid grid-cols-11 gap-1">
+            <div class="aspect-square rounded bg-accent-50  flex items-end justify-center text-[10px] pb-1 text-surface-700">50</div>
+            <div class="aspect-square rounded bg-accent-100 flex items-end justify-center text-[10px] pb-1 text-surface-700">100</div>
+            <div class="aspect-square rounded bg-accent-200 flex items-end justify-center text-[10px] pb-1 text-surface-700">200</div>
+            <div class="aspect-square rounded bg-accent-300 flex items-end justify-center text-[10px] pb-1 text-surface-700">300</div>
+            <div class="aspect-square rounded bg-accent-400 flex items-end justify-center text-[10px] pb-1 text-surface-700">400</div>
+            <div class="aspect-square rounded bg-accent-500 flex items-end justify-center text-[10px] pb-1 text-surface-0">500</div>
+            <div class="aspect-square rounded bg-accent-600 flex items-end justify-center text-[10px] pb-1 text-surface-0">600</div>
+            <div class="aspect-square rounded bg-accent-700 flex items-end justify-center text-[10px] pb-1 text-surface-0">700</div>
+            <div class="aspect-square rounded bg-accent-800 flex items-end justify-center text-[10px] pb-1 text-surface-0">800</div>
+            <div class="aspect-square rounded bg-accent-900 flex items-end justify-center text-[10px] pb-1 text-surface-0">900</div>
+            <div class="aspect-square rounded bg-accent-950 flex items-end justify-center text-[10px] pb-1 text-surface-0">950</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        <div class="om-card">
+          <div class="w-full h-10 rounded bg-success-500 mb-2"></div>
+          <div class="text-sm font-mono text-surface-600 dark:text-surface-300">success</div>
+          <div class="text-xs text-surface-500 dark:text-surface-400">#10b981</div>
+        </div>
+        <div class="om-card">
+          <div class="w-full h-10 rounded bg-warning-500 mb-2"></div>
+          <div class="text-sm font-mono text-surface-600 dark:text-surface-300">warning</div>
+          <div class="text-xs text-surface-500 dark:text-surface-400">#f59e0b</div>
+        </div>
+        <div class="om-card">
+          <div class="w-full h-10 rounded bg-danger-500 mb-2"></div>
+          <div class="text-sm font-mono text-surface-600 dark:text-surface-300">danger</div>
+          <div class="text-xs text-surface-500 dark:text-surface-400">#dc2626</div>
+        </div>
+        <div class="om-card">
+          <div class="w-full h-10 rounded bg-info-500 mb-2"></div>
+          <div class="text-sm font-mono text-surface-600 dark:text-surface-300">info</div>
+          <div class="text-xs text-surface-500 dark:text-surface-400">#0ea5e9</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="text-lg font-semibold mb-4">Typography</h3>
+      <div class="om-card space-y-4">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Inter — sans</p>
+          <p class="text-3xl font-bold tracking-tight">Open governance plane for LLM agents</p>
+          <p class="text-base text-surface-700 dark:text-surface-200 mt-2">openMiura is an open-source governance layer that sits in front of an arbitrary agent runtime and enforces four primitives — policy, approval gates, tamper-evident evidence packs and scope isolation — without attempting to validate the agent's internal reasoning.</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">JetBrains Mono — code</p>
+          <pre class="font-mono text-sm bg-surface-100 dark:bg-surface-800 rounded-md p-3 overflow-x-auto"><code>approval_id = "9fce673e-b92a-41bf-9f9c-6a3bb446fa9b"
+signer      = "qa_analytical@example.org"
+meaning     = "approved for laboratory notebook"
+timestamp   = 1778694972.708638</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="text-lg font-semibold mb-4">Base components (preview)</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="om-card space-y-3">
+          <h4 class="font-semibold text-sm">Buttons</h4>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded-md bg-primary-900 text-surface-0 text-sm hover:bg-primary-800 transition">Primary</button>
+            <button class="px-3 py-1.5 rounded-md bg-accent-600 text-surface-0 text-sm hover:bg-accent-700 transition">Accent</button>
+            <button class="px-3 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 text-sm hover:bg-surface-100 dark:hover:bg-surface-800 transition">Ghost</button>
+            <button class="px-3 py-1.5 rounded-md bg-danger-600 text-surface-0 text-sm hover:bg-danger-700 transition">Destructive</button>
+          </div>
+        </div>
+
+        <div class="om-card space-y-3">
+          <h4 class="font-semibold text-sm">Badges</h4>
+          <div class="flex flex-wrap gap-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-500/15 text-success-700 dark:text-success-500">stable</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-info-500/15 text-info-700 dark:text-info-500">beta</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-500/15 text-warning-700 dark:text-warning-500">partial</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-500/15 text-surface-700 dark:text-surface-300">experimental</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-danger-500/15 text-danger-700 dark:text-danger-500">denied</span>
+          </div>
+        </div>
+
+        <div class="om-card md:col-span-2">
+          <h4 class="font-semibold text-sm mb-3">Status: every layer of the openMiura split</h4>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">
+                <th class="py-2 pr-4">Layer</th>
+                <th class="py-2 pr-4">Status</th>
+                <th class="py-2 pr-4">Max file</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-surface-200 dark:divide-surface-700">
+              <tr><td class="py-2 pr-4 font-mono text-xs">openmiura/core/audit.py</td><td class="py-2 pr-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-500/15 text-success-700 dark:text-success-500">stable</span></td><td class="py-2 pr-4 font-mono text-xs">755</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">openmiura/application/canvas/service/</td><td class="py-2 pr-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-500/15 text-success-700 dark:text-success-500">stable</span></td><td class="py-2 pr-4 font-mono text-xs">1,326</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">openmiura/application/admin/service/</td><td class="py-2 pr-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-500/15 text-success-700 dark:text-success-500">stable</span></td><td class="py-2 pr-4 font-mono text-xs">1,190</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="text-lg font-semibold mb-4">What lands next</h3>
+      <ol class="list-decimal list-inside text-surface-600 dark:text-surface-300 space-y-1">
+        <li><strong>PR-A2</strong> — Layout shell (sidebar, topbar, breadcrumbs, theme toggle plumbing).</li>
+        <li><strong>PR-A3</strong> — Auth / session module shared by the three UIs.</li>
+        <li><strong>PR-A4</strong> — Icon stack (Lucide) + Button / Card / Table / Badge / Toast / Modal components.</li>
+        <li><strong>PR-A5</strong> — Build tooling script + <code class="font-mono text-xs">docs/ui/</code>.</li>
+      </ol>
+    </section>
+
+  </main>
+
+  <footer class="border-t border-surface-200 dark:border-surface-700 py-6 mt-12 text-center text-xs text-surface-500 dark:text-surface-400">
+    openMiura UI v2 · Tailwind v4 · Alpine.js (loaded in PR-A2) · Inter + JetBrains Mono
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const saved = localStorage.getItem('openmiura.v2.theme');
+      const initial = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      root.setAttribute('data-theme', initial);
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('openmiura.v2.theme', next);
+      });
+    })();
+  </script>
+
+</body>
+</html>

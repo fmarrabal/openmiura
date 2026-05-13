@@ -145,6 +145,11 @@ demo_artifacts/
 # Personal / per-user config overrides (system prompts, personas, etc.)
 configs/personal/
 
+# UI v2 build tooling — Tailwind CLI standalone binary downloaded
+# on demand by scripts/build_ui_css.py; never committed (130 MB).
+tools/tailwindcss
+tools/tailwindcss.exe
+
 # committed environment profile templates
 !ops/
 !ops/env/

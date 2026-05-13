@@ -1,0 +1,180 @@
+/**
+ * openMiura UI v2 — Tailwind v4 entry point.
+ *
+ * Source of truth for design tokens (colour palette, typography,
+ * spacing scale, border radii, shadows). Edit this file, then
+ * regenerate the compiled CSS:
+ *
+ *     ./tools/tailwindcss \
+ *         -i openmiura/ui/v2/src/input.css \
+ *         -o openmiura/ui/v2/static/openmiura.css \
+ *         --minify
+ *
+ * See `docs/ui/styling.md` for the full workflow.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ===========================================================
+   *  Brand palette
+   *  Primary navy + cyan accent. Regulatory-serious, not
+   *  chatbot-y. Mapped to Tailwind's semantic scale so every
+   *  utility class (bg-primary-500, text-primary-700, etc.)
+   *  resolves to the values below.
+   * =========================================================== */
+
+  --color-primary-50:  #f0f5fb;
+  --color-primary-100: #d8e4f1;
+  --color-primary-200: #adc3df;
+  --color-primary-300: #7f9fc9;
+  --color-primary-400: #557fb3;
+  --color-primary-500: #2d619c;
+  --color-primary-600: #1b4576;
+  --color-primary-700: #143258;
+  --color-primary-800: #0e2440;
+  --color-primary-900: #0a2540;
+  --color-primary-950: #061730;
+
+  --color-accent-50:  #ecfeff;
+  --color-accent-100: #cffafe;
+  --color-accent-200: #a5f3fc;
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+  --color-accent-700: #0e7490;
+  --color-accent-800: #155e75;
+  --color-accent-900: #164e63;
+  --color-accent-950: #083344;
+
+  /* Semantic state colours (success / warning / danger / info)
+     anchored to Tailwind's emerald / amber / red / sky scales. */
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  --color-danger-500: #dc2626;
+  --color-danger-600: #b91c1c;
+  --color-danger-700: #991b1b;
+
+  --color-info-500: #0ea5e9;
+  --color-info-600: #0284c7;
+  --color-info-700: #0369a1;
+
+  /* Neutral / surface palette. Slate-based for both themes. */
+  --color-surface-0:   #ffffff;
+  --color-surface-50:  #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+  --color-surface-400: #94a3b8;
+  --color-surface-500: #64748b;
+  --color-surface-600: #475569;
+  --color-surface-700: #334155;
+  --color-surface-800: #1e293b;
+  --color-surface-900: #0f172a;
+  --color-surface-950: #020617;
+
+  /* ===========================================================
+   *  Typography
+   * =========================================================== */
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular,
+               Menlo, Monaco, Consolas, "Liberation Mono",
+               "Courier New", monospace;
+
+  /* ===========================================================
+   *  Spacing, radii, shadows
+   *  Tailwind v4 brings sensible defaults; only override what
+   *  the brand actually deviates on.
+   * =========================================================== */
+
+  --radius-card: 0.625rem;   /* 10px — cards / panels */
+  --radius-input: 0.5rem;    /* 8px — inputs / buttons */
+
+  --shadow-card:    0 1px 2px 0 rgb(15 23 42 / 0.04),
+                    0 1px 3px 0 rgb(15 23 42 / 0.08);
+  --shadow-overlay: 0 10px 15px -3px rgb(15 23 42 / 0.10),
+                    0 4px 6px -4px rgb(15 23 42 / 0.08);
+}
+
+/* ===========================================================
+ *  Global base styles
+ *  Light theme by default; dark theme via [data-theme="dark"]
+ *  on <html>. Toggle wired up later in JS.
+ * =========================================================== */
+
+@layer base {
+  html {
+    color-scheme: light;
+    font-family: var(--font-sans);
+  }
+
+  html[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--color-surface-50);
+    color: var(--color-surface-900);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html[data-theme="dark"] body {
+    background: var(--color-surface-950);
+    color: var(--color-surface-100);
+  }
+
+  code, pre, kbd, samp {
+    font-family: var(--font-mono);
+  }
+
+  /* Focus rings: visible, accessible, consistent across UIs. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+    border-radius: var(--radius-input);
+  }
+}
+
+/* ===========================================================
+ *  Component classes (intentionally minimal in PR-A1; the full
+ *  component library lands in PR-A4).
+ * =========================================================== */
+
+@layer components {
+  .om-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: 56px 1fr;
+    grid-template-areas:
+      "sidebar topbar"
+      "sidebar main";
+  }
+
+  .om-sidebar { grid-area: sidebar; }
+  .om-topbar  { grid-area: topbar;  }
+  .om-main    { grid-area: main;    }
+
+  /* Card primitive. Picked up everywhere; safe to ship in A1. */
+  .om-card {
+    background: var(--color-surface-0);
+    border: 1px solid var(--color-surface-200);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 1rem;
+  }
+  html[data-theme="dark"] .om-card {
+    background: var(--color-surface-900);
+    border-color: var(--color-surface-700);
+  }
+}

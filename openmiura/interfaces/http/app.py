@@ -192,6 +192,18 @@ def create_app(
         except Exception:
             pass
 
+    # UI v2 (Tailwind + Alpine) — coexists with the legacy /ui/ during
+    # the migration. The two mounts are independent; deprecation of the
+    # legacy UI happens after Phase B reaches feature parity.
+    #
+    # The /ui/v2 mount MUST be declared before /ui because Starlette
+    # resolves mounts in registration order: the first prefix that
+    # matches wins. A bare /ui registered first would swallow every
+    # /ui/v2/* request and return 404 from inside the legacy directory.
+    ui_v2_static = Path(__file__).resolve().parents[2] / "ui" / "v2" / "static"
+    if ui_v2_static.exists():
+        app.mount("/ui/v2", StaticFiles(directory=str(ui_v2_static), html=True), name="ui_v2")
+
     ui_static = Path(__file__).resolve().parents[2] / "ui" / "static"
     if ui_static.exists():
         app.mount("/ui", StaticFiles(directory=str(ui_static), html=True), name="ui")
