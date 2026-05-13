@@ -1,0 +1,29 @@
+# openMiura — git attributes.
+#
+# Web assets served as-is by the FastAPI app must keep LF line
+# endings regardless of the developer's OS. Otherwise the CI gate
+# `python scripts/build_ui_css.py --check` (regenerate + diff) fails
+# on Windows-authored commits where git autocrlf rewrote LF to CRLF
+# on checkout / commit.
+*.css   text eol=lf
+*.js    text eol=lf
+*.html  text eol=lf
+*.svg   text eol=lf
+*.json  text eol=lf
+
+# Python sources stay platform-default (LF on Linux/macOS,
+# the editor's choice on Windows; CI is Linux so what matters
+# is what's in the repo).
+*.py    text eol=lf
+
+# Shell scripts always LF.
+*.sh    text eol=lf
+
+# Markdown leans LF for portability.
+*.md    text eol=lf
+
+# Lockfiles + YAML pinned LF too.
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf

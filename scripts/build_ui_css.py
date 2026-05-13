@@ -14,6 +14,10 @@ Run:
     py -3 scripts/build_ui_css.py            # default minified build
     py -3 scripts/build_ui_css.py --watch    # rebuild on change
     py -3 scripts/build_ui_css.py --no-minify
+    py -3 scripts/build_ui_css.py --check    # CI: compile to a temp
+                                             # file, diff against the
+                                             # committed CSS, exit 1
+                                             # if they differ.
 """
 
 from __future__ import annotations
@@ -78,13 +82,82 @@ def ensure_binary() -> Path:
     return target
 
 
+def _check_mode(binary: Path) -> int:
+    """CI gate: compile to a temp file and diff against the committed
+    output. Exit 0 if they match byte-for-byte, 1 otherwise with a
+    helpful explanation."""
+    import filecmp
+    import tempfile
+
+    if not OUTPUT.exists():
+        print(
+            f"FAIL: {OUTPUT.relative_to(ROOT)} is not committed.\n"
+            f"      Run `python scripts/build_ui_css.py` locally and "
+            f"commit the result."
+        )
+        return 1
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".css", delete=False, dir=str(TOOLS), prefix="check-"
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        cmd = [str(binary), "-i", str(INPUT), "-o", str(tmp_path), "--minify"]
+        print(f"Compiling {INPUT.relative_to(ROOT)} (check mode)...")
+        rc = subprocess.call(cmd)
+        if rc != 0:
+            print(f"FAIL: tailwindcss exited with code {rc}")
+            return rc
+
+        if filecmp.cmp(str(OUTPUT), str(tmp_path), shallow=False):
+            print(f"OK: {OUTPUT.relative_to(ROOT)} is up to date.")
+            return 0
+
+        committed = OUTPUT.stat().st_size
+        regenerated = tmp_path.stat().st_size
+        print(
+            "FAIL: the committed openmiura.css does not match what the\n"
+            "      Tailwind compiler produces from the current input.css.\n"
+            "      Someone edited input.css (or a *.html under the v2\n"
+            "      tree referenced a new utility class) and forgot to\n"
+            "      regenerate the stylesheet.\n"
+            "\n"
+            f"      committed: {committed:>7} bytes\n"
+            f"      expected:  {regenerated:>7} bytes\n"
+            "\n"
+            "      Fix:\n"
+            "        python scripts/build_ui_css.py\n"
+            "        git add openmiura/ui/v2/static/openmiura.css\n"
+            "        git commit --amend  # or a new commit\n"
+        )
+        return 1
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--watch", action="store_true", help="rebuild on file changes")
     parser.add_argument("--no-minify", action="store_true", help="emit unminified CSS for debugging")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="CI mode: compile to a temp file, diff against the "
+             "committed CSS, exit 1 if they differ",
+    )
     args = parser.parse_args()
 
     binary = ensure_binary()
+
+    if args.check:
+        if args.watch:
+            print("--check and --watch are mutually exclusive")
+            return 2
+        return _check_mode(binary)
 
     cmd = [str(binary), "-i", str(INPUT), "-o", str(OUTPUT)]
     if not args.no_minify:

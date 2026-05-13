@@ -29,7 +29,7 @@ Phase A (foundations) is in progress:
 | A2 | Layout shell (sidebar, topbar, theme switcher, breadcrumbs) | pending |
 | A3 | Auth / session module shared by the 3 UIs | pending |
 | A4 | Icon stack (Lucide) + base components | pending |
-| A5 | Build tooling refinement + docs/ui/ index | pending |
+| A5 | CI gate (recompile-diff) + .gitattributes + docs finalised | **this PR** |
 
 After Phase A, the actual UI surfaces ship in:
 
