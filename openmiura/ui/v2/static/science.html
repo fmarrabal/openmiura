@@ -9,8 +9,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/web/jetbrains-mono.css" />
   <link rel="stylesheet" href="./openmiura.css" />
   <script src="./js/theme.js"></script>
+  <script src="./js/api.js"></script>
+  <script src="./js/auth.js"></script>
   <script src="./js/shell.js"></script>
   <script defer src="./js/alpine.min.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
 </head>
 <body class="font-sans" x-data="omShell({
   profile: 'science',
@@ -86,6 +89,71 @@
           </template>
         </ol>
       </nav>
+
+      <div class="relative" x-data="omAuthPanel()">
+        <button type="button"
+                class="inline-flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition"
+                @click="toggle()" :aria-expanded="open ? 'true' : 'false'">
+          <span class="inline-block w-2 h-2 rounded-full"
+                :class="status === 'connected' ? 'bg-success-500' : status === 'error' ? 'bg-danger-500' : status === 'connecting' ? 'bg-warning-500' : 'bg-surface-400'"></span>
+          <span class="max-w-[180px] truncate" x-text="(me && (me.username || me.principal_id || me.user_key)) || (token ? 'token set' : 'not authenticated')"></span>
+          <span class="text-surface-500 dark:text-surface-400 text-[10px]" x-text="open ? '▴' : '▾'"></span>
+        </button>
+        <div x-show="open" x-cloak @click.outside="close()" x-transition.opacity.duration.150ms
+             class="absolute right-0 mt-2 w-80 om-card z-40 space-y-3 shadow-xl">
+          <div>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Broker base URL</p>
+            <input type="url" x-model="baseUrl"
+                   class="w-full px-2 py-1.5 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                   placeholder="http://127.0.0.1:8081/broker" />
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Auth mode</p>
+            <div class="flex gap-1">
+              <button type="button" class="flex-1 px-2 py-1 text-xs rounded-md transition"
+                      :class="mode === 'token' ? 'bg-primary-900 text-surface-0 dark:bg-primary-700' : 'border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200'"
+                      @click="mode = 'token'">Static token</button>
+              <button type="button" class="flex-1 px-2 py-1 text-xs rounded-md transition"
+                      :class="mode === 'login' ? 'bg-primary-900 text-surface-0 dark:bg-primary-700' : 'border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200'"
+                      @click="mode = 'login'">Username + password</button>
+            </div>
+          </div>
+          <div x-show="mode === 'token'" class="space-y-1">
+            <label class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Token</label>
+            <input type="password" x-model="token"
+                   class="w-full px-2 py-1.5 text-sm font-mono rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                   placeholder="Broker or session token" />
+          </div>
+          <div x-show="mode === 'login'" class="space-y-2">
+            <div>
+              <label class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Username</label>
+              <input type="text" x-model="username" autocomplete="username"
+                     class="w-full px-2 py-1.5 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                     placeholder="admin" />
+            </div>
+            <div>
+              <label class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Password</label>
+              <input type="password" x-model="password" autocomplete="current-password"
+                     class="w-full px-2 py-1.5 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                     placeholder="••••••••" />
+            </div>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button type="button" class="flex-1 px-3 py-1.5 text-sm rounded-md bg-primary-900 text-surface-0 hover:bg-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    :disabled="busy" @click="connect()">
+              <span x-show="!busy">Connect</span>
+              <span x-show="busy">Connecting…</span>
+            </button>
+            <button type="button" class="px-3 py-1.5 text-sm rounded-md border border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:opacity-50 transition"
+                    :disabled="busy || !token" @click="disconnect()">Disconnect</button>
+          </div>
+          <div x-show="error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="error"></div>
+          <div x-show="me" class="text-xs text-surface-600 dark:text-surface-300 border-t border-surface-200 dark:border-surface-700 pt-2 space-y-0.5">
+            <p>Authenticated as <span class="font-mono" x-text="me && (me.username || me.principal_id || me.user_key)"></span></p>
+            <p>Role: <span class="font-mono" x-text="me && (me.role || me.auth_mode || '—')"></span></p>
+          </div>
+        </div>
+      </div>
 
       <button type="button"
               class="p-1.5 rounded-md text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800"

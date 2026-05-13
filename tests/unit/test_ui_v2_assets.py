@@ -29,6 +29,8 @@ INTERVIEW_HTML = UI_V2 / "static" / "interview.html"
 JS_ALPINE = UI_V2 / "static" / "js" / "alpine.min.js"
 JS_THEME = UI_V2 / "static" / "js" / "theme.js"
 JS_SHELL = UI_V2 / "static" / "js" / "shell.js"
+JS_API = UI_V2 / "static" / "js" / "api.js"
+JS_AUTH = UI_V2 / "static" / "js" / "auth.js"
 
 REQUIRED_TOKENS = (
     "--color-primary-900",
@@ -150,6 +152,71 @@ def test_entry_point_mounts_shell_with_expected_profile(
     )
 
 
+# --------------------------------------------------------------------
+# Phase A3 — auth/api module
+# --------------------------------------------------------------------
+
+
+def test_api_module_exposes_documented_surface() -> None:
+    assert JS_API.exists()
+    text = JS_API.read_text(encoding="utf-8")
+    for fn in ("request(", "get(", "post(", "put(", "del("):
+        assert fn in text, f"api.js must define {fn}"
+    assert "window.omApi" in text
+    # 401 must emit om:auth:expired so omAuth can clean up.
+    assert "om:auth:expired" in text
+
+
+def test_auth_module_exposes_documented_surface() -> None:
+    assert JS_AUTH.exists()
+    text = JS_AUTH.read_text(encoding="utf-8")
+    for fn in (
+        "connectWithToken",
+        "connectWithLogin",
+        "logout",
+        "fetchMe",
+        "setBaseUrl",
+        "setMode",
+    ):
+        assert fn in text, f"auth.js must define {fn}"
+    assert "window.omAuth" in text
+    # Persistence keys are part of the public contract; downstream
+    # code may inspect localStorage directly during debug.
+    for key in (
+        "openmiura.v2.auth.baseUrl",
+        "openmiura.v2.auth.mode",
+        "openmiura.v2.auth.token",
+        "openmiura.v2.auth.username",
+    ):
+        assert key in text, f"auth.js must persist under {key}"
+    # Three events that pages can subscribe to.
+    for event in (
+        "om:auth:changed",
+        "om:auth:logged-in",
+        "om:auth:logged-out",
+    ):
+        assert event in text, f"auth.js must emit {event}"
+
+
+def test_shell_exposes_auth_panel_factory() -> None:
+    text = JS_SHELL.read_text(encoding="utf-8")
+    assert "omAuthPanel" in text, (
+        "shell.js must export omAuthPanel for the topbar dropdown"
+    )
+    assert "window.omAuthPanel" in text
+
+
+@pytest.mark.parametrize("path", [ADMIN_HTML, SCIENCE_HTML, INTERVIEW_HTML])
+def test_entry_point_loads_auth_modules(path: Path) -> None:
+    html = path.read_text(encoding="utf-8")
+    assert "./js/api.js" in html
+    assert "./js/auth.js" in html
+    # x-cloak prevents the auth dropdown flash before Alpine boots.
+    assert "x-cloak" in html
+    # Each entry point mounts the omAuthPanel via x-data.
+    assert 'x-data="omAuthPanel()"' in html
+
+
 def test_index_uses_extracted_theme_module() -> None:
     """The Phase A1 inline theme bootstrap moved into js/theme.js."""
     html = PREVIEW_HTML.read_text(encoding="utf-8")
@@ -203,7 +270,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
         assert r_css.status_code == 200
         assert int(r_css.headers["content-length"]) > 5_000
 
-        # Phase A2: every entry point + JS module reachable.
+        # Phase A2 + A3: every entry point + JS module reachable.
         for sub in (
             "/ui/v2/admin.html",
             "/ui/v2/science.html",
@@ -211,6 +278,8 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/alpine.min.js",
             "/ui/v2/js/theme.js",
             "/ui/v2/js/shell.js",
+            "/ui/v2/js/api.js",
+            "/ui/v2/js/auth.js",
         ):
             r = client.get(sub)
             assert r.status_code == 200, f"{sub} not served (got {r.status_code})"
