@@ -151,6 +151,10 @@
  * =========================================================== */
 
 @layer components {
+  /* App shell grid. The default layout (>= md) places a fixed-width
+     sidebar to the left of a topbar and main outlet. On small
+     viewports the sidebar collapses out of flow and is toggled via
+     `mobileMenuOpen` on the Alpine shell component. */
   .om-shell {
     min-height: 100vh;
     display: grid;
@@ -161,9 +165,29 @@
       "sidebar main";
   }
 
-  .om-sidebar { grid-area: sidebar; }
-  .om-topbar  { grid-area: topbar;  }
-  .om-main    { grid-area: main;    }
+  .om-shell--collapsed {
+    grid-template-columns: 64px 1fr;
+  }
+
+  .om-sidebar { grid-area: sidebar; min-height: 0; }
+  .om-topbar  { grid-area: topbar;  min-height: 0; }
+  .om-main    { grid-area: main;    min-height: 0; }
+
+  @media (max-width: 767px) {
+    .om-shell {
+      grid-template-columns: 1fr;
+      grid-template-rows: 56px 1fr;
+      grid-template-areas: "topbar" "main";
+    }
+    .om-sidebar {
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
+      width: 240px;
+      grid-area: unset;
+      z-index: 30;
+      box-shadow: var(--shadow-overlay);
+    }
+  }
 
   /* Card primitive. Picked up everywhere; safe to ship in A1. */
   .om-card {

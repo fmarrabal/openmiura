@@ -16,11 +16,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 UI_V2 = ROOT / "openmiura" / "ui" / "v2"
 INPUT_CSS = UI_V2 / "src" / "input.css"
 OUTPUT_CSS = UI_V2 / "static" / "openmiura.css"
 PREVIEW_HTML = UI_V2 / "static" / "index.html"
+ADMIN_HTML = UI_V2 / "static" / "admin.html"
+SCIENCE_HTML = UI_V2 / "static" / "science.html"
+INTERVIEW_HTML = UI_V2 / "static" / "interview.html"
+JS_ALPINE = UI_V2 / "static" / "js" / "alpine.min.js"
+JS_THEME = UI_V2 / "static" / "js" / "theme.js"
+JS_SHELL = UI_V2 / "static" / "js" / "shell.js"
 
 REQUIRED_TOKENS = (
     "--color-primary-900",
@@ -86,6 +94,71 @@ def test_preview_html_has_theme_toggle() -> None:
     assert "data-theme=" in html
 
 
+# --------------------------------------------------------------------
+# Phase A2 — shell + 3 entry points
+# --------------------------------------------------------------------
+
+
+def test_alpine_bundle_present() -> None:
+    assert JS_ALPINE.exists(), f"missing Alpine bundle: {JS_ALPINE}"
+    size = JS_ALPINE.stat().st_size
+    assert 30_000 < size < 200_000, (
+        f"Alpine bundle size {size} bytes outside expected range — "
+        f"check the CDN download in scripts (or whatever downloaded it)"
+    )
+
+
+def test_theme_module_exposes_public_api() -> None:
+    assert JS_THEME.exists()
+    text = JS_THEME.read_text(encoding="utf-8")
+    # The four public methods every UI v2 page relies on.
+    for fn in ("current()", "set(", "toggle()", "respectSystem()"):
+        assert fn in text, f"theme.js must define {fn}"
+    assert "openmiura.v2.theme" in text, (
+        "theme.js must persist the choice under the documented localStorage key"
+    )
+
+
+def test_shell_module_declares_three_navigation_profiles() -> None:
+    assert JS_SHELL.exists()
+    text = JS_SHELL.read_text(encoding="utf-8")
+    for profile in ("admin:", "science:", "interview:"):
+        assert profile in text, f"shell.js NAV_GROUPS must declare {profile}"
+    # The factory must be exposed globally so HTML `x-data` can reach it.
+    assert "window.omShell" in text
+
+
+@pytest.mark.parametrize(
+    ("path", "profile"),
+    [
+        (ADMIN_HTML, "admin"),
+        (SCIENCE_HTML, "science"),
+        (INTERVIEW_HTML, "interview"),
+    ],
+)
+def test_entry_point_mounts_shell_with_expected_profile(
+    path: Path, profile: str
+) -> None:
+    assert path.exists(), f"missing entry point: {path}"
+    html = path.read_text(encoding="utf-8")
+    assert "./openmiura.css" in html
+    assert "./js/theme.js" in html
+    assert "./js/shell.js" in html
+    assert "./js/alpine.min.js" in html
+    assert f"profile: '{profile}'" in html, (
+        f"{path.name} must invoke omShell with profile '{profile}'"
+    )
+
+
+def test_index_uses_extracted_theme_module() -> None:
+    """The Phase A1 inline theme bootstrap moved into js/theme.js."""
+    html = PREVIEW_HTML.read_text(encoding="utf-8")
+    assert "./js/theme.js" in html
+    # The old inline implementation must be gone (no more raw
+    # localStorage.getItem in the page).
+    assert "localStorage.getItem('openmiura.v2.theme')" not in html
+
+
 def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
     """The /ui/v2 mount must coexist with /ui; mount order matters
     because Starlette resolves prefixes first-match-wins. Regression
@@ -129,5 +202,17 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
         r_css = client.get("/ui/v2/openmiura.css")
         assert r_css.status_code == 200
         assert int(r_css.headers["content-length"]) > 5_000
+
+        # Phase A2: every entry point + JS module reachable.
+        for sub in (
+            "/ui/v2/admin.html",
+            "/ui/v2/science.html",
+            "/ui/v2/interview.html",
+            "/ui/v2/js/alpine.min.js",
+            "/ui/v2/js/theme.js",
+            "/ui/v2/js/shell.js",
+        ):
+            r = client.get(sub)
+            assert r.status_code == 200, f"{sub} not served (got {r.status_code})"
     finally:
         _P(cfg_path).unlink(missing_ok=True)
