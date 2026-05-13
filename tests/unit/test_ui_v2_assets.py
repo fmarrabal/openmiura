@@ -303,6 +303,50 @@ def test_entry_point_loads_icons_components_and_renders_tray(path: Path) -> None
     assert 'x-data="omToastTray()"' in html
 
 
+# --------------------------------------------------------------------
+# Phase A5 — CI gate
+# --------------------------------------------------------------------
+
+
+def test_build_ui_css_supports_check_mode() -> None:
+    """The recompile-diff gate is the contract that prevents drift."""
+    import subprocess
+    import sys as _sys
+
+    script = ROOT / "scripts" / "build_ui_css.py"
+    result = subprocess.run(
+        [_sys.executable, str(script), "--check"],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, (
+        f"build_ui_css.py --check failed (rc {result.returncode}). "
+        f"stdout: {result.stdout}; stderr: {result.stderr}"
+    )
+    assert "up to date" in result.stdout
+
+
+def test_gitattributes_pins_web_assets_to_lf() -> None:
+    """The CI diff fails on Windows-authored commits if `.gitattributes`
+    does not force LF on web assets. Regression test against the
+    autocrlf bug discovered while wiring A5."""
+    text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    for ext in (".css", ".js", ".html", ".svg"):
+        assert f"*{ext}" in text, f".gitattributes must pin *{ext} to LF"
+    assert "eol=lf" in text
+
+
+def test_ui_css_check_workflow_exists() -> None:
+    """The CI workflow that enforces the recompile-diff gate."""
+    wf = ROOT / ".github" / "workflows" / "ui-css-check.yml"
+    assert wf.exists(), "missing .github/workflows/ui-css-check.yml"
+    text = wf.read_text(encoding="utf-8")
+    assert "scripts/build_ui_css.py --check" in text
+    # Triggered on PR + main push on UI v2 paths.
+    assert "openmiura/ui/v2" in text
+
+
 def test_index_uses_extracted_theme_module() -> None:
     """The Phase A1 inline theme bootstrap moved into js/theme.js."""
     html = PREVIEW_HTML.read_text(encoding="utf-8")

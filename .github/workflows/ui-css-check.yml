@@ -1,0 +1,41 @@
+name: ui-css-check
+
+# Lightweight gate that protects the committed UI v2 stylesheet
+# (`openmiura/ui/v2/static/openmiura.css`) from drifting away from
+# its source (`openmiura/ui/v2/src/input.css`).
+#
+# Runs on every PR that touches the UI v2 tree and on every push to
+# main. Downloads the Tailwind v4 standalone binary on the runner,
+# recompiles the CSS, and diffs against what is checked in. Fails
+# with a helpful message if they differ.
+
+on:
+  pull_request:
+    paths:
+      - "openmiura/ui/v2/**"
+      - "scripts/build_ui_css.py"
+      - ".github/workflows/ui-css-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "openmiura/ui/v2/**"
+      - "scripts/build_ui_css.py"
+      - ".github/workflows/ui-css-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Recompile and diff
+        run: python scripts/build_ui_css.py --check

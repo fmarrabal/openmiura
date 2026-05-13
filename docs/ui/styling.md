@@ -107,17 +107,47 @@ python scripts/build_ui_css.py --no-minify
 
 ## CI / verification
 
-The Phase A5 PR will add a CI step that:
+A dedicated GitHub Actions workflow,
+[`ui-css-check`](../../.github/workflows/ui-css-check.yml), enforces
+that the committed `openmiura.css` matches what the compiler
+produces from the current `input.css`. It runs on every PR that
+touches the UI v2 tree and on every push to `main`. The job:
 
-1. Runs `python scripts/build_ui_css.py --no-minify` against a
-   fresh checkout.
-2. Diffs the result against the committed CSS.
-3. Fails if they differ — i.e. someone forgot to recompile
-   after editing the input.
+1. Downloads the Tailwind v4 standalone binary for Linux on the
+   runner (~130 MB; under 30 s including cache miss).
+2. Runs `python scripts/build_ui_css.py --check` which compiles to
+   a temp file and diffs against the committed CSS.
+3. Fails with a helpful message if they differ — the message
+   spells out the byte sizes and the exact fix command.
 
-Until A5 ships, the verification is on the contributor's honour;
-the test added in this PR only asserts the file exists and is
-non-empty.
+This prevents the "edited input.css, forgot to recompile" failure
+mode from leaking past review.
+
+### `.gitattributes` enforces LF line endings
+
+Web assets (`*.css`, `*.js`, `*.html`, `*.svg`, `*.json`) are
+checked in with LF endings via [`/.gitattributes`](../../.gitattributes).
+On Windows, `core.autocrlf` would otherwise rewrite the compiled
+CSS to CRLF on checkout, breaking the byte-for-byte CI diff.
+`git add --renormalize .` was used once to apply the rule to
+already-checked-in files; future contributors do not need to
+think about it.
+
+### Local pre-push check
+
+Before pushing changes to anything under `openmiura/ui/v2/`:
+
+```bash
+python scripts/build_ui_css.py --check
+```
+
+If it fails:
+
+```bash
+python scripts/build_ui_css.py
+git add openmiura/ui/v2/static/openmiura.css
+git commit --amend  # or a new commit
+```
 
 ## What lives where
 
