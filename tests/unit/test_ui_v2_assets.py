@@ -447,9 +447,104 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/auth.js",
             "/ui/v2/js/icons.js",
             "/ui/v2/js/components.js",
+            "/ui/v2/js/admin/dashboard.js",
+            "/ui/v2/js/admin/runtimes.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
             assert r.status_code == 200, f"{sub} not served (got {r.status_code})"
     finally:
         _P(cfg_path).unlink(missing_ok=True)
+
+
+# --------------------------------------------------------------------
+# Phase B2 — Admin Runtimes & dispatches
+# --------------------------------------------------------------------
+
+JS_ADMIN_RUNTIMES = UI_V2 / "static" / "js" / "admin" / "runtimes.js"
+
+
+def test_admin_runtimes_module_exposes_factory() -> None:
+    assert JS_ADMIN_RUNTIMES.exists(), (
+        f"missing admin runtimes module: {JS_ADMIN_RUNTIMES}"
+    )
+    text = JS_ADMIN_RUNTIMES.read_text(encoding="utf-8")
+    assert "window.adminRuntimes" in text, (
+        "runtimes.js must expose window.adminRuntimes for Alpine x-data"
+    )
+
+
+def test_admin_runtimes_module_consults_documented_endpoints() -> None:
+    """The B2 view is read-only on five endpoints plus one POST.
+
+    Endpoint surface is part of the PR contract; downstream PRs
+    that touch these paths must keep them stable or update this
+    test alongside the change.
+    """
+    text = JS_ADMIN_RUNTIMES.read_text(encoding="utf-8")
+    for path in (
+        "/admin/openclaw/runtimes",
+        "/concurrency",
+        "/alerts",
+        "/notification-targets",
+        "/alert-routing",
+        "/recovery-jobs",
+    ):
+        assert path in text, f"runtimes.js must consult {path}"
+
+
+def test_admin_runtimes_module_declares_per_card_state() -> None:
+    """The per-card state machine (state/data/error/raw) and the
+    show-raw toggles are reused by every B-phase view. Regress
+    against an accidental rename."""
+    text = JS_ADMIN_RUNTIMES.read_text(encoding="utf-8")
+    for card in (
+        "runtimes:",
+        "concurrency:",
+        "alerts:",
+        "notificationTargets:",
+        "alertRouting:",
+    ):
+        assert card in text, f"runtimes.js must declare card key {card!r}"
+    # Recovery form lives in the same factory.
+    assert "recoveryForm" in text
+    assert "submitRecovery" in text
+    assert "openRecoveryDialog" in text
+
+
+def test_admin_runtimes_module_reacts_to_auth_events() -> None:
+    """When the user logs in or out, the runtimes view must
+    refresh/clear without a page reload."""
+    text = JS_ADMIN_RUNTIMES.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_runtimes_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/runtimes.js" in html, (
+        "admin.html must load the runtimes module"
+    )
+    assert 'x-data="adminRuntimes()"' in html, (
+        "admin.html must mount adminRuntimes() inside the runtimes template"
+    )
+    assert "activeId === 'runtimes'" in html, (
+        "admin.html must gate the runtimes view by activeId"
+    )
+    # Modal id matches the manager registration.
+    assert "omModalFor('runtimes-recovery')" in html
+    # The placeholder template excludes both dashboard AND runtimes now.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes'" in html
+    ), (
+        "admin.html placeholder template must skip runtimes (B2) and "
+        "dashboard (B1); otherwise the placeholder double-renders"
+    )
+    # Show-raw toggles for the four detail cards.
+    for key in (
+        "showRaw.concurrency",
+        "showRaw.alerts",
+        "showRaw.notificationTargets",
+        "showRaw.alertRouting",
+    ):
+        assert key in html, f"admin.html runtimes view must wire {key}"
