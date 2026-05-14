@@ -347,6 +347,41 @@ def test_ui_css_check_workflow_exists() -> None:
     assert "openmiura/ui/v2" in text
 
 
+# --------------------------------------------------------------------
+# Phase B1 — Admin Dashboard
+# --------------------------------------------------------------------
+
+JS_ADMIN_DASHBOARD = UI_V2 / "static" / "js" / "admin" / "dashboard.js"
+
+
+def test_admin_dashboard_module_exposes_factory() -> None:
+    assert JS_ADMIN_DASHBOARD.exists()
+    text = JS_ADMIN_DASHBOARD.read_text(encoding="utf-8")
+    assert "window.adminDashboard" in text
+    # Consults the documented endpoints.
+    for path in (
+        "/admin/status",
+        "/admin/sessions",
+        "/admin/events",
+        "/admin/openclaw/runtimes",
+        "/admin/canvas/documents",
+    ):
+        assert path in text, f"dashboard.js must consult {path}"
+
+
+def test_admin_html_loads_dashboard_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/dashboard.js" in html
+    assert 'x-data="adminDashboard()"' in html
+    # x-if dispatches by activeId so other sections stay lazy.
+    assert "activeId === 'dashboard'" in html
+    # Empty state when not authenticated.
+    assert "!omAuth.state.token" in html or "omAuth.state.token" in html
+    # Show-raw toggle pattern is in place.
+    assert "showRaw.runtimes" in html
+    assert "showRaw.events" in html
+
+
 def test_index_uses_extracted_theme_module() -> None:
     """The Phase A1 inline theme bootstrap moved into js/theme.js."""
     html = PREVIEW_HTML.read_text(encoding="utf-8")

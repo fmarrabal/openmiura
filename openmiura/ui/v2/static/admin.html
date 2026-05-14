@@ -14,6 +14,7 @@
   <script src="./js/icons.js"></script>
   <script src="./js/components.js"></script>
   <script src="./js/shell.js"></script>
+  <script src="./js/admin/dashboard.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -167,57 +168,212 @@
     </header>
 
     <main class="om-main bg-surface-50 dark:bg-surface-950 overflow-y-auto">
-      <div class="max-w-5xl mx-auto px-6 py-8 space-y-6">
 
-        <header>
-          <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Phase A2 placeholder</p>
-          <h1 class="text-2xl font-semibold tracking-tight">Admin console — shell wired up</h1>
-          <p class="mt-2 text-surface-600 dark:text-surface-300 max-w-2xl">
-            The functional admin surfaces (Dashboard, Runtimes, Policies, Secrets,
-            Identities, Channels, Evidence packs, Debug) land in Phase B
-            (PRs B1–B7). This page exists to validate the shell layout, the
-            navigation grouping, the responsive sidebar and the theme toggle.
-          </p>
-        </header>
+      <!-- ===== DASHBOARD ===== -->
+      <template x-if="activeId === 'dashboard'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminDashboard()" x-init="init()">
 
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="om-card">
-            <p class="text-xs text-surface-500 dark:text-surface-400 mb-1">Active section</p>
-            <p class="text-lg font-semibold" x-text="activeId"></p>
-          </div>
-          <div class="om-card">
-            <p class="text-xs text-surface-500 dark:text-surface-400 mb-1">Sidebar state</p>
-            <p class="text-lg font-semibold" x-text="sidebarCollapsed ? 'collapsed' : 'expanded'"></p>
-          </div>
-          <div class="om-card">
-            <p class="text-xs text-surface-500 dark:text-surface-400 mb-1">Theme</p>
-            <p class="text-lg font-semibold" x-text="theme"></p>
-          </div>
-        </section>
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Operate</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Live overview of the connected openMiura instance. Visual by default; click <span class="font-mono text-xs">raw</span> on any card to fold out the JSON returned by the underlying endpoint.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="toggleAutoRefresh()">
+                <span x-show="autoRefreshSeconds === 0">Auto-refresh: off</span>
+                <span x-show="autoRefreshSeconds > 0" x-text="'Auto-refresh: ' + autoRefreshSeconds + 's'"></span>
+              </button>
+              <button class="om-btn om-btn--primary om-btn--sm" @click="refreshAll()"
+                      :disabled="status.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </header>
 
-        <section class="om-card">
-          <h2 class="text-base font-semibold mb-3">Navigation profile loaded</h2>
-          <ul class="text-sm text-surface-600 dark:text-surface-300 space-y-1 font-mono">
-            <template x-for="group in groups" :key="group.title">
-              <li>
-                <span class="font-semibold" x-text="group.title"></span>:
-                <span x-text="group.items.map(i => i.id).join(', ')"></span>
-              </li>
-            </template>
-          </ul>
-        </section>
+          <!-- Not-authenticated empty state -->
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load dashboard data</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">
+                Open the auth dropdown in the topbar, configure the broker base URL and provide a token or login.
+              </p>
+            </div>
+          </template>
 
-        <section>
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline"
-             href="./index.html">← Back to design tokens preview</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline"
-             href="./science.html">Open science workspace →</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline"
-             href="./interview.html">Open interview demo →</a>
-        </section>
-      </div>
+          <!-- Authenticated content -->
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- Scope summary -->
+              <section class="om-card" x-data>
+                <div class="flex items-center justify-between mb-3">
+                  <h2 class="text-base font-semibold">Active scope</h2>
+                  <span class="om-badge om-badge--info">from /auth/me</span>
+                </div>
+                <template x-if="scopeSummary()">
+                  <dl class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                    <div><dt class="text-xs text-surface-500 dark:text-surface-400">Tenant</dt><dd class="font-mono mt-0.5" x-text="scopeSummary().tenant_id"></dd></div>
+                    <div><dt class="text-xs text-surface-500 dark:text-surface-400">Workspace</dt><dd class="font-mono mt-0.5" x-text="scopeSummary().workspace_id"></dd></div>
+                    <div><dt class="text-xs text-surface-500 dark:text-surface-400">Environment</dt><dd class="font-mono mt-0.5" x-text="scopeSummary().environment"></dd></div>
+                    <div><dt class="text-xs text-surface-500 dark:text-surface-400">Principal</dt><dd class="font-mono mt-0.5" x-text="scopeSummary().principal"></dd></div>
+                    <div><dt class="text-xs text-surface-500 dark:text-surface-400">Role</dt><dd class="font-mono mt-0.5" x-text="scopeSummary().role"></dd></div>
+                  </dl>
+                </template>
+                <template x-if="!scopeSummary()">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No identity payload available.</p>
+                </template>
+              </section>
+
+              <!-- Stat cards row -->
+              <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                <!-- runtimes -->
+                <div class="om-card">
+                  <div class="flex items-start justify-between mb-2">
+                    <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Openclaw runtimes</p>
+                    <span x-html="omIcon('cpu', 'w-4 h-4 text-primary-900 dark:text-accent-300')"></span>
+                  </div>
+                  <template x-if="runtimes.state === 'loading'"><div class="text-2xl text-surface-400">…</div></template>
+                  <template x-if="runtimes.state === 'loaded'">
+                    <div class="text-2xl font-semibold tabular-nums" x-text="runtimesCount() ?? '—'"></div>
+                  </template>
+                  <template x-if="runtimes.state === 'error'">
+                    <div class="text-sm text-danger-700 dark:text-danger-500" x-text="runtimes.error"></div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.runtimes = !showRaw.runtimes">
+                    <span x-show="!showRaw.runtimes">show raw</span>
+                    <span x-show="showRaw.runtimes">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.runtimes" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-40 overflow-auto" x-text="runtimes.raw"></pre>
+                </div>
+
+                <!-- sessions -->
+                <div class="om-card">
+                  <div class="flex items-start justify-between mb-2">
+                    <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Sessions</p>
+                    <span x-html="omIcon('message-circle', 'w-4 h-4 text-primary-900 dark:text-accent-300')"></span>
+                  </div>
+                  <template x-if="sessions.state === 'loading'"><div class="text-2xl text-surface-400">…</div></template>
+                  <template x-if="sessions.state === 'loaded'">
+                    <div class="text-2xl font-semibold tabular-nums" x-text="sessionsCount() ?? '—'"></div>
+                  </template>
+                  <template x-if="sessions.state === 'error'">
+                    <div class="text-sm text-danger-700 dark:text-danger-500" x-text="sessions.error"></div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.sessions = !showRaw.sessions">
+                    <span x-show="!showRaw.sessions">show raw</span>
+                    <span x-show="showRaw.sessions">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.sessions" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-40 overflow-auto" x-text="sessions.raw"></pre>
+                </div>
+
+                <!-- canvas -->
+                <div class="om-card">
+                  <div class="flex items-start justify-between mb-2">
+                    <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Canvas documents</p>
+                    <span x-html="omIcon('layout-dashboard', 'w-4 h-4 text-primary-900 dark:text-accent-300')"></span>
+                  </div>
+                  <template x-if="canvas.state === 'loading'"><div class="text-2xl text-surface-400">…</div></template>
+                  <template x-if="canvas.state === 'loaded'">
+                    <div class="text-2xl font-semibold tabular-nums" x-text="canvasCount() ?? '—'"></div>
+                  </template>
+                  <template x-if="canvas.state === 'error'">
+                    <div class="text-sm text-danger-700 dark:text-danger-500" x-text="canvas.error"></div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.canvas = !showRaw.canvas">
+                    <span x-show="!showRaw.canvas">show raw</span>
+                    <span x-show="showRaw.canvas">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.canvas" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-40 overflow-auto" x-text="canvas.raw"></pre>
+                </div>
+
+                <!-- system status -->
+                <div class="om-card">
+                  <div class="flex items-start justify-between mb-2">
+                    <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">System</p>
+                    <span x-html="omIcon('gauge', 'w-4 h-4 text-primary-900 dark:text-accent-300')"></span>
+                  </div>
+                  <template x-if="status.state === 'loading'"><div class="text-base text-surface-400">checking…</div></template>
+                  <template x-if="status.state === 'loaded'">
+                    <span class="om-badge om-badge--success">healthy</span>
+                  </template>
+                  <template x-if="status.state === 'error'">
+                    <div class="text-sm text-danger-700 dark:text-danger-500" x-text="status.error"></div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.status = !showRaw.status">
+                    <span x-show="!showRaw.status">show raw</span>
+                    <span x-show="showRaw.status">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.status" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-40 overflow-auto" x-text="status.raw"></pre>
+                </div>
+              </section>
+
+              <!-- Recent events -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3">
+                  <h2 class="text-base font-semibold">Recent admin events</h2>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline" @click="showRaw.events = !showRaw.events">
+                    <span x-show="!showRaw.events">show raw</span>
+                    <span x-show="showRaw.events">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="events.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="events.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="events.error"></p>
+                </template>
+                <template x-if="events.state === 'loaded' && eventsItems().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No events.</p>
+                </template>
+                <template x-if="events.state === 'loaded' && eventsItems().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead><tr><th>When</th><th>Source</th><th>Actor</th><th>Action</th></tr></thead>
+                      <tbody>
+                        <template x-for="(ev, i) in eventsItems().slice(0, 10)" :key="i">
+                          <tr>
+                            <td class="font-mono text-xs whitespace-nowrap" x-text="fmtTime(ev.ts || ev.created_at || ev.timestamp)"></td>
+                            <td class="font-mono text-xs" x-text="ev.source || ev.channel || '—'"></td>
+                            <td class="font-mono text-xs" x-text="ev.actor || ev.user || '—'"></td>
+                            <td class="text-sm" x-text="(ev.payload && (ev.payload.action || ev.payload.event)) || ev.event_type || ev.action || '—'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <pre x-show="showRaw.events" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="events.raw"></pre>
+              </section>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholders for B2..B7) ===== -->
+      <template x-if="activeId !== 'dashboard'">
+        <div class="max-w-5xl mx-auto px-6 py-8">
+          <header>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
+              <span x-text="groups.find(g => g.items.some(i => i.id === activeId))?.title || ''"></span>
+            </p>
+            <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
+            <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B2 Runtimes, B3 Policies, B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong> in the sidebar to see the first functional view.
+            </p>
+          </header>
+        </div>
+      </template>
+
     </main>
 
   </div>
