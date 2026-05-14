@@ -15,6 +15,7 @@
   <script src="./js/components.js"></script>
   <script src="./js/shell.js"></script>
   <script src="./js/admin/dashboard.js"></script>
+  <script src="./js/admin/runtimes.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -359,8 +360,211 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholders for B2..B7) ===== -->
-      <template x-if="activeId !== 'dashboard'">
+      <!-- ===== RUNTIMES ===== -->
+      <template x-if="activeId === 'runtimes'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminRuntimes()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Operate</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Runtimes</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Registered OpenClaw runtime adapters. Select a row to inspect its concurrency, alerts, notification targets and alert routing. The legacy HTTP path <span class="font-mono text-xs">/admin/openclaw/*</span> is preserved on purpose; see <span class="font-mono text-xs">docs/_archive/refactor/</span> for context.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshList()" :disabled="runtimes.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <!-- empty / not-authed -->
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load runtimes</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- list -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                  <div class="flex items-center gap-2">
+                    <h2 class="text-base font-semibold">Registered runtimes</h2>
+                    <span class="om-badge om-badge--neutral" x-text="itemsList().length"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input type="text" x-model="filter" placeholder="Filter…"
+                           class="px-2 py-1 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800" />
+                    <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline" @click="showRaw.runtimes = !showRaw.runtimes">
+                      <span x-show="!showRaw.runtimes">show raw</span><span x-show="showRaw.runtimes">hide raw</span>
+                    </button>
+                  </div>
+                </div>
+
+                <template x-if="runtimes.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="runtimes.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="runtimes.error"></p>
+                </template>
+                <template x-if="runtimes.state === 'loaded' && filteredItems().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">
+                    <span x-show="!filter">No runtimes registered for this scope.</span>
+                    <span x-show="filter">No runtimes match the filter.</span>
+                  </p>
+                </template>
+
+                <template x-if="runtimes.state === 'loaded' && filteredItems().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Runtime</th>
+                          <th>Environment</th>
+                          <th>Tenant / Workspace</th>
+                          <th>Updated</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="r in filteredItems()" :key="r.runtime_id || r.id || r.name">
+                          <tr :class="(r.runtime_id || r.id || r.name) === selectedId ? 'bg-primary-50/60 dark:bg-primary-900/30' : ''">
+                            <td class="font-mono text-xs">
+                              <button type="button" class="text-left hover:underline"
+                                      @click="select(r.runtime_id || r.id || r.name)">
+                                <span x-text="r.runtime_id || r.id || r.name || '—'"></span>
+                              </button>
+                            </td>
+                            <td class="font-mono text-xs" x-text="r.environment || '—'"></td>
+                            <td class="font-mono text-xs">
+                              <span x-text="r.tenant_id || '—'"></span> / <span x-text="r.workspace_id || '—'"></span>
+                            </td>
+                            <td class="text-xs whitespace-nowrap" x-text="r.updated_at ? new Date((typeof r.updated_at === 'number' ? r.updated_at * (r.updated_at > 1e12 ? 1 : 1000) : Date.parse(r.updated_at))).toLocaleString() : '—'"></td>
+                            <td>
+                              <button class="om-btn om-btn--ghost om-btn--sm" @click="select(r.runtime_id || r.id || r.name)">Inspect</button>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+
+                <pre x-show="showRaw.runtimes" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="runtimes.raw"></pre>
+              </section>
+
+              <!-- detail -->
+              <template x-if="selectedId">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Selected runtime</p>
+                      <h2 class="text-base font-semibold font-mono mt-0.5" x-text="selectedId"></h2>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshDetail()">
+                        <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh detail</span>
+                      </button>
+                      <button class="om-btn om-btn--danger om-btn--sm" @click="openRecoveryDialog()">
+                        <span x-html="omIcon('terminal', 'w-3.5 h-3.5')"></span><span>Trigger recovery</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                    <div class="om-card">
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Concurrency</p>
+                      <template x-if="concurrency.state === 'loaded' && concurrencySummary()">
+                        <p class="text-lg tabular-nums">
+                          <span class="font-semibold" x-text="concurrencySummary().current ?? '—'"></span>
+                          <span class="text-surface-500 dark:text-surface-400"> / </span>
+                          <span x-text="concurrencySummary().max ?? '—'"></span>
+                        </p>
+                      </template>
+                      <template x-if="concurrency.state !== 'loaded'"><p class="text-sm text-surface-400 italic">—</p></template>
+                      <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.concurrency = !showRaw.concurrency">
+                        <span x-show="!showRaw.concurrency">show raw</span><span x-show="showRaw.concurrency">hide raw</span>
+                      </button>
+                      <pre x-show="showRaw.concurrency" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-32 overflow-auto" x-text="concurrency.raw"></pre>
+                    </div>
+                    <div class="om-card">
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Alerts</p>
+                      <p class="text-lg font-semibold tabular-nums" x-text="alertCount()"></p>
+                      <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.alerts = !showRaw.alerts">
+                        <span x-show="!showRaw.alerts">show raw</span><span x-show="showRaw.alerts">hide raw</span>
+                      </button>
+                      <pre x-show="showRaw.alerts" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-32 overflow-auto" x-text="alerts.raw"></pre>
+                    </div>
+                    <div class="om-card">
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Notification targets</p>
+                      <p class="text-lg font-semibold tabular-nums" x-text="notificationTargetCount()"></p>
+                      <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.notificationTargets = !showRaw.notificationTargets">
+                        <span x-show="!showRaw.notificationTargets">show raw</span><span x-show="showRaw.notificationTargets">hide raw</span>
+                      </button>
+                      <pre x-show="showRaw.notificationTargets" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-32 overflow-auto" x-text="notificationTargets.raw"></pre>
+                    </div>
+                    <div class="om-card">
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Alert routing</p>
+                      <p class="text-lg font-semibold tabular-nums" x-text="(alertRoutingPolicyVersions() ?? '—') + (alertRoutingPolicyVersions() != null ? ' versions' : '')"></p>
+                      <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2" @click="showRaw.alertRouting = !showRaw.alertRouting">
+                        <span x-show="!showRaw.alertRouting">show raw</span><span x-show="showRaw.alertRouting">hide raw</span>
+                      </button>
+                      <pre x-show="showRaw.alertRouting" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-32 overflow-auto" x-text="alertRouting.raw"></pre>
+                    </div>
+                  </div>
+
+                  <details class="text-sm">
+                    <summary class="cursor-pointer text-surface-700 dark:text-surface-200 select-none">Selected runtime payload</summary>
+                    <pre class="mt-2 text-[11px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-72 overflow-auto" x-text="JSON.stringify(selectedRuntime(), null, 2)"></pre>
+                  </details>
+                </section>
+              </template>
+
+              <!-- recovery modal -->
+              <div x-data="omModalFor('runtimes-recovery')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+                  <div class="om-modal__header">
+                    <h3 id="recovery-title" class="text-base font-semibold">Trigger recovery job</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Create a recovery job against <span class="font-mono" x-text="selectedId"></span>. The reason is recorded on the audit trail and becomes part of any later evidence pack.
+                    </p>
+                    <div>
+                      <label class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Reason</label>
+                      <textarea x-model="recoveryForm.reason" rows="3" placeholder="e.g. dispatch queue backed up, draining via recovery"
+                                class="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800"></textarea>
+                    </div>
+                    <div x-show="recoveryForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="recoveryForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="recoveryForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--danger" @click="submitRecovery()" :disabled="recoveryForm.busy">
+                      <span x-show="!recoveryForm.busy">Trigger</span>
+                      <span x-show="recoveryForm.busy">Triggering…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholders for B3..B7) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -368,7 +572,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B2 Runtimes, B3 Policies, B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong> in the sidebar to see the first functional view.
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B3 Policies, B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong> or <strong>Runtimes</strong> in the sidebar to see the functional views shipped so far.
             </p>
           </header>
         </div>
