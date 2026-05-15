@@ -14,6 +14,7 @@
   <script src="./js/icons.js"></script>
   <script src="./js/components.js"></script>
   <script src="./js/shell.js"></script>
+  <script src="./js/science/chat.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -166,34 +167,133 @@
     </header>
 
     <main class="om-main bg-surface-50 dark:bg-surface-950 overflow-y-auto">
-      <div class="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <header>
-          <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Phase A2 placeholder</p>
-          <h1 class="text-2xl font-semibold tracking-tight">Science workspace — shell wired up</h1>
-          <p class="mt-2 text-surface-600 dark:text-surface-300 max-w-2xl">
-            The functional science surfaces (Chat with agent, Upload spectrum & review,
-            Pending approvals, Evidence history) land in Phase C (PRs C1–C4).
-            This page exists to validate the science-profile sidebar grouping.
-          </p>
-        </header>
 
-        <section class="om-card">
-          <h2 class="text-base font-semibold mb-3">Two intentional groups for the operator</h2>
-          <p class="text-sm text-surface-600 dark:text-surface-300">
-            The science profile separates the daily <em>workspace</em> (chat, upload, review)
-            from the governance trail (approvals + evidence) — so an operator
-            focused on the bench is not distracted by audit-style surfaces.
-          </p>
-        </section>
+      <!-- ===== CHAT WITH AGENT ===== -->
+      <template x-if="activeId === 'chat'">
+        <div class="max-w-4xl mx-auto px-6 py-8 space-y-6" x-data="scienceChat()" x-init="init()">
 
-        <section>
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./index.html">← Design tokens preview</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./admin.html">Admin console →</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./interview.html">Interview demo →</a>
-        </section>
-      </div>
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Workspace</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Chat with agent</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Conversation thread with the configured science agent. Persisted in your browser until you reset; each turn is sent through <span class="font-mono text-xs">POST /http/message</span> and audited on the backend.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="sessionId"
+                    x-text="'session: ' + sessionId.slice(0, 12) + '…'"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="reset()" :disabled="composer.busy">
+                <span x-html="omIcon('x', 'w-3.5 h-3.5')"></span><span>New conversation</span>
+              </button>
+            </div>
+          </header>
+
+          <!-- empty / not-authed -->
+          <template x-if="!authenticated()">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to chat with the agent</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="authenticated()">
+            <div class="space-y-4">
+
+              <!-- transcript -->
+              <section class="om-card">
+                <template x-if="isEmpty()">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic py-8 text-center">
+                    No messages yet. Type your first question below to start the conversation.
+                  </p>
+                </template>
+
+                <template x-if="!isEmpty()">
+                  <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                    <template x-for="(m, i) in messages" :key="i">
+                      <article class="flex gap-3"
+                               :class="m.role === 'user' ? 'flex-row-reverse' : ''">
+                        <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold"
+                             :class="m.role === 'user' ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-900 dark:text-accent-300'
+                                   : m.role === 'agent' ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
+                                   : 'bg-surface-100 dark:bg-surface-800 text-surface-500'"
+                             x-text="m.role === 'user' ? 'you' : m.role === 'agent' ? 'AI' : 'sys'"></div>
+                        <div class="min-w-0 max-w-[80%] space-y-1"
+                             :class="m.role === 'user' ? 'text-right' : ''">
+                          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400"
+                             x-text="(m.role === 'agent' && m.agent_id ? m.agent_id + ' · ' : '') + (m.ts ? new Date(m.ts).toLocaleTimeString() : '')"></p>
+                          <div class="inline-block text-left text-sm rounded-md px-3 py-2 whitespace-pre-wrap break-words"
+                               :class="m.role === 'user' ? 'bg-primary-50 dark:bg-primary-900/20 text-surface-900 dark:text-surface-100'
+                                     : m.role === 'agent' ? 'bg-surface-100 dark:bg-surface-800 text-surface-900 dark:text-surface-100'
+                                     : (m.error ? 'bg-danger-500/10 text-danger-700 dark:text-danger-500 italic'
+                                                : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 italic')"
+                               x-text="m.text"></div>
+                        </div>
+                      </article>
+                    </template>
+                    <template x-if="composer.busy">
+                      <article class="flex gap-3">
+                        <div class="shrink-0 w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 flex items-center justify-center text-[10px] font-semibold">AI</div>
+                        <div class="text-sm text-surface-500 dark:text-surface-400 italic">thinking…</div>
+                      </article>
+                    </template>
+                  </div>
+                </template>
+              </section>
+
+              <!-- composer -->
+              <section class="om-card">
+                <label class="block">
+                  <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Your message</span>
+                  <textarea x-model="composer.text" rows="3" spellcheck="true"
+                            placeholder="Ask the agent — e.g. 'Process the NMR file I uploaded yesterday and draft the assignment.'"
+                            class="mt-1 w-full px-3 py-2 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-sm"
+                            @keydown.ctrl.enter.prevent="send()"
+                            @keydown.meta.enter.prevent="send()"></textarea>
+                </label>
+                <div class="mt-2 flex items-center justify-between gap-2 flex-wrap">
+                  <span class="text-[10px] text-surface-500 dark:text-surface-400">Ctrl/⌘ + Enter to send</span>
+                  <div class="flex items-center gap-2">
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw = !showRaw" :disabled="!lastTurnRaw">
+                      <span x-show="!showRaw">show last response raw</span><span x-show="showRaw">hide raw</span>
+                    </button>
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="send()" :disabled="composer.busy || !composer.text.trim()">
+                      <span x-show="!composer.busy">Send</span>
+                      <span x-show="composer.busy">Sending…</span>
+                    </button>
+                  </div>
+                </div>
+                <div x-show="error" class="mt-3 text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="error"></div>
+                <pre x-show="showRaw && lastTurnRaw" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="lastTurnRaw"></pre>
+              </section>
+            </div>
+          </template>
+
+        </div>
+      </template>
+
+      <!-- ===== Other science sections (placeholders for C2..C4) ===== -->
+      <template x-if="activeId !== 'chat'">
+        <div class="max-w-5xl mx-auto px-6 py-8 space-y-6">
+          <header>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
+              <span x-text="groups.find(g => g.items.some(i => i.id === activeId))?.title || ''"></span>
+            </p>
+            <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
+            <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase C (C2 Upload spectrum, C3 Review drafts, C4 Approvals + history). Pick <strong>Chat with agent</strong> in the sidebar to see the functional view shipped so far.
+            </p>
+          </header>
+
+          <section>
+            <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./admin.html">Admin console →</a>
+            ·
+            <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./interview.html">Interview demo →</a>
+          </section>
+        </div>
+      </template>
     </main>
 
   </div>
