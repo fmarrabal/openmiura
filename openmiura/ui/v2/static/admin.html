@@ -22,6 +22,7 @@
   <script src="./js/admin/channels.js"></script>
   <script src="./js/admin/evidence.js"></script>
   <script src="./js/admin/secrets_wizard.js"></script>
+  <script src="./js/admin/dispatches.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -2098,8 +2099,238 @@
         </div>
       </template>
 
+      <!-- ===== DISPATCHES ===== -->
+      <template x-if="activeId === 'dispatches'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminDispatches()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Operate</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Dispatches</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                OpenClaw dispatch records across runtimes. Click a row to inspect its full timeline and act on it: <strong>cancel</strong> aborts a pending dispatch, <strong>retry</strong> re-enqueues with optional overrides, <strong>reconcile</strong> manually pins a canonical status (escape hatch when retry/cancel cannot untangle a half-applied state).
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()" :disabled="list.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load dispatches</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- filters -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h2 class="text-base font-semibold">Filters</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/openclaw/dispatches</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Runtime id</span>
+                    <input type="text" x-model="filters.runtime_id" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Action</span>
+                    <input type="text" x-model="filters.action" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Status</span>
+                    <input type="text" x-model="filters.status" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Limit</span>
+                    <input type="number" min="1" max="300" x-model.number="filters.limit"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()">Apply</button>
+                </div>
+              </section>
+
+              <!-- list -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Dispatches
+                    <span class="om-badge om-badge--neutral ml-2" x-text="itemsList().length"></span>
+                  </h2>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                          @click="showRaw.list = !showRaw.list">
+                    <span x-show="!showRaw.list">show raw</span><span x-show="showRaw.list">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="list.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="list.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="list.error"></p>
+                </template>
+                <template x-if="isEmpty()">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No dispatches match the filters.</p>
+                </template>
+                <template x-if="list.state === 'loaded' && itemsList().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Dispatch id</th>
+                          <th>Runtime</th>
+                          <th>Action</th>
+                          <th>Status</th>
+                          <th>Updated</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="d in itemsList()" :key="d.dispatch_id || d.id">
+                          <tr :class="(d.dispatch_id || d.id) === selectedId ? 'bg-primary-50/60 dark:bg-primary-900/30' : ''">
+                            <td class="font-mono text-xs">
+                              <button type="button" class="text-left hover:underline"
+                                      @click="select(d.dispatch_id || d.id)">
+                                <span x-text="d.dispatch_id || d.id || '—'"></span>
+                              </button>
+                            </td>
+                            <td class="font-mono text-xs" x-text="d.runtime_id || '—'"></td>
+                            <td class="font-mono text-xs" x-text="d.action || '—'"></td>
+                            <td>
+                              <span class="om-badge text-[10px]"
+                                    :class="'om-badge--' + statusTone(d.canonical_status || d.status)"
+                                    x-text="d.canonical_status || d.status || '—'"></span>
+                            </td>
+                            <td class="text-xs whitespace-nowrap" x-text="d.updated_at || d.ts || '—'"></td>
+                            <td class="flex items-center gap-1 flex-wrap">
+                              <button class="om-btn om-btn--ghost om-btn--sm"
+                                      @click="openActionDialog(d.dispatch_id || d.id, 'cancel')">Cancel</button>
+                              <button class="om-btn om-btn--ghost om-btn--sm"
+                                      @click="openActionDialog(d.dispatch_id || d.id, 'retry')">Retry</button>
+                              <button class="om-btn om-btn--danger om-btn--sm"
+                                      @click="openActionDialog(d.dispatch_id || d.id, 'reconcile')">Reconcile</button>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <pre x-show="showRaw.list" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="list.raw"></pre>
+              </section>
+
+              <!-- detail -->
+              <template x-if="selectedId">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Selected dispatch</p>
+                      <h2 class="text-base font-semibold font-mono mt-0.5" x-text="selectedId"></h2>
+                    </div>
+                    <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                            @click="showRaw.detail = !showRaw.detail">
+                      <span x-show="!showRaw.detail">show raw</span><span x-show="showRaw.detail">hide raw</span>
+                    </button>
+                  </div>
+                  <template x-if="detail.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="detail.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="detail.error"></p>
+                  </template>
+                  <template x-if="detail.state === 'loaded'">
+                    <details class="text-sm">
+                      <summary class="cursor-pointer text-surface-700 dark:text-surface-200 select-none">Dispatch payload</summary>
+                      <pre class="mt-2 text-[11px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-72 overflow-auto" x-text="JSON.stringify(detail.data, null, 2)"></pre>
+                    </details>
+                  </template>
+                  <pre x-show="showRaw.detail" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="detail.raw"></pre>
+                </section>
+              </template>
+
+              <!-- last action result -->
+              <template x-if="actionResult.state === 'loaded' || actionResult.state === 'error'">
+                <section class="om-card">
+                  <h2 class="text-base font-semibold mb-2">Last action</h2>
+                  <template x-if="actionResult.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="actionResult.error"></p>
+                  </template>
+                  <template x-if="actionResult.state === 'loaded'">
+                    <p class="text-sm flex items-center gap-2">
+                      <span class="om-badge om-badge--success">applied</span>
+                      <span class="text-xs text-surface-500 dark:text-surface-400"
+                            x-text="actionResult.data && actionResult.data.dispatch ? ('canonical_status: ' + (actionResult.data.dispatch.canonical_status || '—')) : ''"></span>
+                    </p>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                          @click="showRaw.actionResult = !showRaw.actionResult">
+                    <span x-show="!showRaw.actionResult">show raw</span><span x-show="showRaw.actionResult">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.actionResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="actionResult.raw"></pre>
+                </section>
+              </template>
+
+              <!-- action modal -->
+              <div x-data="omModalFor('dispatches-action')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="dispatches-action-title">
+                  <div class="om-modal__header">
+                    <h3 id="dispatches-action-title" class="text-base font-semibold">Confirm dispatch action</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      About to <span class="font-semibold" x-text="actionForm.action"></span> dispatch <span class="font-mono text-xs" x-text="actionForm.dispatch_id"></span>.
+                    </p>
+                    <label class="block" x-show="actionForm.action === 'reconcile'">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Target status *</span>
+                      <input type="text" x-model="actionForm.target_status" placeholder="e.g. succeeded, failed"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Reason *</span>
+                      <textarea x-model="actionForm.reason" rows="3" spellcheck="true"
+                                placeholder="What did you observe? (auditor reads this later)"
+                                class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-sm"></textarea>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="actionForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div x-show="actionForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="actionForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="actionForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitAction()" :disabled="actionForm.busy">
+                      <span x-show="!actionForm.busy">Confirm</span>
+                      <span x-show="actionForm.busy">Submitting…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
       <!-- ===== Remaining admin sections (still placeholders) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard'">
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -2107,7 +2338,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              Eight functional admin surfaces shipped (Dashboard, Runtimes, Policies, Secrets, Identities, Channels, Evidence packs, Secrets wizard). The remaining sidebar items (<strong>Dispatches</strong>, <strong>Approvals</strong>, <strong>Workflows</strong>, <strong>System &amp; config</strong>, <strong>Event log</strong>, <strong>Tool calls</strong>) are reserved for a follow-up sprint.
+              Nine functional admin surfaces shipped. The remaining sidebar items (<strong>Approvals</strong>, <strong>Workflows</strong>, <strong>System &amp; config</strong>, <strong>Event log</strong>, <strong>Tool calls</strong>) are reserved for a follow-up sprint.
             </p>
           </header>
         </div>
