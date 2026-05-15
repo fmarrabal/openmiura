@@ -454,6 +454,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/identities.js",
             "/ui/v2/js/admin/channels.js",
             "/ui/v2/js/admin/evidence.js",
+            "/ui/v2/js/admin/secrets_wizard.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -706,8 +707,8 @@ def test_admin_secrets_module_consults_documented_endpoints() -> None:
     ):
         assert path in text, f"secrets.js must consult {path}"
     assert "/admin/config-center/secrets-wizard" not in text, (
-        "secrets.js must NOT consume the wizard write path in B4; "
-        "that surface ships separately with its own confirmation"
+        "secrets.js must NOT consume the wizard write path; "
+        "that surface lives in secrets_wizard.js (F2)"
     )
 
 
@@ -760,6 +761,59 @@ def test_admin_html_loads_secrets_factory_and_renders_view() -> None:
         "showRaw.explainResult",
     ):
         assert key in html, f"admin.html secrets view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase F2 — Admin Secrets wizard (config-center save path)
+# --------------------------------------------------------------------
+
+JS_ADMIN_SECRETS_WIZARD = UI_V2 / "static" / "js" / "admin" / "secrets_wizard.js"
+
+
+def test_admin_secrets_wizard_module_exposes_factory() -> None:
+    assert JS_ADMIN_SECRETS_WIZARD.exists()
+    text = JS_ADMIN_SECRETS_WIZARD.read_text(encoding="utf-8")
+    assert "window.adminSecretsWizard" in text
+
+
+def test_admin_secrets_wizard_module_consults_documented_endpoints() -> None:
+    """F2 ships the three wizard endpoints. Pinning the
+    snapshot + validate (read-modeled) + save (confirmed
+    write) contract."""
+    text = JS_ADMIN_SECRETS_WIZARD.read_text(encoding="utf-8")
+    for path in (
+        "/admin/config-center/secrets-wizard",
+        "/admin/config-center/secrets-wizard/validate",
+        "/admin/config-center/secrets-wizard/save",
+    ):
+        assert path in text, f"secrets_wizard.js must consult {path}"
+
+
+def test_admin_secrets_wizard_declares_save_modal() -> None:
+    text = JS_ADMIN_SECRETS_WIZARD.read_text(encoding="utf-8")
+    for card in ("snapshot:", "validateResult:", "saveResult:"):
+        assert card in text
+    for handler in ("submitValidate", "submitSave", "openSaveDialog", "closeSaveDialog"):
+        assert handler in text
+    assert "secrets-wizard-save" in text
+
+
+def test_shell_admin_sidebar_includes_secrets_wizard() -> None:
+    """The new nav item under Configure."""
+    text = JS_SHELL.read_text(encoding="utf-8")
+    assert "secrets-wizard" in text, (
+        "shell.js admin nav must include 'secrets-wizard' under Configure"
+    )
+
+
+def test_admin_html_loads_secrets_wizard_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/secrets_wizard.js" in html
+    assert 'x-data="adminSecretsWizard()"' in html
+    assert "activeId === 'secrets-wizard'" in html
+    assert "omModalFor('secrets-wizard-save')" in html
+    # Placeholder excludes the new view too.
+    assert "activeId !== 'secrets-wizard'" in html
 
 
 # --------------------------------------------------------------------
