@@ -1294,3 +1294,65 @@ def test_interview_html_renders_three_views() -> None:
     assert "Phase A2 placeholder" not in html, (
         "interview.html must replace the Phase A2 placeholder banner"
     )
+
+
+# --------------------------------------------------------------------
+# Phase E — Polish (a11y + docs)
+# --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", [ADMIN_HTML, SCIENCE_HTML, INTERVIEW_HTML])
+def test_sidebar_nav_has_a11y_wiring(path: Path) -> None:
+    """Every sidebar must carry an aria-label, mark the active
+    nav button with aria-current="page", and hide the icon
+    span from screen readers. Pinned in Phase E so a future
+    sidebar refactor cannot silently regress accessibility."""
+    html = path.read_text(encoding="utf-8")
+    assert 'aria-label="' in html, f"{path.name} sidebar must declare aria-label"
+    assert 'aria-current="' in html, (
+        f"{path.name} sidebar nav button must declare aria-current "
+        f"so screen readers announce the active page"
+    )
+    # The icon span sits inside a button with a textual label;
+    # the icon itself adds nothing to a screen reader.
+    assert 'aria-hidden="true"' in html, (
+        f"{path.name} icon span must be aria-hidden so screen "
+        f"readers don't announce the SVG node"
+    )
+
+
+def test_input_css_declares_focus_visible_ring() -> None:
+    """Phase E polish: keyboard users see a high-contrast
+    accent ring on every interactive element via
+    :focus-visible. Mouse users see nothing (no behaviour
+    regression). Pin the rule so a future tailwind upgrade
+    that drops the layer can't silently disable it."""
+    text = INPUT_CSS.read_text(encoding="utf-8")
+    assert ":focus-visible" in text, (
+        "input.css must declare a :focus-visible ring rule"
+    )
+    assert "om-sr-only" in text, (
+        "input.css must declare an .om-sr-only helper for "
+        "screen-reader-only text"
+    )
+
+
+def test_docs_ui_readme_describes_phase_e_polish() -> None:
+    """The contributor-facing README under docs/ui/ must
+    surface the Phase E polish notes so the a11y contract is
+    visible to anyone adding a new view."""
+    readme = ROOT / "docs" / "ui" / "README.md"
+    assert readme.exists(), f"missing {readme}"
+    text = readme.read_text(encoding="utf-8")
+    # Sentinel that the README has been updated past Phase A1.
+    assert "aria-current" in text, (
+        "docs/ui/README.md must describe the aria-current "
+        "convention so contributors know to preserve it"
+    )
+    assert ":focus-visible" in text or "focus-visible" in text, (
+        "docs/ui/README.md must mention the focus-visible "
+        "convention"
+    )
+    # All three profiles inventoried.
+    for token in ("admin", "science", "interview"):
+        assert token in text.lower()
