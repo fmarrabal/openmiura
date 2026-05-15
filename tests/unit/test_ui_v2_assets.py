@@ -455,6 +455,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/channels.js",
             "/ui/v2/js/admin/evidence.js",
             "/ui/v2/js/science/chat.js",
+            "/ui/v2/js/science/upload.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -1065,3 +1066,64 @@ def test_science_html_loads_chat_factory_and_renders_view() -> None:
     # Composer present.
     assert "composer.text" in html
     assert "composer.busy" in html
+
+
+# --------------------------------------------------------------------
+# Phase C2 — Science Upload spectrum
+# --------------------------------------------------------------------
+
+JS_SCIENCE_UPLOAD = UI_V2 / "static" / "js" / "science" / "upload.js"
+
+
+def test_science_upload_module_exposes_factory() -> None:
+    assert JS_SCIENCE_UPLOAD.exists()
+    text = JS_SCIENCE_UPLOAD.read_text(encoding="utf-8")
+    assert "window.scienceUpload" in text
+
+
+def test_science_upload_module_uses_only_chat_endpoint() -> None:
+    """C2 piggy-backs on the same /http/message endpoint as C1
+    because openMiura has no dedicated upload endpoint yet.
+    Pinning this contract here surfaces the day someone wires
+    a real upload endpoint and needs to update the regression
+    on the science profile's surface boundary."""
+    text = JS_SCIENCE_UPLOAD.read_text(encoding="utf-8")
+    assert "/http/message" in text
+    assert "/admin/" not in text, (
+        "upload.js must not consume admin endpoints"
+    )
+
+
+def test_science_upload_module_persists_metadata_only() -> None:
+    """The contract: only metadata under openmiura.v2.science.uploads."""
+    text = JS_SCIENCE_UPLOAD.read_text(encoding="utf-8")
+    assert "openmiura.v2.science.uploads" in text
+    # SHA-256 hashing via the Web Crypto API is the identity
+    # primitive that lets operator + agent agree on a file
+    # without round-tripping the bytes.
+    assert "SHA-256" in text or "sha256" in text
+
+
+def test_science_upload_module_caps_file_size_and_staging() -> None:
+    """Both caps are part of the documented contract; assert
+    they appear so a future regression that drops them is
+    explicit."""
+    text = JS_SCIENCE_UPLOAD.read_text(encoding="utf-8")
+    assert "MAX_FILE_BYTES" in text
+    assert "MAX_STAGED" in text
+
+
+def test_science_html_loads_upload_factory_and_renders_view() -> None:
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    assert "./js/science/upload.js" in html
+    assert 'x-data="scienceUpload()"' in html
+    assert "activeId === 'upload'" in html
+    # The placeholder template now excludes both chat AND upload.
+    assert (
+        "activeId !== 'chat' && activeId !== 'upload'" in html
+    ), (
+        "science.html placeholder must skip both chat (C1) and upload (C2)"
+    )
+    # Drop-zone wiring.
+    assert "@dragover" in html
+    assert "@drop.prevent" in html
