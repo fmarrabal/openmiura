@@ -457,6 +457,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/secrets_wizard.js",
             "/ui/v2/js/admin/dispatches.js",
             "/ui/v2/js/admin/approvals.js",
+            "/ui/v2/js/admin/debug.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -895,6 +896,50 @@ def test_admin_html_loads_approvals_view() -> None:
     assert "activeId === 'approvals'" in html
     assert "omModalFor('admin-approval-action')" in html
     assert "activeId !== 'approvals'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F8 — Admin Event log + Tool calls (Debug pane)
+# --------------------------------------------------------------------
+
+JS_ADMIN_DEBUG = UI_V2 / "static" / "js" / "admin" / "debug.js"
+
+
+def test_admin_debug_module_exposes_two_factories() -> None:
+    assert JS_ADMIN_DEBUG.exists()
+    text = JS_ADMIN_DEBUG.read_text(encoding="utf-8")
+    assert "window.adminEventLog" in text
+    assert "window.adminToolCalls" in text
+
+
+def test_admin_debug_module_consults_documented_endpoints() -> None:
+    text = JS_ADMIN_DEBUG.read_text(encoding="utf-8")
+    for path in (
+        "/admin/events",
+        "/admin/traces",
+    ):
+        assert path in text
+
+
+def test_admin_debug_module_is_strictly_read_only() -> None:
+    """The Debug pane never writes. Pin the absence of any
+    POST so a future refactor cannot quietly turn the trace
+    inspector into an action surface."""
+    text = JS_ADMIN_DEBUG.read_text(encoding="utf-8")
+    assert "omApi.post" not in text and "omApi.put" not in text and "omApi.del" not in text, (
+        "debug.js must not write; it is strictly read-only"
+    )
+
+
+def test_admin_html_loads_debug_views() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/debug.js" in html
+    assert 'x-data="adminEventLog()"' in html
+    assert 'x-data="adminToolCalls()"' in html
+    assert "activeId === 'events'" in html
+    assert "activeId === 'tool-calls'" in html
+    assert "activeId !== 'events'" in html
+    assert "activeId !== 'tool-calls'" in html
 
 
 # --------------------------------------------------------------------

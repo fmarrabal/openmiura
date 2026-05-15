@@ -24,6 +24,7 @@
   <script src="./js/admin/secrets_wizard.js"></script>
   <script src="./js/admin/dispatches.js"></script>
   <script src="./js/admin/approvals.js"></script>
+  <script src="./js/admin/debug.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -2453,8 +2454,237 @@
         </div>
       </template>
 
+      <!-- ===== EVENT LOG ===== -->
+      <template x-if="activeId === 'events'">
+        <div class="max-w-5xl mx-auto px-6 py-8 space-y-6" x-data="adminEventLog()" x-init="init()">
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Debug</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Event log</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Stream of recent admin events for the active scope. Read-only window onto what openMiura has recorded.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()" :disabled="list.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load events</h2>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <section class="om-card">
+              <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <input type="text" x-model="filters.channel" placeholder="channel filter"
+                         class="px-2 py-1 text-xs rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 w-40 font-mono" />
+                  <label class="text-xs text-surface-600 dark:text-surface-300">
+                    limit:
+                    <input type="number" min="1" max="500" x-model.number="filters.limit"
+                           class="ml-1 w-20 px-2 py-1 text-xs rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono" />
+                  </label>
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()">Apply</button>
+                </div>
+                <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/events</span>
+              </div>
+              <template x-if="list.state === 'loading'">
+                <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+              </template>
+              <template x-if="list.state === 'error'">
+                <p class="text-sm text-danger-700 dark:text-danger-500" x-text="list.error"></p>
+              </template>
+              <template x-if="isEmpty()">
+                <p class="text-sm text-surface-500 dark:text-surface-400 italic">No events in the window.</p>
+              </template>
+              <template x-if="list.state === 'loaded' && itemsList().length > 0">
+                <ul class="space-y-1 max-h-[60vh] overflow-y-auto pr-1 text-xs">
+                  <template x-for="(ev, i) in itemsList()" :key="i">
+                    <li class="flex items-start gap-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 py-1">
+                      <span class="om-badge om-badge--neutral text-[10px]"
+                            x-text="ev.kind || ev.event_type || ev.type || '—'"></span>
+                      <div class="min-w-0 flex-1">
+                        <div class="font-mono truncate" x-text="ev.summary || ev.message || ev.label || JSON.stringify(ev).slice(0, 120)"></div>
+                        <div class="text-[10px] text-surface-500 dark:text-surface-400"
+                             x-text="(ev.channel ? ev.channel + ' · ' : '') + (ev.ts || ev.timestamp || ev.created_at || '')"></div>
+                      </div>
+                    </li>
+                  </template>
+                </ul>
+              </template>
+              <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                      @click="showRaw = !showRaw">
+                <span x-show="!showRaw">show raw</span><span x-show="showRaw">hide raw</span>
+              </button>
+              <pre x-show="showRaw" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="list.raw"></pre>
+            </section>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== TOOL CALLS (decision traces) ===== -->
+      <template x-if="activeId === 'tool-calls'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminToolCalls()" x-init="init()">
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Debug</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Tool calls</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Decision traces: every tool invocation the policy engine evaluated. Click a row to inspect the verbatim trace payload.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()" :disabled="list.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load traces</h2>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-4">
+              <section class="om-card">
+                <h2 class="text-base font-semibold mb-3">Filters</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Session id</span>
+                    <input type="text" x-model="filters.session_id" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">User key</span>
+                    <input type="text" x-model="filters.user_key" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Agent id</span>
+                    <input type="text" x-model="filters.agent_id" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Channel</span>
+                    <input type="text" x-model="filters.channel" placeholder="(any)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Status</span>
+                    <input type="text" x-model="filters.status" placeholder="allow / deny / …"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Limit</span>
+                    <input type="number" min="1" max="200" x-model.number="filters.limit"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()">Apply</button>
+                </div>
+              </section>
+
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Traces
+                    <span class="om-badge om-badge--neutral ml-2" x-text="itemsList().length"></span>
+                  </h2>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                          @click="showRaw.list = !showRaw.list">
+                    <span x-show="!showRaw.list">show raw</span><span x-show="showRaw.list">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="list.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="list.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="list.error"></p>
+                </template>
+                <template x-if="isEmpty()">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No traces match the filters.</p>
+                </template>
+                <template x-if="list.state === 'loaded' && itemsList().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Trace id</th>
+                          <th>Tool / action</th>
+                          <th>Status</th>
+                          <th>Session</th>
+                          <th>Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="t in itemsList()" :key="t.trace_id || t.id">
+                          <tr :class="(t.trace_id || t.id) === selectedId ? 'bg-primary-50/60 dark:bg-primary-900/30' : ''">
+                            <td class="font-mono text-xs">
+                              <button type="button" class="text-left hover:underline"
+                                      @click="select(t.trace_id || t.id)">
+                                <span x-text="t.trace_id || t.id || '—'"></span>
+                              </button>
+                            </td>
+                            <td class="font-mono text-xs" x-text="t.tool_name || t.action || t.resource_name || '—'"></td>
+                            <td><span class="om-badge text-[10px]" :class="'om-badge--' + statusTone(t.status || t.decision)"
+                                      x-text="t.status || t.decision || '—'"></span></td>
+                            <td class="font-mono text-xs truncate max-w-[14rem]" x-text="t.session_id || '—'"></td>
+                            <td class="text-xs whitespace-nowrap" x-text="t.ts || t.timestamp || t.created_at || '—'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <pre x-show="showRaw.list" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="list.raw"></pre>
+              </section>
+
+              <template x-if="selectedId">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Selected trace</p>
+                      <h2 class="text-base font-semibold font-mono mt-0.5" x-text="selectedId"></h2>
+                    </div>
+                    <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                            @click="showRaw.detail = !showRaw.detail">
+                      <span x-show="!showRaw.detail">show raw</span><span x-show="showRaw.detail">hide raw</span>
+                    </button>
+                  </div>
+                  <template x-if="detail.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="detail.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="detail.error"></p>
+                  </template>
+                  <template x-if="detail.state === 'loaded'">
+                    <pre class="text-[11px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-72 overflow-auto" x-text="JSON.stringify(detail.data, null, 2)"></pre>
+                  </template>
+                  <pre x-show="showRaw.detail" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="detail.raw"></pre>
+                </section>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+
       <!-- ===== Remaining admin sections (still placeholders) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals'">
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals' && activeId !== 'events' && activeId !== 'tool-calls'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -2462,7 +2692,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              Ten functional admin surfaces shipped. The remaining sidebar items (<strong>Workflows</strong>, <strong>System &amp; config</strong>, <strong>Event log</strong>, <strong>Tool calls</strong>) are reserved for a follow-up sprint.
+              Twelve functional admin surfaces shipped. The remaining sidebar items (<strong>Workflows</strong>, <strong>System &amp; config</strong>) are reserved for a follow-up sprint.
             </p>
           </header>
         </div>
