@@ -455,6 +455,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/channels.js",
             "/ui/v2/js/admin/evidence.js",
             "/ui/v2/js/admin/secrets_wizard.js",
+            "/ui/v2/js/admin/dispatches.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -814,6 +815,49 @@ def test_admin_html_loads_secrets_wizard_view() -> None:
     assert "omModalFor('secrets-wizard-save')" in html
     # Placeholder excludes the new view too.
     assert "activeId !== 'secrets-wizard'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F4 — Admin Dispatches view
+# --------------------------------------------------------------------
+
+JS_ADMIN_DISPATCHES = UI_V2 / "static" / "js" / "admin" / "dispatches.js"
+
+
+def test_admin_dispatches_module_exposes_factory() -> None:
+    assert JS_ADMIN_DISPATCHES.exists()
+    text = JS_ADMIN_DISPATCHES.read_text(encoding="utf-8")
+    assert "window.adminDispatches" in text
+
+
+def test_admin_dispatches_module_consults_documented_endpoints() -> None:
+    """F4 surfaces list + detail (read) and cancel / retry /
+    reconcile (confirmed writes). The action endpoint pattern
+    is part of the URL — encoded by the generic action handler
+    so a future "abort" verb works without code changes."""
+    text = JS_ADMIN_DISPATCHES.read_text(encoding="utf-8")
+    for path in (
+        "/admin/openclaw/dispatches",
+    ):
+        assert path in text, f"dispatches.js must consult {path}"
+
+
+def test_admin_dispatches_module_declares_action_modal() -> None:
+    text = JS_ADMIN_DISPATCHES.read_text(encoding="utf-8")
+    for card in ("list:", "detail:", "actionResult:"):
+        assert card in text
+    for handler in ("openActionDialog", "closeActionDialog", "submitAction", "select("):
+        assert handler in text
+    assert "dispatches-action" in text
+
+
+def test_admin_html_loads_dispatches_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/dispatches.js" in html
+    assert 'x-data="adminDispatches()"' in html
+    assert "activeId === 'dispatches'" in html
+    assert "omModalFor('dispatches-action')" in html
+    assert "activeId !== 'dispatches'" in html
 
 
 # --------------------------------------------------------------------
