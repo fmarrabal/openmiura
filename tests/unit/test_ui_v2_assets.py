@@ -459,6 +459,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/science/review.js",
             "/ui/v2/js/science/approvals.js",
             "/ui/v2/js/science/history.js",
+            "/ui/v2/js/interview/demo.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -1211,3 +1212,85 @@ def test_science_html_loads_three_modules_and_renders_three_views() -> None:
     )
     # Approvals modal id is wired.
     assert "omModalFor('science-approval-action')" in html
+
+
+# --------------------------------------------------------------------
+# Phase D1–D3 — Interview UI
+# --------------------------------------------------------------------
+
+JS_INTERVIEW_DEMO = UI_V2 / "static" / "js" / "interview" / "demo.js"
+
+
+def test_interview_demo_module_exposes_three_factories() -> None:
+    assert JS_INTERVIEW_DEMO.exists()
+    text = JS_INTERVIEW_DEMO.read_text(encoding="utf-8")
+    for name in (
+        "window.interviewOverview",
+        "window.interviewWalkthrough",
+        "window.interviewEvidence",
+    ):
+        assert name in text, f"demo.js must expose {name}"
+
+
+def test_interview_demo_module_is_offline_only() -> None:
+    """The interview profile must not call the backend. This
+    keeps the demo working without a running broker and is
+    part of the documented contract: synthetic data only.
+
+    Regress against an accidental window.omApi.* import that
+    would silently re-introduce live calls. Endpoint *strings*
+    are allowed as documentation inside the synthetic step
+    detail (they show the reviewer what the live equivalent
+    would look like); the contract is the absence of the
+    actual omApi handle, fetch() and XMLHttpRequest.
+    """
+    text = JS_INTERVIEW_DEMO.read_text(encoding="utf-8")
+    assert "omApi" not in text, (
+        "demo.js must not reach for window.omApi; the interview "
+        "profile is offline by design"
+    )
+    assert "fetch(" not in text, (
+        "demo.js must not call fetch() directly"
+    )
+    assert "XMLHttpRequest" not in text, (
+        "demo.js must not call XMLHttpRequest directly"
+    )
+
+
+def test_interview_demo_walkthrough_navigation_methods() -> None:
+    text = JS_INTERVIEW_DEMO.read_text(encoding="utf-8")
+    for fn in ("next(", "prev(", "goto(", "toggleAutoplay(", "currentStep("):
+        assert fn in text, f"walkthrough factory must declare {fn}"
+    # The canonical demo has 6 steps; pin the count so a
+    # rewrite that drops one is visible.
+    assert "STEPS" in text
+
+
+def test_interview_demo_evidence_has_synthetic_signature() -> None:
+    """The evidence sample must include an algorithm + digest +
+    actor — the three fields a reviewer reaches for first."""
+    text = JS_INTERVIEW_DEMO.read_text(encoding="utf-8")
+    assert "ed25519" in text
+    assert "digest_sha256" in text
+    assert "actor" in text
+
+
+def test_interview_html_renders_three_views() -> None:
+    html = INTERVIEW_HTML.read_text(encoding="utf-8")
+    assert "./js/interview/demo.js" in html
+    for x_data in (
+        'x-data="interviewOverview()"',
+        'x-data="interviewWalkthrough()"',
+        'x-data="interviewEvidence()"',
+    ):
+        assert x_data in html, f"interview.html must mount {x_data}"
+    for active in (
+        "activeId === 'overview'",
+        "activeId === 'walkthrough'",
+        "activeId === 'evidence'",
+    ):
+        assert active in html
+    # The old Phase A2 placeholder is gone.
+    assert "Phase A2 placeholder" not in html, (
+        "interview.html must replace the Phase A2 placeholder banner"
+    )
