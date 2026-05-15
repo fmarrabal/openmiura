@@ -26,6 +26,7 @@
   <script src="./js/admin/approvals.js"></script>
   <script src="./js/admin/debug.js"></script>
   <script src="./js/admin/workflows.js"></script>
+  <script src="./js/admin/system.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -2837,18 +2838,287 @@
         </div>
       </template>
 
-      <!-- ===== Remaining admin sections (still placeholders) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals' && activeId !== 'events' && activeId !== 'tool-calls' && activeId !== 'workflows'">
-        <div class="max-w-5xl mx-auto px-6 py-8">
-          <header>
-            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
-              <span x-text="groups.find(g => g.items.some(i => i.id === activeId))?.title || ''"></span>
-            </p>
-            <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
-            <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              Thirteen functional admin surfaces shipped. The last sidebar item (<strong>System &amp; config</strong>) is reserved for a follow-up sprint.
-            </p>
+      <!-- ===== SYSTEM & CONFIG ===== -->
+      <template x-if="activeId === 'system'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminSystem()" x-init="init()">
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Configure</p>
+              <h1 class="text-2xl font-semibold tracking-tight">System &amp; config</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Full openMiura config-center: inspect every YAML section, edit it, validate it (read-modeled), save it (confirmed write to disk). The reload-assistant card below decides which sections can hot-reload vs. require a restart.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refresh()" :disabled="configCenter.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
           </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load system config</h2>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- config sections inventory -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Configuration sections
+                    <span class="om-badge om-badge--neutral ml-2" x-text="sectionsList().length"></span>
+                  </h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/config-center</span>
+                </div>
+                <template x-if="configCenter.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="configCenter.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="configCenter.error"></p>
+                </template>
+                <template x-if="configCenter.state === 'loaded' && sectionsList().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No sections registered.</p>
+                </template>
+                <template x-if="configCenter.state === 'loaded' && sectionsList().length > 0">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <template x-for="s in sectionsList()" :key="s.name">
+                      <button type="button" class="text-left p-3 rounded-md border transition"
+                              :class="s.name === editor.section ? 'border-primary-500 bg-primary-50/60 dark:bg-primary-900/30' : 'border-surface-200 dark:border-surface-700 hover:border-primary-300'"
+                              @click="selectSection(s.name)">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="min-w-0">
+                            <p class="text-sm font-semibold" x-text="s.title || s.name"></p>
+                            <p class="text-[10px] font-mono text-surface-500 dark:text-surface-400" x-text="s.name"></p>
+                          </div>
+                          <span class="om-badge text-[10px]" :class="'om-badge--' + sectionTone(s.status)"
+                                x-text="(s.status && (s.status.state || s.status.status)) || '—'"></span>
+                        </div>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.configCenter = !showRaw.configCenter">
+                  <span x-show="!showRaw.configCenter">show raw</span><span x-show="showRaw.configCenter">hide raw</span>
+                </button>
+                <pre x-show="showRaw.configCenter" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="configCenter.raw"></pre>
+              </section>
+
+              <!-- YAML editor -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <div class="flex items-center gap-2">
+                    <h2 class="text-base font-semibold">Editor</h2>
+                    <span class="om-badge om-badge--neutral text-[10px]" x-text="editor.section || 'no section selected'"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="submitValidate()" :disabled="validateResult.state === 'loading' || !editor.section">
+                      <span x-show="validateResult.state !== 'loading'">Validate</span>
+                      <span x-show="validateResult.state === 'loading'">Validating…</span>
+                    </button>
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="openSaveDialog()" :disabled="!editor.section">
+                      <span x-html="omIcon('upload-cloud', 'w-3.5 h-3.5')"></span><span>Save…</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea x-model="editor.content" rows="14" spellcheck="false"
+                          placeholder="# YAML for the selected section"
+                          class="w-full px-3 py-2 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+
+                <template x-if="validateResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="validateResult.error"></p>
+                </template>
+                <template x-if="validateResult.state === 'loaded'">
+                  <div class="mt-3 text-sm flex items-center gap-2">
+                    <span class="text-surface-500 dark:text-surface-400">Validation:</span>
+                    <span class="om-badge" :class="'om-badge--' + (validateValid() === true ? 'success' : validateValid() === false ? 'danger' : 'neutral')"
+                          x-text="validateValid() === true ? 'valid' : validateValid() === false ? 'invalid' : 'parsed'"></span>
+                  </div>
+                </template>
+
+                <template x-if="saveResult.state === 'loaded' && saveResult.data">
+                  <div class="mt-4 p-3 rounded-md border text-sm space-y-1"
+                       :class="saveRestartRequired() ? 'border-warning-500/40 bg-warning-500/10' : 'border-success-500/40 bg-success-500/10'">
+                    <p class="font-semibold flex items-center gap-2">
+                      <span class="om-badge" :class="'om-badge--' + (saveRestartRequired() ? 'warning' : 'success')"
+                            x-text="saveRestartRequired() ? 'saved · restart required' : 'saved'"></span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs font-normal" x-text="saveResult.data.section ? 'section: ' + saveResult.data.section : ''"></span>
+                    </p>
+                  </div>
+                </template>
+                <template x-if="saveResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="saveResult.error"></p>
+                </template>
+
+                <div class="mt-2 flex items-center gap-3">
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                          @click="showRaw.validateResult = !showRaw.validateResult">
+                    <span x-show="!showRaw.validateResult">validate raw</span><span x-show="showRaw.validateResult">hide validate raw</span>
+                  </button>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline"
+                          @click="showRaw.saveResult = !showRaw.saveResult">
+                    <span x-show="!showRaw.saveResult">save raw</span><span x-show="showRaw.saveResult">hide save raw</span>
+                  </button>
+                </div>
+                <pre x-show="showRaw.validateResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="validateResult.raw"></pre>
+                <pre x-show="showRaw.saveResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="saveResult.raw"></pre>
+              </section>
+
+              <!-- reload assistant -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Reload assistant
+                    <span class="om-badge text-[10px] ml-2"
+                          :class="restartHookConfigured() === true ? 'om-badge--success' : restartHookConfigured() === false ? 'om-badge--warning' : 'om-badge--neutral'"
+                          x-text="restartHookConfigured() === true ? 'restart hook configured' : restartHookConfigured() === false ? 'no restart hook' : '—'"></span>
+                  </h2>
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="openReloadDialog()" :disabled="reloadStatus.state !== 'loaded'">
+                    <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Apply reload…</span>
+                  </button>
+                </div>
+                <template x-if="reloadStatus.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="reloadStatus.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="reloadStatus.error"></p>
+                </template>
+                <template x-if="reloadStatus.state === 'loaded'">
+                  <ul class="space-y-1 text-xs">
+                    <template x-for="(s, i) in reloadSectionsList()" :key="i">
+                      <li class="flex items-center justify-between gap-2 py-1 border-b border-surface-100 dark:border-surface-800 last:border-b-0">
+                        <span class="font-mono" x-text="s.name || '—'"></span>
+                        <span class="flex items-center gap-2">
+                          <span class="om-badge om-badge--neutral text-[10px]"
+                                x-text="s.live_reloadable ? 'live-reload' : 'restart-required'"></span>
+                          <span class="text-surface-500 dark:text-surface-400" x-text="s.status || ''"></span>
+                        </span>
+                      </li>
+                    </template>
+                  </ul>
+                </template>
+                <template x-if="reloadResult.state === 'loaded' && reloadResult.data">
+                  <p class="mt-3 text-sm flex items-center gap-2">
+                    <span class="om-badge om-badge--success">applied</span>
+                    <span class="text-surface-500 dark:text-surface-400 text-xs"
+                          x-text="reloadResult.data.live_reload_applied ? 'live reload applied' : (reloadResult.data.restart_required ? 'restart required' : '')"></span>
+                  </p>
+                </template>
+                <template x-if="reloadResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="reloadResult.error"></p>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.reloadStatus = !showRaw.reloadStatus">
+                  <span x-show="!showRaw.reloadStatus">show raw</span><span x-show="showRaw.reloadStatus">hide raw</span>
+                </button>
+                <pre x-show="showRaw.reloadStatus" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="reloadStatus.raw"></pre>
+              </section>
+
+              <!-- save modal -->
+              <div x-data="omModalFor('system-save')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="system-save-title">
+                  <div class="om-modal__header">
+                    <h3 id="system-save-title" class="text-base font-semibold">Save config section</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      About to rewrite the on-disk YAML for section <span class="font-mono text-xs" x-text="editor.section"></span>.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="saveForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input type="checkbox" x-model="saveForm.reload_after_save" />
+                      <span>Attempt live reload after save</span>
+                    </label>
+                    <div x-show="saveForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="saveForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="saveForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitSave()" :disabled="saveForm.busy">
+                      <span x-show="!saveForm.busy">Save</span>
+                      <span x-show="saveForm.busy">Saving…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- reload-assistant apply modal -->
+              <div x-data="omModalFor('system-reload')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="system-reload-title">
+                  <div class="om-modal__header">
+                    <h3 id="system-reload-title" class="text-base font-semibold">Apply reload</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Pick the sections to reload and the apply mode. Some sections require a restart — the backend will signal it via <span class="font-mono text-xs">restart_required</span>.
+                    </p>
+                    <div>
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Sections</span>
+                      <div class="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        <template x-for="(s, i) in reloadSectionsList()" :key="i">
+                          <label class="inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" :checked="reloadForm.sections.includes(s.name)"
+                                   @change="toggleReloadSection(s.name)" />
+                            <span class="font-mono text-xs" x-text="s.name"></span>
+                          </label>
+                        </template>
+                      </div>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input type="checkbox" x-model="reloadForm.apply_live_reload" />
+                      <span>Attempt live reload</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input type="checkbox" x-model="reloadForm.request_restart" />
+                      <span>Request restart (queues a restart, doesn't execute)</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input type="checkbox" x-model="reloadForm.execute_restart_hook" />
+                      <span>Execute restart hook (actually restart the process)</span>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="reloadForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div x-show="reloadForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="reloadForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="reloadForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitReload()" :disabled="reloadForm.busy">
+                      <span x-show="!reloadForm.busy">Apply</span>
+                      <span x-show="reloadForm.busy">Applying…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Fallback (only triggers for unknown activeIds now) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals' && activeId !== 'events' && activeId !== 'tool-calls' && activeId !== 'workflows' && activeId !== 'system'">
+        <div class="max-w-5xl mx-auto px-6 py-8">
+          <h1 class="text-2xl font-semibold tracking-tight">Pick a section</h1>
+          <p class="mt-2 text-sm text-surface-600 dark:text-surface-300">
+            All admin sidebar items are wired up. Pick one in the sidebar.
+          </p>
         </div>
       </template>
 
