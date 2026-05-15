@@ -45,10 +45,11 @@
         </div>
       </div>
 
-      <nav class="flex-1 overflow-y-auto py-3 space-y-4">
+      <nav class="flex-1 overflow-y-auto py-3 space-y-4" aria-label="Admin sections">
         <template x-for="group in groups" :key="group.title">
-          <div>
-            <p class="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400"
+          <div :aria-labelledby="'group-' + group.title">
+            <p :id="'group-' + group.title"
+               class="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400"
                x-text="group.title"></p>
             <ul>
               <template x-for="item in group.items" :key="item.id">
@@ -58,8 +59,9 @@
                           :class="isActive(item.id)
                             ? 'bg-primary-50 dark:bg-primary-900/40 text-primary-900 dark:text-accent-300 font-medium border-l-2 border-primary-900 dark:border-accent-400'
                             : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 border-l-2 border-transparent'"
+                          :aria-current="isActive(item.id) ? 'page' : 'false'"
                           @click="setActive(item.id)">
-                    <span x-html="omIcon(item.icon, 'w-4 h-4 shrink-0')"></span>
+                    <span x-html="omIcon(item.icon, 'w-4 h-4 shrink-0')" aria-hidden="true"></span>
                     <span x-text="item.label" class="truncate"></span>
                   </button>
                 </li>
