@@ -17,6 +17,7 @@
   <script src="./js/admin/dashboard.js"></script>
   <script src="./js/admin/runtimes.js"></script>
   <script src="./js/admin/policies.js"></script>
+  <script src="./js/admin/secrets.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -857,8 +858,306 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholders for B4..B7) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies'">
+      <!-- ===== SECRETS ===== -->
+      <template x-if="activeId === 'secrets'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminSecrets()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Govern</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Secrets</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Secret-governance surface for compliance and forensics. The catalog lists declared <span class="font-mono text-xs">ref</span>s in the active scope; the values themselves never leave the backend. The explain form is read-modeled — it replays a decision without consuming the secret.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshAll()" :disabled="summary.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh all</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load secret governance</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- shared filters -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Filters</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">applied to catalog / timeline / usage</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Free text (q)</span>
+                    <input type="text" x-model="filters.q" placeholder="(optional)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Ref</span>
+                    <input type="text" x-model="filters.ref" placeholder="e.g. secret://stripe"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Tool</span>
+                    <input type="text" x-model="filters.tool" placeholder="(optional)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Outcome</span>
+                    <select x-model="filters.outcome" class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-xs">
+                      <option value="">any</option>
+                      <option value="allow">allow</option>
+                      <option value="deny">deny</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Limit</span>
+                    <input type="number" min="1" max="500" x-model.number="filters.limit"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+              </section>
+
+              <!-- summary -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Summary</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/secrets/summary</span>
+                </div>
+                <template x-if="summary.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="summary.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="summary.error"></p>
+                </template>
+                <template x-if="summary.state === 'loaded'">
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Total events</p>
+                      <p class="text-2xl font-semibold tabular-nums" x-text="summaryStats().total ?? '—'"></p>
+                    </div>
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Allowed</p>
+                      <p class="text-2xl font-semibold tabular-nums text-success-700 dark:text-success-500" x-text="summaryStats().allowed ?? '—'"></p>
+                    </div>
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Denied</p>
+                      <p class="text-2xl font-semibold tabular-nums text-danger-700 dark:text-danger-500" x-text="summaryStats().denied ?? '—'"></p>
+                    </div>
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Deny rate</p>
+                      <p class="text-2xl font-semibold tabular-nums flex items-center gap-2">
+                        <span x-text="summaryStats().deny_rate_pct == null ? '—' : summaryStats().deny_rate_pct + '%'"></span>
+                        <span class="om-badge text-[10px]" :class="'om-badge--' + summaryTone()"
+                              x-text="summaryTone()"></span>
+                      </p>
+                    </div>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.summary = !showRaw.summary">
+                  <span x-show="!showRaw.summary">show raw</span><span x-show="showRaw.summary">hide raw</span>
+                </button>
+                <pre x-show="showRaw.summary" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="summary.raw"></pre>
+              </section>
+
+              <!-- catalog -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Catalog
+                    <span class="om-badge om-badge--neutral ml-2" x-text="catalogItems().length"></span>
+                  </h2>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/secrets/catalog</span>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshCatalog()" :disabled="catalog.state === 'loading'">Reload</button>
+                  </div>
+                </div>
+                <template x-if="catalog.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="catalog.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="catalog.error"></p>
+                </template>
+                <template x-if="catalog.state === 'loaded' && catalogItems().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No declared secret refs in this scope.</p>
+                </template>
+                <template x-if="catalog.state === 'loaded' && catalogItems().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Ref</th>
+                          <th>Source</th>
+                          <th>Last seen</th>
+                          <th>Tools</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="item in catalogItems()" :key="item.ref || JSON.stringify(item)">
+                          <tr>
+                            <td class="font-mono text-xs" x-text="item.ref || '—'"></td>
+                            <td class="text-xs" x-text="item.source || item.provider || '—'"></td>
+                            <td class="text-xs whitespace-nowrap" x-text="item.last_seen_at || item.updated_at || '—'"></td>
+                            <td class="text-xs" x-text="(item.tools && item.tools.join ? item.tools.join(', ') : '—')"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.catalog = !showRaw.catalog">
+                  <span x-show="!showRaw.catalog">show raw</span><span x-show="showRaw.catalog">hide raw</span>
+                </button>
+                <pre x-show="showRaw.catalog" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="catalog.raw"></pre>
+              </section>
+
+              <!-- timeline + usage row -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Timeline
+                      <span class="om-badge om-badge--neutral ml-2" x-text="timelineItems().length"></span>
+                    </h2>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshTimeline()" :disabled="timeline.state === 'loading'">Reload</button>
+                  </div>
+                  <template x-if="timeline.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="timeline.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="timeline.error"></p>
+                  </template>
+                  <template x-if="timeline.state === 'loaded' && timelineItems().length === 0">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">No timeline events match.</p>
+                  </template>
+                  <template x-if="timeline.state === 'loaded' && timelineItems().length > 0">
+                    <ul class="text-xs space-y-2 max-h-72 overflow-auto pr-1">
+                      <template x-for="(ev, i) in timelineItems()" :key="i">
+                        <li class="flex items-start gap-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 pb-1">
+                          <span class="om-badge text-[10px]" :class="'om-badge--' + decisionTone(decisionLabel(ev))"
+                                x-text="decisionLabel(ev)"></span>
+                          <div class="min-w-0 flex-1">
+                            <div class="font-mono truncate" x-text="(ev.ref || '—') + ' / ' + (ev.tool_name || '—')"></div>
+                            <div class="text-[10px] text-surface-500 dark:text-surface-400 truncate"
+                                 x-text="ev.reason || ev.policy_reason || ev.user_role || ''"></div>
+                          </div>
+                          <span class="text-[10px] text-surface-500 dark:text-surface-400 whitespace-nowrap"
+                                x-text="ev.ts || ev.timestamp || ''"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                          @click="showRaw.timeline = !showRaw.timeline">
+                    <span x-show="!showRaw.timeline">show raw</span><span x-show="showRaw.timeline">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.timeline" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="timeline.raw"></pre>
+                </section>
+
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Usage
+                      <span class="om-badge om-badge--neutral ml-2" x-text="usageItems().length"></span>
+                    </h2>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshUsage()" :disabled="usage.state === 'loading'">Reload</button>
+                  </div>
+                  <template x-if="usage.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="usage.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="usage.error"></p>
+                  </template>
+                  <template x-if="usage.state === 'loaded' && usageItems().length === 0">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">No usage groups match.</p>
+                  </template>
+                  <template x-if="usage.state === 'loaded' && usageItems().length > 0">
+                    <ul class="text-xs space-y-2 max-h-72 overflow-auto pr-1">
+                      <template x-for="(g, i) in usageItems()" :key="i">
+                        <li class="flex items-center justify-between gap-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 pb-1">
+                          <div class="min-w-0 flex-1">
+                            <div class="font-mono truncate" x-text="(g.ref || '—') + ' / ' + (g.tool_name || g.tool || '—')"></div>
+                          </div>
+                          <span class="om-badge om-badge--neutral text-[10px]"
+                                x-text="(g.count ?? g.total ?? g.events ?? 0) + ' uses'"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                          @click="showRaw.usage = !showRaw.usage">
+                    <span x-show="!showRaw.usage">show raw</span><span x-show="showRaw.usage">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.usage" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="usage.raw"></pre>
+                </section>
+              </div>
+
+              <!-- explain -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Explain access</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/secrets/explain</span>
+                </div>
+                <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                  Replay a secret-access decision for the given <span class="font-mono text-xs">ref</span> + <span class="font-mono text-xs">tool</span> and surface the policy reason. The secret value is never read or returned.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Ref *</span>
+                    <input type="text" x-model="explainForm.ref" placeholder="secret://..."
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Tool name *</span>
+                    <input type="text" x-model="explainForm.tool_name" placeholder="e.g. http_post"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">User role</span>
+                    <input type="text" x-model="explainForm.user_role" placeholder="(optional)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="submitExplain()" :disabled="explainResult.state === 'loading'">
+                    <span x-show="explainResult.state !== 'loading'">Explain</span>
+                    <span x-show="explainResult.state === 'loading'">Resolving…</span>
+                  </button>
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.explainResult = !showRaw.explainResult">
+                    <span x-show="!showRaw.explainResult">show raw</span><span x-show="showRaw.explainResult">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="explainResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="explainResult.error"></p>
+                </template>
+                <template x-if="explainResult.state === 'loaded'">
+                  <div class="mt-3 flex items-center gap-2 text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Decision:</span>
+                    <span class="om-badge" :class="'om-badge--' + decisionTone(decisionLabel(explainResult.data))" x-text="decisionLabel(explainResult.data)"></span>
+                    <span class="text-surface-500 dark:text-surface-400" x-text="explainResult.data && explainResult.data.reason ? '— ' + explainResult.data.reason : ''"></span>
+                  </div>
+                </template>
+                <pre x-show="showRaw.explainResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="explainResult.raw"></pre>
+              </section>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholders for B5..B7) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -866,7 +1165,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong> or <strong>Policies</strong> in the sidebar to see the functional views shipped so far.
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong> or <strong>Secrets</strong> in the sidebar to see the functional views shipped so far.
             </p>
           </header>
         </div>
