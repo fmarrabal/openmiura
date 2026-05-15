@@ -19,6 +19,7 @@
   <script src="./js/admin/policies.js"></script>
   <script src="./js/admin/secrets.js"></script>
   <script src="./js/admin/identities.js"></script>
+  <script src="./js/admin/channels.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -1470,8 +1471,189 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholders for B6..B7) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities'">
+      <!-- ===== CHANNELS ===== -->
+      <template x-if="activeId === 'channels'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminChannels()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Configure</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Channels wizard</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Inspect and reconfigure the channel adapters (Slack, Telegram, voice, ...). Two-step pipeline: <span class="font-mono text-xs">validate</span> is read-modeled and safe to call repeatedly; <span class="font-mono text-xs">save</span> rewrites the on-disk YAML and lives behind a confirmation modal.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshSnapshot()" :disabled="snapshot.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load channels</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- channels inventory -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h2 class="text-base font-semibold">Registered channels
+                    <span class="om-badge om-badge--neutral ml-2" x-text="channelsList().length"></span>
+                  </h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/config-center/channels-wizard</span>
+                </div>
+                <template x-if="snapshot.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="snapshot.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="snapshot.error"></p>
+                </template>
+                <template x-if="snapshot.state === 'loaded' && channelsList().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No channels registered.</p>
+                </template>
+                <template x-if="snapshot.state === 'loaded' && channelsList().length > 0">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <template x-for="c in channelsList()" :key="c.name">
+                      <button type="button" class="text-left p-3 rounded-md border transition"
+                              :class="c.name === editor.channel ? 'border-primary-500 bg-primary-50/60 dark:bg-primary-900/30' : 'border-surface-200 dark:border-surface-700 hover:border-primary-300'"
+                              @click="selectChannel(c.name)">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="min-w-0">
+                            <p class="text-sm font-semibold" x-text="c.title || c.name"></p>
+                            <p class="text-[10px] font-mono text-surface-500 dark:text-surface-400" x-text="c.name"></p>
+                          </div>
+                          <span class="om-badge text-[10px]" :class="'om-badge--' + channelTone(c.status)"
+                                x-text="(c.status && (c.status.state || c.status.status)) || '—'"></span>
+                        </div>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.snapshot = !showRaw.snapshot">
+                  <span x-show="!showRaw.snapshot">show raw</span><span x-show="showRaw.snapshot">hide raw</span>
+                </button>
+                <pre x-show="showRaw.snapshot" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="snapshot.raw"></pre>
+              </section>
+
+              <!-- YAML editor -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <div class="flex items-center gap-2">
+                    <h2 class="text-base font-semibold">Editor</h2>
+                    <span class="om-badge om-badge--neutral text-[10px]" x-text="editor.channel || 'no channel selected'"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="submitValidate()" :disabled="validateResult.state === 'loading' || !editor.channel">
+                      <span x-show="validateResult.state !== 'loading'">Validate</span>
+                      <span x-show="validateResult.state === 'loading'">Validating…</span>
+                    </button>
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="openSaveDialog()" :disabled="!editor.channel">
+                      <span x-html="omIcon('upload-cloud', 'w-3.5 h-3.5')"></span><span>Save…</span>
+                    </button>
+                  </div>
+                </div>
+                <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                  Editing the raw YAML for <span class="font-mono text-xs" x-text="(snapshot.data && snapshot.data.path) || '<config-path>'"></span>. Validation parses the candidate without touching disk; save rewrites it.
+                </p>
+                <textarea x-model="editor.content" rows="14" spellcheck="false"
+                          placeholder="channels:&#10;  telegram:&#10;    enabled: true&#10;    bot_token: secret://telegram-bot-token"
+                          class="w-full px-3 py-2 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+
+                <!-- validate result -->
+                <template x-if="validateResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="validateResult.error"></p>
+                </template>
+                <template x-if="validateResult.state === 'loaded'">
+                  <div class="mt-3 text-sm flex items-center gap-2">
+                    <span class="text-surface-500 dark:text-surface-400">Validation:</span>
+                    <span class="om-badge"
+                          :class="'om-badge--' + (validateConfigured() === true ? 'success' : validateConfigured() === false ? 'warning' : 'neutral')"
+                          x-text="validateConfigured() === true ? 'configured' : validateConfigured() === false ? 'incomplete' : 'parsed'"></span>
+                    <span class="text-surface-500 dark:text-surface-400 text-xs" x-text="validateResult.data && validateResult.data.channel_status && validateResult.data.channel_status.reason ? '— ' + validateResult.data.channel_status.reason : ''"></span>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                        @click="showRaw.validateResult = !showRaw.validateResult">
+                  <span x-show="!showRaw.validateResult">show raw</span><span x-show="showRaw.validateResult">hide raw</span>
+                </button>
+                <pre x-show="showRaw.validateResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="validateResult.raw"></pre>
+
+                <!-- save result -->
+                <template x-if="saveResult.state === 'loaded' && saveResult.data">
+                  <div class="mt-4 p-3 rounded-md border text-sm space-y-1"
+                       :class="saveRestartRequired() ? 'border-warning-500/40 bg-warning-500/10' : 'border-success-500/40 bg-success-500/10'">
+                    <p class="font-semibold flex items-center gap-2">
+                      <span class="om-badge" :class="'om-badge--' + (saveRestartRequired() ? 'warning' : 'success')"
+                            x-text="saveRestartRequired() ? 'saved · restart required' : 'saved'"></span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs font-normal" x-text="saveResult.data.channel ? 'channel: ' + saveResult.data.channel : ''"></span>
+                    </p>
+                    <p class="text-xs text-surface-600 dark:text-surface-300" x-show="saveRestartRequired()">
+                      The save succeeded but the channel needs a restart to pick the new config. Schedule it manually.
+                    </p>
+                  </div>
+                </template>
+                <template x-if="saveResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="saveResult.error"></p>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                        @click="showRaw.saveResult = !showRaw.saveResult">
+                  <span x-show="!showRaw.saveResult">show raw</span><span x-show="showRaw.saveResult">hide raw</span>
+                </button>
+                <pre x-show="showRaw.saveResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="saveResult.raw"></pre>
+              </section>
+
+              <!-- save modal -->
+              <div x-data="omModalFor('channels-save')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="channels-save-title">
+                  <div class="om-modal__header">
+                    <h3 id="channels-save-title" class="text-base font-semibold">Save channel configuration</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      About to rewrite the on-disk YAML for channel <span class="font-mono text-xs" x-text="editor.channel"></span>. The audit trail records this action and a recovery snapshot is taken before the write.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="saveForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input type="checkbox" x-model="saveForm.reload_after_save" />
+                      <span>Attempt live reload after save (channels that need a restart will say so in the response)</span>
+                    </label>
+                    <div x-show="saveForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="saveForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="saveForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitSave()" :disabled="saveForm.busy">
+                      <span x-show="!saveForm.busy">Save</span>
+                      <span x-show="saveForm.busy">Saving…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholder for B7) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -1479,7 +1661,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong>, <strong>Secrets</strong> or <strong>Identities</strong> in the sidebar to see the functional views shipped so far.
+              This section is a placeholder. The functional surface lands in the final Phase B PR (B7 Evidence packs + Debug pane). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong>, <strong>Secrets</strong>, <strong>Identities</strong> or <strong>Channels</strong> in the sidebar to see the functional views shipped so far.
             </p>
           </header>
         </div>

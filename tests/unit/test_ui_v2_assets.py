@@ -452,6 +452,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/policies.js",
             "/ui/v2/js/admin/secrets.js",
             "/ui/v2/js/admin/identities.js",
+            "/ui/v2/js/admin/channels.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -822,3 +823,86 @@ def test_admin_html_loads_identities_factory_and_renders_view() -> None:
         "showRaw.securityResult",
     ):
         assert key in html, f"admin.html identities view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase B6 — Admin Channels wizard
+# --------------------------------------------------------------------
+
+JS_ADMIN_CHANNELS = UI_V2 / "static" / "js" / "admin" / "channels.js"
+
+
+def test_admin_channels_module_exposes_factory() -> None:
+    assert JS_ADMIN_CHANNELS.exists(), (
+        f"missing admin channels module: {JS_ADMIN_CHANNELS}"
+    )
+    text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
+    assert "window.adminChannels" in text, (
+        "channels.js must expose window.adminChannels for Alpine x-data"
+    )
+
+
+def test_admin_channels_module_consults_documented_endpoints() -> None:
+    """B6 covers the three channels-wizard endpoints. The save
+    endpoint is the only B-phase write that touches disk; this
+    test pins the surface so an accidental rename surfaces here."""
+    text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
+    for path in (
+        "/admin/config-center/channels-wizard",
+        "/admin/config-center/channels-wizard/validate",
+        "/admin/config-center/channels-wizard/save",
+    ):
+        assert path in text, f"channels.js must consult {path}"
+
+
+def test_admin_channels_module_declares_per_card_state_and_save_modal() -> None:
+    text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
+    for card in (
+        "snapshot:",
+        "validateResult:",
+        "saveResult:",
+    ):
+        assert card in text, f"channels.js must declare card key {card!r}"
+    # Editor + save form lives in the factory.
+    assert "editor" in text
+    assert "saveForm" in text
+    for handler in ("submitValidate", "submitSave", "openSaveDialog", "closeSaveDialog"):
+        assert handler in text, f"channels.js must declare {handler}"
+    assert "channels-save" in text, (
+        "channels.js must register its modal under 'channels-save'"
+    )
+
+
+def test_admin_channels_module_reacts_to_auth_events() -> None:
+    text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_channels_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/channels.js" in html, (
+        "admin.html must load the channels module"
+    )
+    assert 'x-data="adminChannels()"' in html, (
+        "admin.html must mount adminChannels() inside the channels template"
+    )
+    assert "activeId === 'channels'" in html, (
+        "admin.html must gate the channels view by activeId"
+    )
+    # Modal id matches the manager registration.
+    assert "omModalFor('channels-save')" in html
+    # The placeholder template now excludes six live views.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes' && "
+        "activeId !== 'policies' && activeId !== 'secrets' && "
+        "activeId !== 'identities' && activeId !== 'channels'" in html
+    ), (
+        "admin.html placeholder template must skip channels (B6) too"
+    )
+    for key in (
+        "showRaw.snapshot",
+        "showRaw.validateResult",
+        "showRaw.saveResult",
+    ):
+        assert key in html, f"admin.html channels view must wire {key}"
