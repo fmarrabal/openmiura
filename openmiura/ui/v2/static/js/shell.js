@@ -20,10 +20,11 @@
       {
         title: 'Operate',
         items: [
-          { id: 'dashboard',  label: 'Dashboard',         icon: 'gauge' },
-          { id: 'runtimes',   label: 'Runtimes',          icon: 'cpu' },
-          { id: 'dispatches', label: 'Dispatches',        icon: 'send' },
-          { id: 'evidence',   label: 'Evidence packs',    icon: 'shield-check' },
+          { id: 'dashboard',           label: 'Dashboard',          icon: 'gauge' },
+          { id: 'runtimes',            label: 'Runtimes',           icon: 'cpu' },
+          { id: 'dispatches',          label: 'Dispatches',         icon: 'send' },
+          { id: 'evidence',            label: 'Evidence packs',     icon: 'shield-check' },
+          { id: 'portfolio-evidence',  label: 'Portfolio evidence', icon: 'shield-check' },
         ],
       },
       {

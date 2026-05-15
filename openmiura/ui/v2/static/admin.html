@@ -27,6 +27,7 @@
   <script src="./js/admin/debug.js"></script>
   <script src="./js/admin/workflows.js"></script>
   <script src="./js/admin/system.js"></script>
+  <script src="./js/admin/portfolio_evidence.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -3112,12 +3113,214 @@
         </div>
       </template>
 
+      <!-- ===== PORTFOLIO EVIDENCE ===== -->
+      <template x-if="activeId === 'portfolio-evidence'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminPortfolioEvidence()" x-init="init()">
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Operate</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Portfolio evidence</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Portfolio-aware evidence packs. Each portfolio carries its own bundle: export new packs, prune old ones, verify the integrity of a specific artifact, restore one from cold storage. All writes confirmed by modal.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshPortfolios()" :disabled="portfolios.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load portfolios</h2>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- portfolios inventory -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Portfolios
+                    <span class="om-badge om-badge--neutral ml-2" x-text="portfoliosList().length"></span>
+                  </h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/openclaw/alert-governance/portfolios</span>
+                </div>
+                <template x-if="portfolios.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="portfolios.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="portfolios.error"></p>
+                </template>
+                <template x-if="portfolios.state === 'loaded' && portfoliosList().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No portfolios in this scope.</p>
+                </template>
+                <template x-if="portfolios.state === 'loaded' && portfoliosList().length > 0">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <template x-for="p in portfoliosList()" :key="p.portfolio_id || p.id">
+                      <button type="button" class="text-left p-3 rounded-md border transition"
+                              :class="(p.portfolio_id || p.id) === selectedPortfolioId ? 'border-primary-500 bg-primary-50/60 dark:bg-primary-900/30' : 'border-surface-200 dark:border-surface-700 hover:border-primary-300'"
+                              @click="selectPortfolio(p.portfolio_id || p.id)">
+                        <p class="text-sm font-semibold" x-text="p.title || p.name || (p.portfolio_id || p.id)"></p>
+                        <p class="text-[10px] font-mono text-surface-500 dark:text-surface-400" x-text="p.portfolio_id || p.id"></p>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.portfolios = !showRaw.portfolios">
+                  <span x-show="!showRaw.portfolios">show raw</span><span x-show="showRaw.portfolios">hide raw</span>
+                </button>
+                <pre x-show="showRaw.portfolios" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="portfolios.raw"></pre>
+              </section>
+
+              <!-- selected portfolio packages -->
+              <template x-if="selectedPortfolioId">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                    <div>
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Selected portfolio</p>
+                      <h2 class="text-base font-semibold font-mono mt-0.5" x-text="selectedPortfolioId"></h2>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <button class="om-btn om-btn--primary om-btn--sm" @click="openActionDialog('export')">
+                        <span x-html="omIcon('shield-check', 'w-3.5 h-3.5')"></span><span>Export…</span>
+                      </button>
+                      <button class="om-btn om-btn--ghost om-btn--sm" @click="openActionDialog('prune')">Prune…</button>
+                      <button class="om-btn om-btn--ghost om-btn--sm" @click="openActionDialog('verify')">Verify…</button>
+                      <button class="om-btn om-btn--ghost om-btn--sm" @click="openActionDialog('restore')">Restore…</button>
+                    </div>
+                  </div>
+                  <template x-if="packages.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="packages.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="packages.error"></p>
+                  </template>
+                  <template x-if="packages.state === 'loaded' && packagesList().length === 0">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">No evidence packages in this portfolio.</p>
+                  </template>
+                  <template x-if="packages.state === 'loaded' && packagesList().length > 0">
+                    <div class="overflow-x-auto">
+                      <table class="om-table om-table--compact">
+                        <thead>
+                          <tr>
+                            <th>Artifact ref</th>
+                            <th>Report label</th>
+                            <th>Status</th>
+                            <th>Generated</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template x-for="(pkg, i) in packagesList()" :key="i">
+                            <tr>
+                              <td class="font-mono text-xs truncate max-w-[16rem]" x-text="pkg.artifact_ref || pkg.id || '—'"></td>
+                              <td class="text-xs" x-text="pkg.report_label || '—'"></td>
+                              <td>
+                                <span class="om-badge om-badge--neutral text-[10px]" x-text="pkg.status || '—'"></span>
+                              </td>
+                              <td class="text-xs whitespace-nowrap" x-text="pkg.generated_at || pkg.created_at || '—'"></td>
+                              <td class="flex items-center gap-1">
+                                <button class="om-btn om-btn--ghost om-btn--sm" @click="openActionDialog('verify', pkg.artifact_ref || pkg.id)">Verify</button>
+                                <button class="om-btn om-btn--ghost om-btn--sm" @click="openActionDialog('restore', pkg.artifact_ref || pkg.id)">Restore</button>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                          @click="showRaw.packages = !showRaw.packages">
+                    <span x-show="!showRaw.packages">show raw</span><span x-show="showRaw.packages">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.packages" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="packages.raw"></pre>
+                </section>
+              </template>
+
+              <!-- last action result -->
+              <template x-if="actionResult.state === 'loaded' || actionResult.state === 'error'">
+                <section class="om-card">
+                  <h2 class="text-base font-semibold mb-2">Last action</h2>
+                  <template x-if="actionResult.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="actionResult.error"></p>
+                  </template>
+                  <template x-if="actionResult.state === 'loaded'">
+                    <p class="text-sm flex items-center gap-2">
+                      <span class="om-badge om-badge--success">applied</span>
+                    </p>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                          @click="showRaw.actionResult = !showRaw.actionResult">
+                    <span x-show="!showRaw.actionResult">show raw</span><span x-show="showRaw.actionResult">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.actionResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="actionResult.raw"></pre>
+                </section>
+              </template>
+
+              <!-- action modal -->
+              <div x-data="omModalFor('portfolio-evidence-action')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="portfolio-evidence-action-title">
+                  <div class="om-modal__header">
+                    <h3 id="portfolio-evidence-action-title" class="text-base font-semibold">Confirm portfolio action</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      About to <span class="font-semibold" x-text="actionForm.action"></span> on portfolio <span class="font-mono text-xs" x-text="selectedPortfolioId"></span>.
+                    </p>
+                    <label class="block" x-show="actionForm.action === 'export'">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Report label</span>
+                      <input type="text" x-model="actionForm.report_label"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block" x-show="actionForm.action === 'prune'">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Older than (optional)</span>
+                      <input type="text" x-model="actionForm.older_than" placeholder="e.g. 2024-01-01 or 30d"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block" x-show="actionForm.action === 'verify' || actionForm.action === 'restore'">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Artifact ref *</span>
+                      <input type="text" x-model="actionForm.artifact_ref"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="actionForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div x-show="actionForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="actionForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="actionForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitAction()" :disabled="actionForm.busy">
+                      <span x-show="!actionForm.busy">Confirm</span>
+                      <span x-show="actionForm.busy">Submitting…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
       <!-- ===== Fallback (only triggers for unknown activeIds now) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals' && activeId !== 'events' && activeId !== 'tool-calls' && activeId !== 'workflows' && activeId !== 'system'">
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence' && activeId !== 'secrets-wizard' && activeId !== 'dispatches' && activeId !== 'approvals' && activeId !== 'events' && activeId !== 'tool-calls' && activeId !== 'workflows' && activeId !== 'system' && activeId !== 'portfolio-evidence'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <h1 class="text-2xl font-semibold tracking-tight">Pick a section</h1>
           <p class="mt-2 text-sm text-surface-600 dark:text-surface-300">
-            All admin sidebar items are wired up. Pick one in the sidebar.
+            All 15 admin sidebar items are wired up. Pick one in the sidebar.
           </p>
         </div>
       </template>

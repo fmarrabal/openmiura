@@ -460,6 +460,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/debug.js",
             "/ui/v2/js/admin/workflows.js",
             "/ui/v2/js/admin/system.js",
+            "/ui/v2/js/admin/portfolio_evidence.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -1035,6 +1036,62 @@ def test_admin_html_loads_system_view() -> None:
     assert "omModalFor('system-save')" in html
     assert "omModalFor('system-reload')" in html
     assert "activeId !== 'system'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F3 — Admin Portfolio-scoped evidence packs
+# --------------------------------------------------------------------
+
+JS_ADMIN_PORTFOLIO_EVIDENCE = UI_V2 / "static" / "js" / "admin" / "portfolio_evidence.js"
+
+
+def test_admin_portfolio_evidence_module_exposes_factory() -> None:
+    assert JS_ADMIN_PORTFOLIO_EVIDENCE.exists()
+    text = JS_ADMIN_PORTFOLIO_EVIDENCE.read_text(encoding="utf-8")
+    assert "window.adminPortfolioEvidence" in text
+
+
+def test_admin_portfolio_evidence_module_consults_documented_endpoints() -> None:
+    """F3 surfaces the five portfolio-scoped evidence endpoints
+    that B7 deliberately left out. The non-portfolio compliance
+    endpoints belong to the B7 view; this surface is
+    portfolio-aware only."""
+    text = JS_ADMIN_PORTFOLIO_EVIDENCE.read_text(encoding="utf-8")
+    for path in (
+        "/admin/openclaw/alert-governance/portfolios",
+        "evidence-packages",
+        "evidence-package-export",
+        "evidence-packages/prune",
+        "evidence-artifact-verify",
+        "evidence-artifact-restore",
+    ):
+        assert path in text, f"portfolio_evidence.js must consult {path}"
+    # The non-portfolio compliance endpoints belong to B7, not here.
+    assert "/admin/compliance/summary" not in text
+    assert "/admin/compliance/export" not in text
+
+
+def test_admin_portfolio_evidence_declares_shared_action_modal() -> None:
+    text = JS_ADMIN_PORTFOLIO_EVIDENCE.read_text(encoding="utf-8")
+    for card in ("portfolios:", "packages:", "actionResult:"):
+        assert card in text
+    for handler in ("openActionDialog", "closeActionDialog", "submitAction", "selectPortfolio"):
+        assert handler in text
+    assert "portfolio-evidence-action" in text
+
+
+def test_admin_html_loads_portfolio_evidence_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/portfolio_evidence.js" in html
+    assert 'x-data="adminPortfolioEvidence()"' in html
+    assert "activeId === 'portfolio-evidence'" in html
+    assert "omModalFor('portfolio-evidence-action')" in html
+    assert "activeId !== 'portfolio-evidence'" in html
+
+
+def test_shell_admin_sidebar_includes_portfolio_evidence() -> None:
+    text = JS_SHELL.read_text(encoding="utf-8")
+    assert "portfolio-evidence" in text
 
 
 # --------------------------------------------------------------------
