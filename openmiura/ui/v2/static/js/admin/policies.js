@@ -92,6 +92,7 @@
       explainResult:   emptyCard(),
       simulateResult:  emptyCard(),
       diffResult:      emptyCard(),
+      applyResult:     emptyCard(),
 
       showRaw: {
         packs:          false,
@@ -99,6 +100,7 @@
         explainResult:  false,
         simulateResult: false,
         diffResult:     false,
+        applyResult:    false,
       },
 
       filter: '',
@@ -114,6 +116,17 @@
         baseline_policy_yaml:  '',
         samples_json:          '[]',
         samples_error:         '',
+      },
+
+      // F1: Apply pack to runtime (confirmed write).
+      applyForm: {
+        runtime_id:    '',
+        pack_name:     '',
+        runtime_class: '',
+        actor:         'admin',
+        open:          false,
+        busy:          false,
+        error:         '',
       },
 
       lastRefreshAt: null,
@@ -134,6 +147,7 @@
         this.explainResult  = emptyCard();
         this.simulateResult = emptyCard();
         this.diffResult     = emptyCard();
+        this.applyResult    = emptyCard();
         this.lastRefreshAt  = null;
       },
 
@@ -297,6 +311,68 @@
           return d.sample_results.filter((s) => s && s.changed).length;
         }
         return null;
+      },
+
+      // ----- F1: apply pack to runtime (confirmed write) -----
+
+      openApplyDialog(packName) {
+        this.applyForm = {
+          runtime_id:    '',
+          pack_name:     packName || '',
+          runtime_class: '',
+          actor:         'admin',
+          open:          true,
+          busy:          false,
+          error:         '',
+        };
+        window.omModal.open('policies-apply-pack');
+      },
+
+      closeApplyDialog() {
+        this.applyForm.open = false;
+        window.omModal.close('policies-apply-pack');
+      },
+
+      async submitApplyPack() {
+        const runtimeId = (this.applyForm.runtime_id || '').trim();
+        const packName  = (this.applyForm.pack_name  || '').trim();
+        if (!runtimeId) {
+          this.applyForm.error = 'runtime_id is required';
+          return;
+        }
+        if (!packName) {
+          this.applyForm.error = 'pack_name is required';
+          return;
+        }
+        this.applyForm.busy = true;
+        this.applyForm.error = '';
+        const body = {
+          actor:     (this.applyForm.actor || 'admin').trim() || 'admin',
+          pack_name: packName,
+        };
+        const rc = (this.applyForm.runtime_class || '').trim();
+        if (rc) body.runtime_class = rc;
+        const card = this.applyResult;
+        card.state = 'loading';
+        card.error = null;
+        const r = await window.omApi.post(
+          `/admin/openclaw/runtimes/${encodeURIComponent(runtimeId)}/policy-pack`,
+          body
+        );
+        this.applyForm.busy = false;
+        if (r.ok) {
+          card.data = r.data;
+          card.raw  = JSON.stringify(r.data, null, 2);
+          card.state = 'loaded';
+          window.omToasts.success(`Pack "${packName}" applied to ${runtimeId}`);
+          this.closeApplyDialog();
+        } else {
+          card.data = null;
+          card.error = `HTTP ${r.status}: ${r.error}`;
+          card.raw   = r.raw || JSON.stringify(r, null, 2);
+          card.state = 'error';
+          this.applyForm.error = `HTTP ${r.status}: ${r.error}`;
+        }
       },
     };
   };

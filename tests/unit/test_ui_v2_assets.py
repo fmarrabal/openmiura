@@ -579,11 +579,10 @@ def test_admin_policies_module_exposes_factory() -> None:
 
 
 def test_admin_policies_module_consults_documented_endpoints() -> None:
-    """The B3 view is read-only on two GETs plus three read-modeled
-    POSTs (explain/simulate/diff don't mutate the active policy).
-
-    The endpoint surface is part of the PR contract; downstream PRs
-    that touch these paths must keep them stable.
+    """The B3 view consults two GETs, three read-modeled POSTs
+    (explain/simulate/diff) and one confirmed write (F1: apply
+    pack to runtime). Pinning the surface keeps downstream
+    refactors honest.
     """
     text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
     for path in (
@@ -592,8 +591,25 @@ def test_admin_policies_module_consults_documented_endpoints() -> None:
         "/admin/policies/explain",
         "/admin/policy-explorer/simulate",
         "/admin/policy-explorer/diff",
+        # F1 — apply pack to runtime (confirmed write)
+        "/policy-pack",
     ):
         assert path in text, f"policies.js must consult {path}"
+
+
+def test_admin_policies_module_declares_apply_pack_modal() -> None:
+    """F1: the apply-pack modal is the only write surface in
+    the policies view. Pin its plumbing so a future refactor
+    cannot silently remove it."""
+    text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
+    assert "applyForm" in text
+    assert "submitApplyPack" in text
+    assert "openApplyDialog" in text
+    assert "closeApplyDialog" in text
+    assert "policies-apply-pack" in text, (
+        "policies.js must register its apply modal under "
+        "'policies-apply-pack'"
+    )
 
 
 def test_admin_policies_module_declares_per_card_state() -> None:
@@ -640,15 +656,18 @@ def test_admin_html_loads_policies_factory_and_renders_view() -> None:
         "admin.html placeholder template must skip policies (B3) too; "
         "otherwise the placeholder double-renders for activeId='policies'"
     )
-    # Show-raw toggles for the five cards.
+    # Show-raw toggles for the six cards (5 from B3 + 1 from F1).
     for key in (
         "showRaw.packs",
         "showRaw.snapshot",
         "showRaw.explainResult",
         "showRaw.simulateResult",
         "showRaw.diffResult",
+        "showRaw.applyResult",
     ):
         assert key in html, f"admin.html policies view must wire {key}"
+    # F1: apply-pack modal mounted.
+    assert "omModalFor('policies-apply-pack')" in html
 
 
 # --------------------------------------------------------------------

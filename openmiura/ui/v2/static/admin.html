@@ -635,12 +635,18 @@
                     <ul class="text-sm space-y-2 max-h-72 overflow-auto pr-1">
                       <template x-for="p in filteredPacks()" :key="p.pack_name || p.name || p.id || JSON.stringify(p)">
                         <li class="flex items-start justify-between gap-2 py-1 border-b border-surface-100 dark:border-surface-800 last:border-b-0">
-                          <div class="min-w-0">
+                          <div class="min-w-0 flex-1">
                             <div class="font-mono text-xs truncate" x-text="p.pack_name || p.name || p.id || '—'"></div>
                             <div class="text-[10px] text-surface-500 dark:text-surface-400 truncate"
                                  x-text="p.runtime_class || p.transport || p.description || ''"></div>
                           </div>
-                          <span class="om-badge om-badge--neutral text-[10px]" x-text="p.version || p.revision || ''"></span>
+                          <div class="flex items-center gap-2 shrink-0">
+                            <span class="om-badge om-badge--neutral text-[10px]" x-text="p.version || p.revision || ''"></span>
+                            <button class="om-btn om-btn--ghost om-btn--sm"
+                                    @click="openApplyDialog(p.pack_name || p.name || p.id)">
+                              Apply to runtime…
+                            </button>
+                          </div>
                         </li>
                       </template>
                     </ul>
@@ -857,6 +863,76 @@
                 </template>
                 <pre x-show="showRaw.diffResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-72 overflow-auto" x-text="diffResult.raw"></pre>
               </section>
+
+              <!-- last apply-pack result -->
+              <template x-if="applyResult.state === 'loaded' || applyResult.state === 'error'">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-2 gap-2">
+                    <h2 class="text-base font-semibold">Last pack application</h2>
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/openclaw/runtimes/&lt;id&gt;/policy-pack</span>
+                  </div>
+                  <template x-if="applyResult.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="applyResult.error"></p>
+                  </template>
+                  <template x-if="applyResult.state === 'loaded'">
+                    <p class="text-sm flex items-center gap-2">
+                      <span class="om-badge om-badge--success">applied</span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs"
+                            x-text="applyResult.data && applyResult.data.runtime_summary ? ('runtime_id: ' + (applyResult.data.runtime_summary.runtime_id || '—')) : ''"></span>
+                    </p>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                          @click="showRaw.applyResult = !showRaw.applyResult">
+                    <span x-show="!showRaw.applyResult">show raw</span><span x-show="showRaw.applyResult">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.applyResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="applyResult.raw"></pre>
+                </section>
+              </template>
+
+              <!-- apply pack modal -->
+              <div x-data="omModalFor('policies-apply-pack')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="policies-apply-pack-title">
+                  <div class="om-modal__header">
+                    <h3 id="policies-apply-pack-title" class="text-base font-semibold">Apply policy pack to runtime</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Apply pack <span class="font-mono text-xs" x-text="applyForm.pack_name"></span> to a runtime. The runtime's active policy is replaced; the action is recorded on the audit trail with the actor name below.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Runtime id *</span>
+                      <input type="text" x-model="applyForm.runtime_id" placeholder="e.g. openclaw-prod-1"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Pack name *</span>
+                      <input type="text" x-model="applyForm.pack_name"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Runtime class</span>
+                      <input type="text" x-model="applyForm.runtime_class" placeholder="(optional, backend will infer)"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</span>
+                      <input type="text" x-model="applyForm.actor"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div x-show="applyForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="applyForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="applyForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitApplyPack()" :disabled="applyForm.busy">
+                      <span x-show="!applyForm.busy">Apply</span>
+                      <span x-show="applyForm.busy">Applying…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
 
             </div>
           </template>
