@@ -456,6 +456,9 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/evidence.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
+            "/ui/v2/js/science/review.js",
+            "/ui/v2/js/science/approvals.js",
+            "/ui/v2/js/science/history.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -1127,3 +1130,84 @@ def test_science_html_loads_upload_factory_and_renders_view() -> None:
     # Drop-zone wiring.
     assert "@dragover" in html
     assert "@drop.prevent" in html
+
+
+# --------------------------------------------------------------------
+# Phase C3+C4 — Science Review / Approvals / History
+# --------------------------------------------------------------------
+
+JS_SCIENCE_REVIEW    = UI_V2 / "static" / "js" / "science" / "review.js"
+JS_SCIENCE_APPROVALS = UI_V2 / "static" / "js" / "science" / "approvals.js"
+JS_SCIENCE_HISTORY   = UI_V2 / "static" / "js" / "science" / "history.js"
+
+
+def test_science_review_module_exposes_factory_and_uses_overview() -> None:
+    assert JS_SCIENCE_REVIEW.exists()
+    text = JS_SCIENCE_REVIEW.read_text(encoding="utf-8")
+    assert "window.scienceReview" in text
+    assert "/admin/operator/overview" in text
+    # Review is strictly read-only — no action endpoint.
+    assert "/admin/operator/approvals/" not in text, (
+        "review.js must not POST to the approvals action endpoint; "
+        "act-on-it lives in approvals.js"
+    )
+
+
+def test_science_approvals_module_exposes_factory_and_action_modal() -> None:
+    assert JS_SCIENCE_APPROVALS.exists()
+    text = JS_SCIENCE_APPROVALS.read_text(encoding="utf-8")
+    assert "window.scienceApprovals" in text
+    # The two endpoints consumed.
+    assert "/admin/operator/overview" in text
+    assert "/admin/operator/approvals/" in text
+    # Modal + confirmed-action plumbing.
+    assert "openActionDialog" in text
+    assert "closeActionDialog" in text
+    assert "submitAction" in text
+    assert "science-approval-action" in text, (
+        "approvals.js must register its modal under "
+        "'science-approval-action'"
+    )
+
+
+def test_science_history_module_exposes_factory_and_uses_summary() -> None:
+    assert JS_SCIENCE_HISTORY.exists()
+    text = JS_SCIENCE_HISTORY.read_text(encoding="utf-8")
+    assert "window.scienceHistory" in text
+    assert "/admin/compliance/summary" in text
+    # No export trigger here — the science user drops into the
+    # admin Evidence packs view to actually export.
+    assert "/admin/compliance/export" not in text, (
+        "history.js must NOT trigger an export; that surface "
+        "lives on the admin Evidence packs view"
+    )
+
+
+def test_science_html_loads_three_modules_and_renders_three_views() -> None:
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    for src in (
+        "./js/science/review.js",
+        "./js/science/approvals.js",
+        "./js/science/history.js",
+    ):
+        assert src in html, f"science.html must load {src}"
+    for x_data in (
+        'x-data="scienceReview()"',
+        'x-data="scienceApprovals()"',
+        'x-data="scienceHistory()"',
+    ):
+        assert x_data in html, f"science.html must mount {x_data}"
+    for active in (
+        "activeId === 'review'",
+        "activeId === 'approvals'",
+        "activeId === 'history'",
+    ):
+        assert active in html, f"science.html must gate {active}"
+    # Fallback excludes all five live views.
+    assert (
+        "activeId !== 'chat' && activeId !== 'upload' && "
+        "activeId !== 'review' && activeId !== 'approvals' && "
+        "activeId !== 'history'" in html
+    )
+    # Approvals modal id is wired.
+    assert "omModalFor('science-approval-action')" in html
