@@ -458,6 +458,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/dispatches.js",
             "/ui/v2/js/admin/approvals.js",
             "/ui/v2/js/admin/debug.js",
+            "/ui/v2/js/admin/workflows.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -940,6 +941,45 @@ def test_admin_html_loads_debug_views() -> None:
     assert "activeId === 'tool-calls'" in html
     assert "activeId !== 'events'" in html
     assert "activeId !== 'tool-calls'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F6 — Admin Workflows view
+# --------------------------------------------------------------------
+
+JS_ADMIN_WORKFLOWS = UI_V2 / "static" / "js" / "admin" / "workflows.js"
+
+
+def test_admin_workflows_module_exposes_factory() -> None:
+    assert JS_ADMIN_WORKFLOWS.exists()
+    text = JS_ADMIN_WORKFLOWS.read_text(encoding="utf-8")
+    assert "window.adminWorkflows" in text
+
+
+def test_admin_workflows_module_consults_documented_endpoints() -> None:
+    text = JS_ADMIN_WORKFLOWS.read_text(encoding="utf-8")
+    for path in (
+        "/admin/operator/overview",
+        "/admin/operator/workflows/",
+    ):
+        assert path in text
+
+
+def test_admin_workflows_module_declares_action_modal() -> None:
+    text = JS_ADMIN_WORKFLOWS.read_text(encoding="utf-8")
+    assert "actionForm" in text
+    assert "submitAction" in text
+    assert "openActionDialog" in text
+    assert "workflows-action" in text
+
+
+def test_admin_html_loads_workflows_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/workflows.js" in html
+    assert 'x-data="adminWorkflows()"' in html
+    assert "activeId === 'workflows'" in html
+    assert "omModalFor('workflows-action')" in html
+    assert "activeId !== 'workflows'" in html
 
 
 # --------------------------------------------------------------------
