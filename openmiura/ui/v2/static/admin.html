@@ -16,6 +16,7 @@
   <script src="./js/shell.js"></script>
   <script src="./js/admin/dashboard.js"></script>
   <script src="./js/admin/runtimes.js"></script>
+  <script src="./js/admin/policies.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -563,8 +564,301 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholders for B3..B7) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes'">
+      <!-- ===== POLICIES ===== -->
+      <template x-if="activeId === 'policies'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminPolicies()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Govern</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Policies</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Registered policy packs and the current policy snapshot, plus the three explorer endpoints: <span class="font-mono text-xs">explain</span> a decision, <span class="font-mono text-xs">simulate</span> a candidate YAML, and <span class="font-mono text-xs">diff</span> a candidate against a baseline. All three are read-modeled — they do not mutate the active policy.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshAll()" :disabled="packs.state === 'loading' || snapshot.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <!-- empty / not-authed -->
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load policies</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- packs + snapshot row -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <!-- pack registry -->
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                    <div class="flex items-center gap-2">
+                      <h2 class="text-base font-semibold">Registered policy packs</h2>
+                      <span class="om-badge om-badge--neutral" x-text="packCount()"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input type="text" x-model="runtimeClass" placeholder="runtime class"
+                             class="px-2 py-1 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 w-28" />
+                      <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshPacks()" :disabled="packs.state === 'loading'">Apply</button>
+                      <input type="text" x-model="filter" placeholder="Filter…"
+                             class="px-2 py-1 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 w-32" />
+                    </div>
+                  </div>
+                  <template x-if="packs.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="packs.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="packs.error"></p>
+                  </template>
+                  <template x-if="packs.state === 'loaded' && filteredPacks().length === 0">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">No policy packs match.</p>
+                  </template>
+                  <template x-if="packs.state === 'loaded' && filteredPacks().length > 0">
+                    <ul class="text-sm space-y-2 max-h-72 overflow-auto pr-1">
+                      <template x-for="p in filteredPacks()" :key="p.pack_name || p.name || p.id || JSON.stringify(p)">
+                        <li class="flex items-start justify-between gap-2 py-1 border-b border-surface-100 dark:border-surface-800 last:border-b-0">
+                          <div class="min-w-0">
+                            <div class="font-mono text-xs truncate" x-text="p.pack_name || p.name || p.id || '—'"></div>
+                            <div class="text-[10px] text-surface-500 dark:text-surface-400 truncate"
+                                 x-text="p.runtime_class || p.transport || p.description || ''"></div>
+                          </div>
+                          <span class="om-badge om-badge--neutral text-[10px]" x-text="p.version || p.revision || ''"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                          @click="showRaw.packs = !showRaw.packs">
+                    <span x-show="!showRaw.packs">show raw</span><span x-show="showRaw.packs">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.packs" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="packs.raw"></pre>
+                </section>
+
+                <!-- snapshot -->
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Policy snapshot</h2>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshSnapshot()" :disabled="snapshot.state === 'loading'">Reload</button>
+                  </div>
+                  <template x-if="snapshot.state === 'loading'">
+                    <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                  </template>
+                  <template x-if="snapshot.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="snapshot.error"></p>
+                  </template>
+                  <template x-if="snapshot.state === 'loaded'">
+                    <div class="text-sm text-surface-700 dark:text-surface-300 space-y-1">
+                      <p>
+                        <span class="text-surface-500 dark:text-surface-400">Status: </span>
+                        <span class="font-mono" x-text="snapshot.data && snapshot.data.ok ? 'ok' : (snapshot.data && snapshot.data.status || '—')"></span>
+                      </p>
+                      <p class="text-xs text-surface-500 dark:text-surface-400">
+                        Inspect the verbatim JSON for the active policy:
+                      </p>
+                    </div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                          @click="showRaw.snapshot = !showRaw.snapshot">
+                    <span x-show="!showRaw.snapshot">show raw</span><span x-show="showRaw.snapshot">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.snapshot" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="snapshot.raw"></pre>
+                </section>
+              </div>
+
+              <!-- explain -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Explain a decision</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/policies/explain</span>
+                </div>
+                <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                  Ask the policy engine why a request was — or would be — allowed or denied. Fields with default values can be left blank.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Scope</span>
+                    <select x-model="explainForm.scope" class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800">
+                      <option value="tool">tool</option>
+                      <option value="memory">memory</option>
+                      <option value="secret">secret</option>
+                      <option value="channel">channel</option>
+                      <option value="approval">approval</option>
+                    </select>
+                  </label>
+                  <label class="block md:col-span-2">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Resource name *</span>
+                    <input type="text" x-model="explainForm.resource_name" placeholder="e.g. http_get, secret://stripe"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Action</span>
+                    <input type="text" x-model="explainForm.action" placeholder="use"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Agent name</span>
+                    <input type="text" x-model="explainForm.agent_name" placeholder="(optional)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">User role</span>
+                    <input type="text" x-model="explainForm.user_role" placeholder="(optional)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="submitExplain()" :disabled="explainResult.state === 'loading'">
+                    <span x-show="explainResult.state !== 'loading'">Explain</span>
+                    <span x-show="explainResult.state === 'loading'">Resolving…</span>
+                  </button>
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.explainResult = !showRaw.explainResult">
+                    <span x-show="!showRaw.explainResult">show raw</span><span x-show="showRaw.explainResult">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="explainResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="explainResult.error"></p>
+                </template>
+                <template x-if="explainResult.state === 'loaded'">
+                  <div class="mt-3 flex items-center gap-2 text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Decision:</span>
+                    <span class="om-badge" :class="'om-badge--' + decisionTone(decisionLabel(explainResult.data))" x-text="decisionLabel(explainResult.data)"></span>
+                    <span class="text-surface-500 dark:text-surface-400" x-text="explainResult.data && explainResult.data.reason ? '— ' + explainResult.data.reason : ''"></span>
+                  </div>
+                </template>
+                <pre x-show="showRaw.explainResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="explainResult.raw"></pre>
+              </section>
+
+              <!-- simulate -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Simulate a candidate policy</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/policy-explorer/simulate</span>
+                </div>
+                <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                  Replace the active policy with the YAML below and resolve the same request. The active policy is not modified.
+                </p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 text-sm">
+                  <div class="space-y-2">
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Scope</span>
+                      <select x-model="simulateForm.scope" class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800">
+                        <option value="tool">tool</option>
+                        <option value="memory">memory</option>
+                        <option value="secret">secret</option>
+                        <option value="channel">channel</option>
+                        <option value="approval">approval</option>
+                      </select>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Resource name *</span>
+                      <input type="text" x-model="simulateForm.resource_name"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Action</span>
+                      <input type="text" x-model="simulateForm.action"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                  </div>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Candidate policy (YAML)</span>
+                    <textarea x-model="simulateForm.candidate_policy_yaml" rows="8" spellcheck="false"
+                              placeholder="version: 1&#10;rules:&#10;  - scope: tool&#10;    resource: http_get&#10;    decision: allow"
+                              class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+                  </label>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="submitSimulate()" :disabled="simulateResult.state === 'loading'">
+                    <span x-show="simulateResult.state !== 'loading'">Simulate</span>
+                    <span x-show="simulateResult.state === 'loading'">Simulating…</span>
+                  </button>
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.simulateResult = !showRaw.simulateResult">
+                    <span x-show="!showRaw.simulateResult">show raw</span><span x-show="showRaw.simulateResult">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="simulateResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="simulateResult.error"></p>
+                </template>
+                <template x-if="simulateResult.state === 'loaded'">
+                  <div class="mt-3 flex items-center gap-2 text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Simulated:</span>
+                    <span class="om-badge" :class="'om-badge--' + decisionTone(decisionLabel(simulateResult.data))" x-text="decisionLabel(simulateResult.data)"></span>
+                    <span class="text-surface-500 dark:text-surface-400" x-show="simulateResult.data && simulateResult.data.changed === true">— differs from active policy</span>
+                  </div>
+                </template>
+                <pre x-show="showRaw.simulateResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="simulateResult.raw"></pre>
+              </section>
+
+              <!-- diff -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Diff candidate vs baseline</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/policy-explorer/diff</span>
+                </div>
+                <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                  Both YAMLs are optional — empty means "use the active policy". <strong>Samples</strong> is a JSON array of decision requests that get evaluated under both policies; the response lists which samples change verdict.
+                </p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Baseline (YAML)</span>
+                    <textarea x-model="diffForm.baseline_policy_yaml" rows="6" spellcheck="false"
+                              placeholder="(blank = active policy)"
+                              class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Candidate (YAML)</span>
+                    <textarea x-model="diffForm.candidate_policy_yaml" rows="6" spellcheck="false"
+                              placeholder="(blank = active policy)"
+                              class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+                  </label>
+                  <label class="block lg:col-span-2">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Samples (JSON array)</span>
+                    <textarea x-model="diffForm.samples_json" rows="4" spellcheck="false"
+                              placeholder='[{"scope":"tool","resource_name":"http_get","action":"use"}]'
+                              class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs"></textarea>
+                    <div x-show="diffForm.samples_error" class="mt-1 text-xs text-danger-700 dark:text-danger-500" x-text="diffForm.samples_error"></div>
+                  </label>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="submitDiff()" :disabled="diffResult.state === 'loading'">
+                    <span x-show="diffResult.state !== 'loading'">Compute diff</span>
+                    <span x-show="diffResult.state === 'loading'">Diffing…</span>
+                  </button>
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.diffResult = !showRaw.diffResult">
+                    <span x-show="!showRaw.diffResult">show raw</span><span x-show="showRaw.diffResult">hide raw</span>
+                  </button>
+                </div>
+                <template x-if="diffResult.state === 'error'">
+                  <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="diffResult.error"></p>
+                </template>
+                <template x-if="diffResult.state === 'loaded'">
+                  <div class="mt-3 text-sm flex items-center gap-2">
+                    <span class="text-surface-500 dark:text-surface-400">Samples differing:</span>
+                    <span class="om-badge" :class="'om-badge--' + (diffChangedCount() ? 'warning' : 'success')" x-text="diffChangedCount() ?? '—'"></span>
+                  </div>
+                </template>
+                <pre x-show="showRaw.diffResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-72 overflow-auto" x-text="diffResult.raw"></pre>
+              </section>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholders for B4..B7) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -572,7 +866,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B3 Policies, B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong> or <strong>Runtimes</strong> in the sidebar to see the functional views shipped so far.
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B4 Secrets, B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong> or <strong>Policies</strong> in the sidebar to see the functional views shipped so far.
             </p>
           </header>
         </div>

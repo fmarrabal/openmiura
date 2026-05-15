@@ -449,6 +449,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/components.js",
             "/ui/v2/js/admin/dashboard.js",
             "/ui/v2/js/admin/runtimes.js",
+            "/ui/v2/js/admin/policies.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -548,3 +549,93 @@ def test_admin_html_loads_runtimes_factory_and_renders_view() -> None:
         "showRaw.alertRouting",
     ):
         assert key in html, f"admin.html runtimes view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase B3 — Admin Policies editor
+# --------------------------------------------------------------------
+
+JS_ADMIN_POLICIES = UI_V2 / "static" / "js" / "admin" / "policies.js"
+
+
+def test_admin_policies_module_exposes_factory() -> None:
+    assert JS_ADMIN_POLICIES.exists(), (
+        f"missing admin policies module: {JS_ADMIN_POLICIES}"
+    )
+    text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
+    assert "window.adminPolicies" in text, (
+        "policies.js must expose window.adminPolicies for Alpine x-data"
+    )
+
+
+def test_admin_policies_module_consults_documented_endpoints() -> None:
+    """The B3 view is read-only on two GETs plus three read-modeled
+    POSTs (explain/simulate/diff don't mutate the active policy).
+
+    The endpoint surface is part of the PR contract; downstream PRs
+    that touch these paths must keep them stable.
+    """
+    text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
+    for path in (
+        "/admin/openclaw/policy-packs",
+        "/admin/policy-explorer/snapshot",
+        "/admin/policies/explain",
+        "/admin/policy-explorer/simulate",
+        "/admin/policy-explorer/diff",
+    ):
+        assert path in text, f"policies.js must consult {path}"
+
+
+def test_admin_policies_module_declares_per_card_state() -> None:
+    """Per-card { state, data, error, raw } pattern reused from B1/B2."""
+    text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
+    for card in (
+        "packs:",
+        "snapshot:",
+        "explainResult:",
+        "simulateResult:",
+        "diffResult:",
+    ):
+        assert card in text, f"policies.js must declare card key {card!r}"
+    # Three forms live in the factory.
+    for form in ("explainForm", "simulateForm", "diffForm"):
+        assert form in text, f"policies.js must declare {form}"
+    # Submit handlers wired.
+    for handler in ("submitExplain", "submitSimulate", "submitDiff"):
+        assert handler in text, f"policies.js must declare {handler}"
+
+
+def test_admin_policies_module_reacts_to_auth_events() -> None:
+    text = JS_ADMIN_POLICIES.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_policies_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/policies.js" in html, (
+        "admin.html must load the policies module"
+    )
+    assert 'x-data="adminPolicies()"' in html, (
+        "admin.html must mount adminPolicies() inside the policies template"
+    )
+    assert "activeId === 'policies'" in html, (
+        "admin.html must gate the policies view by activeId"
+    )
+    # The placeholder template now excludes three live views, not two.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes' && "
+        "activeId !== 'policies'" in html
+    ), (
+        "admin.html placeholder template must skip policies (B3) too; "
+        "otherwise the placeholder double-renders for activeId='policies'"
+    )
+    # Show-raw toggles for the five cards.
+    for key in (
+        "showRaw.packs",
+        "showRaw.snapshot",
+        "showRaw.explainResult",
+        "showRaw.simulateResult",
+        "showRaw.diffResult",
+    ):
+        assert key in html, f"admin.html policies view must wire {key}"
