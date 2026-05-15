@@ -38,9 +38,10 @@
       {
         title: 'Configure',
         items: [
-          { id: 'channels',   label: 'Channels',           icon: 'plug' },
-          { id: 'workflows',  label: 'Workflows',          icon: 'workflow' },
-          { id: 'system',     label: 'System & config',    icon: 'settings' },
+          { id: 'channels',         label: 'Channels',           icon: 'plug' },
+          { id: 'secrets-wizard',   label: 'Secrets wizard',     icon: 'key' },
+          { id: 'workflows',        label: 'Workflows',          icon: 'workflow' },
+          { id: 'system',           label: 'System & config',    icon: 'settings' },
         ],
       },
       {
