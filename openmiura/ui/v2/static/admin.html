@@ -20,6 +20,7 @@
   <script src="./js/admin/secrets.js"></script>
   <script src="./js/admin/identities.js"></script>
   <script src="./js/admin/channels.js"></script>
+  <script src="./js/admin/evidence.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -1652,8 +1653,189 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholder for B7) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels'">
+      <!-- ===== EVIDENCE PACKS ===== -->
+      <template x-if="activeId === 'evidence'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminEvidence()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Operate</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Evidence packs</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Compliance summary + evidence-pack export for the active scope. The summary is read-only and surfaces a per-section count for the chosen time window. Export builds a downloadable pack and records the action with a <span class="font-mono text-xs">report_label</span> the auditor sees later.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshSummary()" :disabled="summary.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load evidence</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- filters -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Scope &amp; window</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">passed to summary + export</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Tenant</span>
+                    <input type="text" x-model="filters.tenant_id" placeholder="(active scope)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Workspace</span>
+                    <input type="text" x-model="filters.workspace_id" placeholder="(active scope)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Environment</span>
+                    <input type="text" x-model="filters.environment" placeholder="(active scope)"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Window (h)</span>
+                    <input type="number" min="1" max="720" x-model.number="filters.window_hours"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Limit / section</span>
+                    <input type="number" min="1" max="200" x-model.number="filters.limit_per_section"
+                           class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                  </label>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshSummary()" :disabled="summary.state === 'loading'">Apply &amp; reload</button>
+                  <button class="om-btn om-btn--primary om-btn--sm" @click="openExportDialog()" :disabled="summary.state !== 'loaded'">
+                    <span x-html="omIcon('shield-check', 'w-3.5 h-3.5')"></span><span>Export evidence pack…</span>
+                  </button>
+                </div>
+              </section>
+
+              <!-- summary -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                  <h2 class="text-base font-semibold">Compliance summary</h2>
+                  <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">GET /admin/compliance/summary</span>
+                </div>
+                <template x-if="summary.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="summary.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="summary.error"></p>
+                </template>
+                <template x-if="summary.state === 'loaded'">
+                  <div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-sm">
+                      <template x-for="key in sectionKeys()" :key="key">
+                        <div class="om-card">
+                          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400" x-text="key.replace(/_/g, ' ')"></p>
+                          <p class="text-xl font-semibold tabular-nums mt-1" x-text="sectionCount(key) ?? '—'"></p>
+                        </div>
+                      </template>
+                    </div>
+                    <p class="text-[10px] font-mono text-surface-500 dark:text-surface-400 mt-3"
+                       x-show="auditEventId()" x-text="'audit_event_id: ' + auditEventId()"></p>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.summary = !showRaw.summary">
+                  <span x-show="!showRaw.summary">show raw</span><span x-show="showRaw.summary">hide raw</span>
+                </button>
+                <pre x-show="showRaw.summary" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-80 overflow-auto" x-text="summary.raw"></pre>
+              </section>
+
+              <!-- last export result -->
+              <template x-if="exportResult.state === 'loaded' || exportResult.state === 'error'">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Last export</h2>
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/compliance/export</span>
+                  </div>
+                  <template x-if="exportResult.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="exportResult.error"></p>
+                  </template>
+                  <template x-if="exportResult.state === 'loaded'">
+                    <div class="text-sm space-y-1">
+                      <p class="flex items-center gap-2">
+                        <span class="om-badge om-badge--success">exported</span>
+                        <span class="text-surface-500 dark:text-surface-400">Artifact ref:</span>
+                        <span class="font-mono text-xs" x-text="exportArtifactRef() || '(see raw)'"></span>
+                      </p>
+                      <p class="text-xs text-surface-500 dark:text-surface-400">The export was recorded on the audit trail; pull the artifact from the backend via its ref.</p>
+                    </div>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                          @click="showRaw.exportResult = !showRaw.exportResult">
+                    <span x-show="!showRaw.exportResult">show raw</span><span x-show="showRaw.exportResult">hide raw</span>
+                  </button>
+                  <pre x-show="showRaw.exportResult" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="exportResult.raw"></pre>
+                </section>
+              </template>
+
+              <!-- export modal -->
+              <div x-data="omModalFor('evidence-export')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="evidence-export-title">
+                  <div class="om-modal__header">
+                    <h3 id="evidence-export-title" class="text-base font-semibold">Export evidence pack</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Build an evidence pack for the current scope &amp; window. The pack is recorded on the audit trail with the chosen label.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Report label</span>
+                      <input type="text" x-model="exportForm.report_label"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div>
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Sections to include</span>
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        <template x-for="key in sectionKeys()" :key="key">
+                          <label class="inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" :checked="exportForm.sections[key]" @change="toggleSection(key)" />
+                            <span class="font-mono text-xs" x-text="key.replace(/_/g, ' ')"></span>
+                          </label>
+                        </template>
+                      </div>
+                    </div>
+                    <div x-show="exportForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="exportForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="exportForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitExport()" :disabled="exportForm.busy">
+                      <span x-show="!exportForm.busy">Export</span>
+                      <span x-show="exportForm.busy">Exporting…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Remaining admin sections (still placeholders) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities' && activeId !== 'channels' && activeId !== 'evidence'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -1661,7 +1843,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in the final Phase B PR (B7 Evidence packs + Debug pane). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong>, <strong>Secrets</strong>, <strong>Identities</strong> or <strong>Channels</strong> in the sidebar to see the functional views shipped so far.
+              Phase B is now complete. The remaining sidebar items (<strong>Dispatches</strong>, <strong>Approvals</strong>, <strong>Workflows</strong>, <strong>System &amp; config</strong>, <strong>Event log</strong>, <strong>Tool calls</strong>) are reserved for a follow-up sprint. Pick any of the seven functional views (Dashboard, Runtimes, Policies, Secrets, Identities, Channels, Evidence packs) to continue.
             </p>
           </header>
         </div>

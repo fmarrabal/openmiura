@@ -453,6 +453,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/secrets.js",
             "/ui/v2/js/admin/identities.js",
             "/ui/v2/js/admin/channels.js",
+            "/ui/v2/js/admin/evidence.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -906,3 +907,87 @@ def test_admin_html_loads_channels_factory_and_renders_view() -> None:
         "showRaw.saveResult",
     ):
         assert key in html, f"admin.html channels view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase B7 — Admin Evidence packs
+# --------------------------------------------------------------------
+
+JS_ADMIN_EVIDENCE = UI_V2 / "static" / "js" / "admin" / "evidence.js"
+
+
+def test_admin_evidence_module_exposes_factory() -> None:
+    assert JS_ADMIN_EVIDENCE.exists(), (
+        f"missing admin evidence module: {JS_ADMIN_EVIDENCE}"
+    )
+    text = JS_ADMIN_EVIDENCE.read_text(encoding="utf-8")
+    assert "window.adminEvidence" in text, (
+        "evidence.js must expose window.adminEvidence for Alpine x-data"
+    )
+
+
+def test_admin_evidence_module_consults_documented_endpoints() -> None:
+    """B7 covers the compliance summary + export pair only.
+
+    The portfolio-scoped evidence-package endpoints under
+    /admin/openclaw/alert-governance/portfolios/{id}/... are
+    deferred to a follow-up sprint; assert their absence so an
+    accidental import does not creep in without explicit
+    review.
+    """
+    text = JS_ADMIN_EVIDENCE.read_text(encoding="utf-8")
+    for path in (
+        "/admin/compliance/summary",
+        "/admin/compliance/export",
+    ):
+        assert path in text, f"evidence.js must consult {path}"
+    assert "alert-governance/portfolios" not in text, (
+        "evidence.js must NOT consume the portfolio-scoped "
+        "evidence-package endpoints in B7; reserve them for a "
+        "later sprint that ships portfolio-aware UI"
+    )
+
+
+def test_admin_evidence_module_declares_per_card_state_and_export_modal() -> None:
+    text = JS_ADMIN_EVIDENCE.read_text(encoding="utf-8")
+    for card in ("summary:", "exportResult:"):
+        assert card in text, f"evidence.js must declare card key {card!r}"
+    assert "exportForm" in text
+    for handler in ("submitExport", "openExportDialog", "closeExportDialog", "refreshSummary"):
+        assert handler in text, f"evidence.js must declare {handler}"
+    # Section-checkbox state lives in the form.
+    assert "sections" in text
+    assert "evidence-export" in text, (
+        "evidence.js must register its modal under 'evidence-export'"
+    )
+
+
+def test_admin_evidence_module_reacts_to_auth_events() -> None:
+    text = JS_ADMIN_EVIDENCE.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_evidence_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/evidence.js" in html, (
+        "admin.html must load the evidence module"
+    )
+    assert 'x-data="adminEvidence()"' in html, (
+        "admin.html must mount adminEvidence() inside the evidence template"
+    )
+    assert "activeId === 'evidence'" in html, (
+        "admin.html must gate the evidence view by activeId"
+    )
+    assert "omModalFor('evidence-export')" in html
+    # The placeholder template now excludes all seven live views.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes' && "
+        "activeId !== 'policies' && activeId !== 'secrets' && "
+        "activeId !== 'identities' && activeId !== 'channels' && "
+        "activeId !== 'evidence'" in html
+    ), (
+        "admin.html placeholder template must skip evidence (B7) too"
+    )
+    for key in ("showRaw.summary", "showRaw.exportResult"):
+        assert key in html, f"admin.html evidence view must wire {key}"
