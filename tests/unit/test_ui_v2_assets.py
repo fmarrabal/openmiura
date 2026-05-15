@@ -451,6 +451,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/runtimes.js",
             "/ui/v2/js/admin/policies.js",
             "/ui/v2/js/admin/secrets.js",
+            "/ui/v2/js/admin/identities.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -732,3 +733,92 @@ def test_admin_html_loads_secrets_factory_and_renders_view() -> None:
         "showRaw.explainResult",
     ):
         assert key in html, f"admin.html secrets view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase B5 — Admin Identities & RBAC
+# --------------------------------------------------------------------
+
+JS_ADMIN_IDENTITIES = UI_V2 / "static" / "js" / "admin" / "identities.js"
+
+
+def test_admin_identities_module_exposes_factory() -> None:
+    assert JS_ADMIN_IDENTITIES.exists(), (
+        f"missing admin identities module: {JS_ADMIN_IDENTITIES}"
+    )
+    text = JS_ADMIN_IDENTITIES.read_text(encoding="utf-8")
+    assert "window.adminIdentities" in text, (
+        "identities.js must expose window.adminIdentities for Alpine x-data"
+    )
+
+
+def test_admin_identities_module_consults_documented_endpoints() -> None:
+    """B5 covers identity linking + the two RBAC explain endpoints."""
+    text = JS_ADMIN_IDENTITIES.read_text(encoding="utf-8")
+    for path in (
+        "/admin/identities",
+        "/admin/identities/link",
+        "/admin/sessions",
+        "/admin/sandbox/explain",
+        "/admin/security/explain",
+    ):
+        assert path in text, f"identities.js must consult {path}"
+
+
+def test_admin_identities_module_declares_per_card_state_and_link_form() -> None:
+    text = JS_ADMIN_IDENTITIES.read_text(encoding="utf-8")
+    for card in (
+        "identities:",
+        "sessions:",
+        "sandboxResult:",
+        "securityResult:",
+    ):
+        assert card in text, f"identities.js must declare card key {card!r}"
+    # Three forms, one a confirmed write.
+    for form in ("linkForm", "sandboxForm", "securityForm"):
+        assert form in text, f"identities.js must declare {form}"
+    # Submit handlers.
+    for handler in ("submitLink", "submitSandbox", "submitSecurity"):
+        assert handler in text
+    # Confirmation modal plumbing.
+    assert "openLinkDialog" in text
+    assert "closeLinkDialog" in text
+    assert "identities-link" in text, (
+        "identities.js must register its modal under 'identities-link'"
+    )
+
+
+def test_admin_identities_module_reacts_to_auth_events() -> None:
+    text = JS_ADMIN_IDENTITIES.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_identities_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/identities.js" in html, (
+        "admin.html must load the identities module"
+    )
+    assert 'x-data="adminIdentities()"' in html, (
+        "admin.html must mount adminIdentities() inside the identities template"
+    )
+    assert "activeId === 'identities'" in html, (
+        "admin.html must gate the identities view by activeId"
+    )
+    # Modal id matches the manager registration.
+    assert "omModalFor('identities-link')" in html
+    # The placeholder template now excludes five live views.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes' && "
+        "activeId !== 'policies' && activeId !== 'secrets' && "
+        "activeId !== 'identities'" in html
+    ), (
+        "admin.html placeholder template must skip identities (B5) too"
+    )
+    for key in (
+        "showRaw.identities",
+        "showRaw.sessions",
+        "showRaw.sandboxResult",
+        "showRaw.securityResult",
+    ):
+        assert key in html, f"admin.html identities view must wire {key}"

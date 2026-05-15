@@ -18,6 +18,7 @@
   <script src="./js/admin/runtimes.js"></script>
   <script src="./js/admin/policies.js"></script>
   <script src="./js/admin/secrets.js"></script>
+  <script src="./js/admin/identities.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -1156,8 +1157,321 @@
         </div>
       </template>
 
-      <!-- ===== Other admin sections (placeholders for B5..B7) ===== -->
-      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets'">
+      <!-- ===== IDENTITIES & RBAC ===== -->
+      <template x-if="activeId === 'identities'">
+        <div class="max-w-6xl mx-auto px-6 py-8 space-y-6" x-data="adminIdentities()" x-init="init()">
+
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Govern</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Identities &amp; RBAC</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300">
+                Identity-link table (channel → global user key) and the read-modeled explain endpoints for sandbox capabilities and security access. Linking an identity is audit-only — it records the binding, it does not grant a role. Roles are derived from the principal scope (<span class="font-mono text-xs">tenant / workspace / environment / role</span>).
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-surface-500 dark:text-surface-400" x-show="lastRefreshAt"
+                    x-text="lastRefreshAt ? 'updated ' + lastRefreshAt.toLocaleTimeString() : ''"></span>
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshAll()" :disabled="identities.state === 'loading'">
+                <span x-html="omIcon('arrow-up-down', 'w-3.5 h-3.5')"></span><span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <template x-if="!omAuth.state.token">
+            <div class="om-card text-center py-12">
+              <div class="mx-auto w-12 h-12 rounded-full bg-warning-500/15 text-warning-700 dark:text-warning-500 flex items-center justify-center mb-3"
+                   x-html="omIcon('key', 'w-6 h-6')"></div>
+              <h2 class="text-base font-semibold mb-1">Connect to load identities</h2>
+              <p class="text-sm text-surface-600 dark:text-surface-300">Use the auth dropdown in the topbar.</p>
+            </div>
+          </template>
+
+          <template x-if="omAuth.state.token">
+            <div class="space-y-6">
+
+              <!-- identities table -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h2 class="text-base font-semibold">Identity links
+                    <span class="om-badge om-badge--neutral ml-2" x-text="identitiesItems().length"></span>
+                  </h2>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <input type="text" x-model="filters.global_user_key" placeholder="filter global_user_key"
+                           class="px-2 py-1 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs w-48" />
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshIdentities()" :disabled="identities.state === 'loading'">Apply</button>
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="openLinkDialog()">
+                      <span x-html="omIcon('plug', 'w-3.5 h-3.5')"></span><span>Link identity</span>
+                    </button>
+                  </div>
+                </div>
+                <template x-if="identities.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="identities.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="identities.error"></p>
+                </template>
+                <template x-if="identities.state === 'loaded' && identitiesItems().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No identity links in this scope.</p>
+                </template>
+                <template x-if="identities.state === 'loaded' && identitiesItems().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Channel user key</th>
+                          <th>Global user key</th>
+                          <th>Linked by</th>
+                          <th>Linked at</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="(it, i) in identitiesItems()" :key="i">
+                          <tr>
+                            <td class="font-mono text-xs" x-text="it.channel_user_key || it.channel_key || '—'"></td>
+                            <td class="font-mono text-xs" x-text="it.global_user_key || '—'"></td>
+                            <td class="text-xs" x-text="it.linked_by || '—'"></td>
+                            <td class="text-xs whitespace-nowrap" x-text="it.linked_at || it.created_at || '—'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.identities = !showRaw.identities">
+                  <span x-show="!showRaw.identities">show raw</span><span x-show="showRaw.identities">hide raw</span>
+                </button>
+                <pre x-show="showRaw.identities" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="identities.raw"></pre>
+              </section>
+
+              <!-- sessions table -->
+              <section class="om-card">
+                <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h2 class="text-base font-semibold">Active sessions
+                    <span class="om-badge om-badge--neutral ml-2" x-text="sessionsItems().length"></span>
+                  </h2>
+                  <div class="flex items-center gap-2">
+                    <input type="number" min="1" max="500" x-model.number="filters.sessions_limit"
+                           class="px-2 py-1 text-sm rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs w-20" />
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="refreshSessions()" :disabled="sessions.state === 'loading'">Reload</button>
+                  </div>
+                </div>
+                <template x-if="sessions.state === 'loading'">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">Loading…</p>
+                </template>
+                <template x-if="sessions.state === 'error'">
+                  <p class="text-sm text-danger-700 dark:text-danger-500" x-text="sessions.error"></p>
+                </template>
+                <template x-if="sessions.state === 'loaded' && sessionsItems().length === 0">
+                  <p class="text-sm text-surface-500 dark:text-surface-400 italic">No active sessions.</p>
+                </template>
+                <template x-if="sessions.state === 'loaded' && sessionsItems().length > 0">
+                  <div class="overflow-x-auto">
+                    <table class="om-table om-table--compact">
+                      <thead>
+                        <tr>
+                          <th>Session ID</th>
+                          <th>Principal</th>
+                          <th>Tenant / Workspace</th>
+                          <th>Channel</th>
+                          <th>Started</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="(s, i) in sessionsItems()" :key="i">
+                          <tr>
+                            <td class="font-mono text-xs truncate max-w-[12rem]" x-text="s.session_id || s.id || '—'"></td>
+                            <td class="font-mono text-xs" x-text="s.global_user_key || s.principal_id || s.user_key || '—'"></td>
+                            <td class="font-mono text-xs">
+                              <span x-text="s.tenant_id || '—'"></span> / <span x-text="s.workspace_id || '—'"></span>
+                            </td>
+                            <td class="text-xs" x-text="s.channel || s.transport || '—'"></td>
+                            <td class="text-xs whitespace-nowrap" x-text="s.started_at || s.created_at || '—'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                        @click="showRaw.sessions = !showRaw.sessions">
+                  <span x-show="!showRaw.sessions">show raw</span><span x-show="showRaw.sessions">hide raw</span>
+                </button>
+                <pre x-show="showRaw.sessions" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="sessions.raw"></pre>
+              </section>
+
+              <!-- sandbox + security explain row -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <!-- sandbox capabilities -->
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Sandbox capabilities</h2>
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/sandbox/explain</span>
+                  </div>
+                  <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                    Resolve the capability bundle for a (role × scope) tuple. Useful when an operator reports "tool X disappeared from my menu".
+                  </p>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">User role</span>
+                      <input type="text" x-model="sandboxForm.user_role" placeholder="(optional)"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Environment</span>
+                      <input type="text" x-model="sandboxForm.environment" placeholder="(optional)"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Tenant</span>
+                      <input type="text" x-model="sandboxForm.tenant_id"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Workspace</span>
+                      <input type="text" x-model="sandboxForm.workspace_id"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Agent name</span>
+                      <input type="text" x-model="sandboxForm.agent_name"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Tool name</span>
+                      <input type="text" x-model="sandboxForm.tool_name"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                  </div>
+                  <div class="mt-3 flex items-center gap-2">
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="submitSandbox()" :disabled="sandboxResult.state === 'loading'">
+                      <span x-show="sandboxResult.state !== 'loading'">Explain</span>
+                      <span x-show="sandboxResult.state === 'loading'">Resolving…</span>
+                    </button>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.sandboxResult = !showRaw.sandboxResult">
+                      <span x-show="!showRaw.sandboxResult">show raw</span><span x-show="showRaw.sandboxResult">hide raw</span>
+                    </button>
+                  </div>
+                  <template x-if="sandboxResult.state === 'error'">
+                    <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="sandboxResult.error"></p>
+                  </template>
+                  <template x-if="sandboxResult.state === 'loaded'">
+                    <div class="mt-3 text-sm">
+                      <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Allowed tools</p>
+                      <p class="font-mono text-xs mt-1" x-text="(sandboxResult.data && (sandboxResult.data.allowed_tools || sandboxResult.data.tools)) ? ((sandboxResult.data.allowed_tools || sandboxResult.data.tools).join ? (sandboxResult.data.allowed_tools || sandboxResult.data.tools).join(', ') : '—') : '—'"></p>
+                    </div>
+                  </template>
+                  <pre x-show="showRaw.sandboxResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="sandboxResult.raw"></pre>
+                </section>
+
+                <!-- security access -->
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-base font-semibold">Security access</h2>
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/security/explain</span>
+                  </div>
+                  <p class="text-sm text-surface-600 dark:text-surface-300 mb-3">
+                    Would this (role × scope) access the given resource? Like the policies B3 explain, but routed through the security layer.
+                  </p>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Scope</span>
+                      <select x-model="securityForm.scope" class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800">
+                        <option value="tool">tool</option>
+                        <option value="memory">memory</option>
+                        <option value="secret">secret</option>
+                        <option value="channel">channel</option>
+                        <option value="approval">approval</option>
+                      </select>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Resource name *</span>
+                      <input type="text" x-model="securityForm.resource_name"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Action</span>
+                      <input type="text" x-model="securityForm.action" placeholder="use"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">User role</span>
+                      <input type="text" x-model="securityForm.user_role"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                  </div>
+                  <div class="mt-3 flex items-center gap-2">
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="submitSecurity()" :disabled="securityResult.state === 'loading'">
+                      <span x-show="securityResult.state !== 'loading'">Explain</span>
+                      <span x-show="securityResult.state === 'loading'">Resolving…</span>
+                    </button>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw.securityResult = !showRaw.securityResult">
+                      <span x-show="!showRaw.securityResult">show raw</span><span x-show="showRaw.securityResult">hide raw</span>
+                    </button>
+                  </div>
+                  <template x-if="securityResult.state === 'error'">
+                    <p class="mt-3 text-sm text-danger-700 dark:text-danger-500" x-text="securityResult.error"></p>
+                  </template>
+                  <template x-if="securityResult.state === 'loaded'">
+                    <div class="mt-3 flex items-center gap-2 text-sm">
+                      <span class="text-surface-500 dark:text-surface-400">Decision:</span>
+                      <span class="om-badge" :class="'om-badge--' + decisionTone(decisionLabel(securityResult.data))" x-text="decisionLabel(securityResult.data)"></span>
+                      <span class="text-surface-500 dark:text-surface-400" x-text="securityResult.data && securityResult.data.reason ? '— ' + securityResult.data.reason : ''"></span>
+                    </div>
+                  </template>
+                  <pre x-show="showRaw.securityResult" x-cloak class="mt-3 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="securityResult.raw"></pre>
+                </section>
+              </div>
+
+              <!-- link identity modal -->
+              <div x-data="omModalFor('identities-link')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="link-title">
+                  <div class="om-modal__header">
+                    <h3 id="link-title" class="text-base font-semibold">Link identity</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Record a binding between a <span class="font-mono text-xs">channel_user_key</span> (e.g. a Slack handle or Telegram alias) and a <span class="font-mono text-xs">global_user_key</span>. This is audit-only — it does not grant a role.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Channel user key *</span>
+                      <input type="text" x-model="linkForm.channel_user_key"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Global user key *</span>
+                      <input type="text" x-model="linkForm.global_user_key"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Linked by</span>
+                      <input type="text" x-model="linkForm.linked_by"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <div x-show="linkForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="linkForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="linkForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitLink()" :disabled="linkForm.busy">
+                      <span x-show="!linkForm.busy">Link</span>
+                      <span x-show="linkForm.busy">Linking…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Other admin sections (placeholders for B6..B7) ===== -->
+      <template x-if="activeId !== 'dashboard' && activeId !== 'runtimes' && activeId !== 'policies' && activeId !== 'secrets' && activeId !== 'identities'">
         <div class="max-w-5xl mx-auto px-6 py-8">
           <header>
             <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">
@@ -1165,7 +1479,7 @@
             </p>
             <h1 class="text-2xl font-semibold tracking-tight" x-text="groups.flatMap(g => g.items).find(i => i.id === activeId)?.label || activeId"></h1>
             <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
-              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B5 Identities &amp; RBAC, B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong> or <strong>Secrets</strong> in the sidebar to see the functional views shipped so far.
+              This section is a placeholder. The functional surface lands in a follow-up PR of Phase B (B6 Channels, B7 Evidence packs). Pick <strong>Dashboard</strong>, <strong>Runtimes</strong>, <strong>Policies</strong>, <strong>Secrets</strong> or <strong>Identities</strong> in the sidebar to see the functional views shipped so far.
             </p>
           </header>
         </div>
