@@ -454,6 +454,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/identities.js",
             "/ui/v2/js/admin/channels.js",
             "/ui/v2/js/admin/evidence.js",
+            "/ui/v2/js/science/chat.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -991,3 +992,76 @@ def test_admin_html_loads_evidence_factory_and_renders_view() -> None:
     )
     for key in ("showRaw.summary", "showRaw.exportResult"):
         assert key in html, f"admin.html evidence view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase C1 — Science Chat with agent
+# --------------------------------------------------------------------
+
+JS_SCIENCE_CHAT = UI_V2 / "static" / "js" / "science" / "chat.js"
+
+
+def test_science_chat_module_exposes_factory() -> None:
+    assert JS_SCIENCE_CHAT.exists(), (
+        f"missing science chat module: {JS_SCIENCE_CHAT}"
+    )
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    assert "window.scienceChat" in text, (
+        "chat.js must expose window.scienceChat for Alpine x-data"
+    )
+
+
+def test_science_chat_module_consults_documented_endpoint() -> None:
+    """C1 is single-endpoint: the stable POST /http/message
+    chat surface. The admin chat endpoints are *not* consumed
+    here — assert their absence to keep science isolated."""
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    assert "/http/message" in text, "chat.js must consult /http/message"
+    assert "/admin/" not in text, (
+        "chat.js must NOT consume any admin endpoints; the science "
+        "profile is intentionally isolated from the admin surface"
+    )
+
+
+def test_science_chat_module_persists_under_documented_keys() -> None:
+    """The localStorage keys are part of the public contract;
+    downstream debug tools may inspect them."""
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    assert "openmiura.v2.science.messages" in text, (
+        "chat.js must persist transcripts under "
+        "openmiura.v2.science.messages"
+    )
+    assert "openmiura.v2.science.session_id" in text, (
+        "chat.js must persist the session id under "
+        "openmiura.v2.science.session_id"
+    )
+
+
+def test_science_chat_module_declares_send_and_reset() -> None:
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    for fn in ("send(", "reset(", "authenticated("):
+        assert fn in text, f"chat.js must declare {fn}"
+    # The auth event a chat session listens to (logout marks
+    # an end-of-session in the transcript).
+    assert "om:auth:logged-out" in text
+
+
+def test_science_html_loads_chat_factory_and_renders_view() -> None:
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    assert "./js/science/chat.js" in html, (
+        "science.html must load the chat module"
+    )
+    assert 'x-data="scienceChat()"' in html, (
+        "science.html must mount scienceChat() inside the chat template"
+    )
+    assert "activeId === 'chat'" in html, (
+        "science.html must gate the chat view by activeId"
+    )
+    # The Phase A2 placeholder is gone now — the placeholder
+    # template should only catch *other* science activeIds.
+    assert "activeId !== 'chat'" in html, (
+        "science.html placeholder template must skip chat (C1)"
+    )
+    # Composer present.
+    assert "composer.text" in html
+    assert "composer.busy" in html
