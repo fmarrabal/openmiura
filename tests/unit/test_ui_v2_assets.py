@@ -450,6 +450,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/dashboard.js",
             "/ui/v2/js/admin/runtimes.js",
             "/ui/v2/js/admin/policies.js",
+            "/ui/v2/js/admin/secrets.js",
             "/ui/v2/components.html",
         ):
             r = client.get(sub)
@@ -639,3 +640,95 @@ def test_admin_html_loads_policies_factory_and_renders_view() -> None:
         "showRaw.diffResult",
     ):
         assert key in html, f"admin.html policies view must wire {key}"
+
+
+# --------------------------------------------------------------------
+# Phase B4 — Admin Secrets governance
+# --------------------------------------------------------------------
+
+JS_ADMIN_SECRETS = UI_V2 / "static" / "js" / "admin" / "secrets.js"
+
+
+def test_admin_secrets_module_exposes_factory() -> None:
+    assert JS_ADMIN_SECRETS.exists(), (
+        f"missing admin secrets module: {JS_ADMIN_SECRETS}"
+    )
+    text = JS_ADMIN_SECRETS.read_text(encoding="utf-8")
+    assert "window.adminSecrets" in text, (
+        "secrets.js must expose window.adminSecrets for Alpine x-data"
+    )
+
+
+def test_admin_secrets_module_consults_documented_endpoints() -> None:
+    """B4 is read-only on four GETs plus one read-modeled POST.
+
+    The wizard /admin/config-center/secrets-wizard/save is *not*
+    consumed here — that write surface lands in B6 (Channels) once
+    the confirmation pattern factored. Regress against an
+    accidental wizard import (would be a privilege-escalation
+    surface increase the PR did not commit to).
+    """
+    text = JS_ADMIN_SECRETS.read_text(encoding="utf-8")
+    for path in (
+        "/admin/secrets/summary",
+        "/admin/secrets/catalog",
+        "/admin/secrets/timeline",
+        "/admin/secrets/usage",
+        "/admin/secrets/explain",
+    ):
+        assert path in text, f"secrets.js must consult {path}"
+    assert "/admin/config-center/secrets-wizard" not in text, (
+        "secrets.js must NOT consume the wizard write path in B4; "
+        "that surface ships separately with its own confirmation"
+    )
+
+
+def test_admin_secrets_module_declares_per_card_state() -> None:
+    text = JS_ADMIN_SECRETS.read_text(encoding="utf-8")
+    for card in (
+        "summary:",
+        "catalog:",
+        "timeline:",
+        "usage:",
+        "explainResult:",
+    ):
+        assert card in text, f"secrets.js must declare card key {card!r}"
+    assert "explainForm" in text
+    assert "submitExplain" in text
+    # Shared filter object (q / ref / tool / outcome / limit).
+    assert "filters:" in text or "filters =" in text
+
+
+def test_admin_secrets_module_reacts_to_auth_events() -> None:
+    text = JS_ADMIN_SECRETS.read_text(encoding="utf-8")
+    assert "om:auth:logged-in" in text
+    assert "om:auth:logged-out" in text
+
+
+def test_admin_html_loads_secrets_factory_and_renders_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/secrets.js" in html, (
+        "admin.html must load the secrets module"
+    )
+    assert 'x-data="adminSecrets()"' in html, (
+        "admin.html must mount adminSecrets() inside the secrets template"
+    )
+    assert "activeId === 'secrets'" in html, (
+        "admin.html must gate the secrets view by activeId"
+    )
+    # The placeholder template now excludes four live views.
+    assert (
+        "activeId !== 'dashboard' && activeId !== 'runtimes' && "
+        "activeId !== 'policies' && activeId !== 'secrets'" in html
+    ), (
+        "admin.html placeholder template must skip secrets (B4) too; "
+        "otherwise the placeholder double-renders for activeId='secrets'"
+    )
+    for key in (
+        "showRaw.summary",
+        "showRaw.catalog",
+        "showRaw.timeline",
+        "showRaw.usage",
+        "showRaw.explainResult",
+    ):
+        assert key in html, f"admin.html secrets view must wire {key}"
