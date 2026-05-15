@@ -14,6 +14,7 @@
   <script src="./js/icons.js"></script>
   <script src="./js/components.js"></script>
   <script src="./js/shell.js"></script>
+  <script src="./js/interview/demo.js"></script>
   <script defer src="./js/alpine.min.js"></script>
   <style>[x-cloak] { display: none !important; }</style>
 </head>
@@ -160,36 +161,239 @@
     </header>
 
     <main class="om-main bg-surface-50 dark:bg-surface-950 overflow-y-auto">
-      <div class="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        <header>
-          <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Phase A2 placeholder</p>
-          <h1 class="text-2xl font-semibold tracking-tight">Interview demo — shell wired up</h1>
-          <p class="mt-2 text-surface-600 dark:text-surface-300 max-w-2xl">
-            The functional walkthrough (overview narrative, guided step-by-step
-            of the canonical demo, evidence inspector with signature tree) lands
-            in Phase D (PRs D1–D3). This page exists to validate the
-            interview-profile single-group sidebar.
-          </p>
-        </header>
 
-        <section class="om-card">
-          <h2 class="text-base font-semibold mb-3">Why a separate UI for interviews</h2>
-          <p class="text-sm text-surface-600 dark:text-surface-300">
-            The admin and science UIs assume the visitor will spend hours inside
-            the product. The interview UI is for someone who has 5 minutes and
-            wants to understand <em>what openMiura does</em>. Single narrative,
-            no setup required, synthetic data only.
-          </p>
-        </section>
+      <!-- ===== OVERVIEW ===== -->
+      <template x-if="activeId === 'overview'">
+        <div class="max-w-4xl mx-auto px-6 py-8 space-y-6" x-data="interviewOverview()">
+          <header>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">openMiura, in 5 minutes</p>
+            <h1 class="text-2xl font-semibold tracking-tight">What is this product?</h1>
+            <p class="mt-2 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
+              openMiura is the governance plane between an LLM agent and the
+              systems it touches. We do not run the agent. We <em>audit</em>,
+              <em>gate</em>, and <em>sign</em> every action the agent takes,
+              so a regulated lab (GxP / GMP / Part 11) can defend the
+              decisions later.
+            </p>
+            <p class="mt-2 text-xs text-surface-500 dark:text-surface-400 max-w-2xl">
+              This page is a demo. No backend calls. Pick <strong>Walkthrough</strong> to see the
+              canonical NMR-review flow step by step, or <strong>Evidence inspector</strong> to see
+              what a signed audit pack looks like.
+            </p>
+          </header>
 
-        <section>
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./index.html">← Design tokens preview</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./admin.html">Admin console →</a>
-          ·
-          <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./science.html">Science workspace →</a>
-        </section>
-      </div>
+          <section class="space-y-3">
+            <template x-for="p in pillars" :key="p.id">
+              <button type="button"
+                      class="om-card w-full text-left transition"
+                      :class="p.open ? 'border-l-4 border-accent-500' : ''"
+                      @click="togglePillar(p.id)">
+                <div class="flex items-start gap-3">
+                  <span class="shrink-0 w-9 h-9 rounded-md bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 flex items-center justify-center"
+                        x-html="omIcon(p.icon, 'w-5 h-5')"></span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold flex items-center justify-between gap-2">
+                      <span x-text="p.title"></span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs" x-text="p.open ? '−' : '+'"></span>
+                    </p>
+                    <p class="mt-1 text-sm text-surface-600 dark:text-surface-300"
+                       x-show="p.open" x-cloak
+                       x-text="p.summary"></p>
+                  </div>
+                </div>
+              </button>
+            </template>
+          </section>
+
+          <section>
+            <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./admin.html">Admin console →</a>
+            ·
+            <a class="text-sm text-accent-700 dark:text-accent-300 hover:underline" href="./science.html">Science workspace →</a>
+          </section>
+        </div>
+      </template>
+
+      <!-- ===== WALKTHROUGH ===== -->
+      <template x-if="activeId === 'walkthrough'">
+        <div class="max-w-4xl mx-auto px-6 py-8 space-y-6" x-data="interviewWalkthrough()" x-init="init()">
+          <header class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Demo</p>
+              <h1 class="text-2xl font-semibold tracking-tight">Canonical walkthrough</h1>
+              <p class="mt-1 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
+                A scientist at UAL processes an NMR spectrum with the agent.
+                Each step shows what openMiura logged. Arrow keys ←→ to navigate.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="toggleAutoplay()">
+                <span x-show="!autoplay" x-html="omIcon('play-circle', 'w-3.5 h-3.5')"></span>
+                <span x-show="autoplay">⏸</span>
+                <span x-text="autoplay ? 'Pause' : 'Auto-advance'"></span>
+              </button>
+            </div>
+          </header>
+
+          <!-- progress -->
+          <section class="om-card">
+            <div class="flex items-center justify-between mb-2 gap-2">
+              <p class="text-xs text-surface-500 dark:text-surface-400">
+                <span>Step</span>
+                <span class="font-mono" x-text="(currentIdx + 1) + ' / ' + steps.length"></span>
+              </p>
+              <p class="text-xs text-surface-500 dark:text-surface-400" x-text="progress() + '%'"></p>
+            </div>
+            <div class="h-1.5 rounded bg-surface-200 dark:bg-surface-700 overflow-hidden">
+              <div class="h-full bg-accent-500 transition-all" :style="'width:' + progress() + '%'"></div>
+            </div>
+
+            <!-- step chips -->
+            <div class="flex flex-wrap gap-2 mt-3">
+              <template x-for="(s, i) in steps" :key="s.id">
+                <button type="button"
+                        class="px-2 py-1 text-[10px] font-mono rounded-md border transition"
+                        :class="i === currentIdx
+                          ? 'border-accent-500 text-accent-700 dark:text-accent-300 bg-accent-50 dark:bg-accent-900/30'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-accent-300'"
+                        @click="goto(i)">
+                  <span x-text="(i + 1) + '. ' + s.id"></span>
+                </button>
+              </template>
+            </div>
+          </section>
+
+          <!-- current step -->
+          <section class="om-card" x-show="currentStep()">
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Step <span x-text="currentIdx + 1"></span></p>
+            <h2 class="text-xl font-semibold tracking-tight" x-text="currentStep().title"></h2>
+            <p class="mt-2 text-sm text-surface-700 dark:text-surface-200" x-text="currentStep().lede"></p>
+
+            <pre class="mt-4 text-[11px] font-mono p-3 rounded bg-surface-100 dark:bg-surface-800 overflow-x-auto"
+                 x-text="(currentStep().detail || []).join('\n')"></pre>
+
+            <div class="mt-4 flex items-center justify-between gap-2">
+              <button class="om-btn om-btn--ghost om-btn--sm" @click="prev()" :disabled="isFirst()">← Previous</button>
+              <button class="om-btn om-btn--primary om-btn--sm" @click="next()" :disabled="isLast()">Next →</button>
+            </div>
+          </section>
+        </div>
+      </template>
+
+      <!-- ===== EVIDENCE INSPECTOR ===== -->
+      <template x-if="activeId === 'evidence'">
+        <div class="max-w-5xl mx-auto px-6 py-8 space-y-6" x-data="interviewEvidence()">
+          <header>
+            <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-1">Demo</p>
+            <h1 class="text-2xl font-semibold tracking-tight">Evidence inspector</h1>
+            <p class="mt-1 text-sm text-surface-600 dark:text-surface-300 max-w-2xl">
+              What a signed compliance export looks like once an auditor pulls it. Synthetic data — every field matches the shape of what the live compliance export endpoint returns.
+            </p>
+          </header>
+
+          <!-- pack header -->
+          <section class="om-card">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Artifact ref</p>
+                <p class="font-mono text-xs mt-0.5 break-all" x-text="pack.artifact_ref"></p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Report label</p>
+                <p class="font-mono text-xs mt-0.5" x-text="pack.report_label"></p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Generated at</p>
+                <p class="font-mono text-xs mt-0.5" x-text="pack.generated_at"></p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Actor</p>
+                <p class="font-mono text-xs mt-0.5" x-text="pack.actor"></p>
+              </div>
+            </div>
+            <div class="mt-3 text-xs text-surface-600 dark:text-surface-300">
+              Scope:
+              <span class="font-mono"
+                    x-text="pack.scope.tenant_id + ' / ' + pack.scope.workspace_id + ' / ' + pack.scope.environment"></span>
+            </div>
+          </section>
+
+          <!-- sections -->
+          <section class="om-card">
+            <h2 class="text-base font-semibold mb-3">Sections</h2>
+            <div class="space-y-2">
+              <template x-for="key in sectionKeys()" :key="key">
+                <div class="border border-surface-200 dark:border-surface-700 rounded-md">
+                  <button type="button"
+                          class="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left"
+                          @click="toggleSection(key)">
+                    <span class="font-mono text-xs" x-text="key.replace(/_/g, ' ')"></span>
+                    <span class="flex items-center gap-2">
+                      <span class="om-badge om-badge--neutral text-[10px]" x-text="sectionCount(key) ?? '—'"></span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs"
+                            x-text="expandedSections[key] ? '−' : '+'"></span>
+                    </span>
+                  </button>
+                  <div x-show="expandedSections[key]" x-cloak class="px-3 pb-3">
+                    <template x-if="sectionItems(key).length === 0">
+                      <p class="text-xs text-surface-500 dark:text-surface-400 italic">(no items in this section)</p>
+                    </template>
+                    <template x-if="sectionItems(key).length > 0">
+                      <ul class="space-y-1 text-xs font-mono">
+                        <template x-for="(it, i) in sectionItems(key)" :key="i">
+                          <li class="px-2 py-1 rounded bg-surface-50 dark:bg-surface-800 overflow-x-auto"
+                              x-text="JSON.stringify(it)"></li>
+                        </template>
+                      </ul>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+
+          <!-- signature -->
+          <section class="om-card">
+            <h2 class="text-base font-semibold mb-3 flex items-center gap-2">
+              <span x-html="omIcon('shield-check', 'w-4 h-4')"></span>
+              <span>Signature</span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+              <div>
+                <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Algorithm</p>
+                <p x-text="pack.signature.algorithm"></p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Public key</p>
+                <p class="break-all" x-text="pack.signature.public_key"></p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Signed at</p>
+                <p x-text="pack.signature.signed_at"></p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Digest sha256</p>
+                <p class="break-all" x-text="pack.signature.digest_sha256"></p>
+              </div>
+            </div>
+            <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-3"
+                    @click="showRaw = !showRaw">
+              <span x-show="!showRaw">show raw JSON</span><span x-show="showRaw">hide raw</span>
+            </button>
+            <pre x-show="showRaw" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-80 overflow-auto" x-text="rawJson()"></pre>
+          </section>
+        </div>
+      </template>
+
+      <!-- ===== Fallback ===== -->
+      <template x-if="activeId !== 'overview' && activeId !== 'walkthrough' && activeId !== 'evidence'">
+        <div class="max-w-4xl mx-auto px-6 py-8">
+          <h1 class="text-2xl font-semibold tracking-tight">Pick a demo section</h1>
+          <p class="mt-2 text-sm text-surface-600 dark:text-surface-300">
+            All three interview views are wired up. Pick one in the sidebar.
+          </p>
+        </div>
+      </template>
+
     </main>
 
   </div>
