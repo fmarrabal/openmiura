@@ -456,6 +456,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/evidence.js",
             "/ui/v2/js/admin/secrets_wizard.js",
             "/ui/v2/js/admin/dispatches.js",
+            "/ui/v2/js/admin/approvals.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -858,6 +859,42 @@ def test_admin_html_loads_dispatches_view() -> None:
     assert "activeId === 'dispatches'" in html
     assert "omModalFor('dispatches-action')" in html
     assert "activeId !== 'dispatches'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F5 — Admin Approvals view
+# --------------------------------------------------------------------
+
+JS_ADMIN_APPROVALS = UI_V2 / "static" / "js" / "admin" / "approvals.js"
+
+
+def test_admin_approvals_module_exposes_factory() -> None:
+    assert JS_ADMIN_APPROVALS.exists()
+    text = JS_ADMIN_APPROVALS.read_text(encoding="utf-8")
+    assert "window.adminApprovals" in text
+
+
+def test_admin_approvals_module_consults_documented_endpoints() -> None:
+    text = JS_ADMIN_APPROVALS.read_text(encoding="utf-8")
+    assert "/admin/operator/overview" in text
+    assert "/admin/operator/approvals/" in text
+
+
+def test_admin_approvals_module_declares_action_modal() -> None:
+    text = JS_ADMIN_APPROVALS.read_text(encoding="utf-8")
+    assert "actionForm" in text
+    assert "submitAction" in text
+    assert "openActionDialog" in text
+    assert "admin-approval-action" in text
+
+
+def test_admin_html_loads_approvals_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/approvals.js" in html
+    assert 'x-data="adminApprovals()"' in html
+    assert "activeId === 'approvals'" in html
+    assert "omModalFor('admin-approval-action')" in html
+    assert "activeId !== 'approvals'" in html
 
 
 # --------------------------------------------------------------------
