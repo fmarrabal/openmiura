@@ -459,6 +459,7 @@ def test_app_mounts_ui_v2_alongside_legacy_ui() -> None:
             "/ui/v2/js/admin/approvals.js",
             "/ui/v2/js/admin/debug.js",
             "/ui/v2/js/admin/workflows.js",
+            "/ui/v2/js/admin/system.js",
             "/ui/v2/js/science/chat.js",
             "/ui/v2/js/science/upload.js",
             "/ui/v2/js/science/review.js",
@@ -980,6 +981,60 @@ def test_admin_html_loads_workflows_view() -> None:
     assert "activeId === 'workflows'" in html
     assert "omModalFor('workflows-action')" in html
     assert "activeId !== 'workflows'" in html
+
+
+# --------------------------------------------------------------------
+# Phase F7 — Admin System & config view
+# --------------------------------------------------------------------
+
+JS_ADMIN_SYSTEM = UI_V2 / "static" / "js" / "admin" / "system.js"
+
+
+def test_admin_system_module_exposes_factory() -> None:
+    assert JS_ADMIN_SYSTEM.exists()
+    text = JS_ADMIN_SYSTEM.read_text(encoding="utf-8")
+    assert "window.adminSystem" in text
+
+
+def test_admin_system_module_consults_documented_endpoints() -> None:
+    """Five endpoints: snapshot + validate + save + reload status
+    + reload apply. Packaging endpoints under /admin/phase8 +
+    /admin/phase9 are explicitly absent (out of scope for this
+    surface — they are an SRE/build concern)."""
+    text = JS_ADMIN_SYSTEM.read_text(encoding="utf-8")
+    for path in (
+        "/admin/config-center",
+        "/admin/config-center/validate",
+        "/admin/config-center/save",
+        "/admin/config-center/reload-assistant",
+        "/admin/config-center/reload-assistant/apply",
+    ):
+        assert path in text
+    assert "/admin/phase8/" not in text and "/admin/phase9/" not in text, (
+        "system.js must NOT pull the packaging endpoints; those "
+        "belong to a separate SRE/build surface"
+    )
+
+
+def test_admin_system_module_declares_two_modals() -> None:
+    text = JS_ADMIN_SYSTEM.read_text(encoding="utf-8")
+    for handler in (
+        "submitValidate", "submitSave", "openSaveDialog",
+        "submitReload", "openReloadDialog", "toggleReloadSection",
+    ):
+        assert handler in text
+    assert "system-save" in text
+    assert "system-reload" in text
+
+
+def test_admin_html_loads_system_view() -> None:
+    html = ADMIN_HTML.read_text(encoding="utf-8")
+    assert "./js/admin/system.js" in html
+    assert 'x-data="adminSystem()"' in html
+    assert "activeId === 'system'" in html
+    assert "omModalFor('system-save')" in html
+    assert "omModalFor('system-reload')" in html
+    assert "activeId !== 'system'" in html
 
 
 # --------------------------------------------------------------------
