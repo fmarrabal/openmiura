@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
 
@@ -25,6 +25,7 @@ from openmiura.gateway import Gateway
 from openmiura.infrastructure.bootstrap.container import build_gateway, resolve_gateway_factory
 from openmiura.interfaces.http.routes.admin import router as admin_router
 from openmiura.interfaces.http.routes.science import router as science_router
+from openmiura.interfaces.http.streaming import stream_message
 from openmiura.observability import metrics_payload, update_memory_metrics
 from openmiura.pipeline import process_message
 
@@ -165,6 +166,35 @@ def create_app(
         if gw is None:
             raise HTTPException(status_code=503, detail="Service not initialized")
         return handler(gw, msg)
+
+    @app.post("/http/message/stream")
+    async def http_message_stream(msg: InboundMessage):
+        """SSE pseudo-streaming sibling of /http/message.
+
+        Same input shape, same auth surface (none — both rely
+        on the broker for upstream auth). Output is a stream
+        of SSE events (``meta``, ``heartbeat``, ``chunk``,
+        ``done`` / ``error``). The full ``OutboundMessage``
+        lands in the ``done`` event's payload, so a client
+        that doesn't care about the streaming UX can wait for
+        ``done`` and consume the same shape as the single-
+        shot endpoint.
+
+        See ``openmiura/interfaces/http/streaming.py`` for the
+        SSE taxonomy and the streaming_mode contract.
+        """
+        gw: Gateway | None = getattr(app.state, "gw", None)
+        if gw is None:
+            raise HTTPException(status_code=503, detail="Service not initialized")
+        generator = stream_message(gw, msg, handler=handler)
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control":     "no-cache, no-transform",
+                "X-Accel-Buffering": "no",  # nginx hint
+            },
+        )
 
     @app.exception_handler(HTTPException)
     def _http_exception_handler(_, exc: HTTPException):

@@ -1383,15 +1383,37 @@ def test_science_chat_module_exposes_factory() -> None:
 
 
 def test_science_chat_module_consults_documented_endpoint() -> None:
-    """C1 is single-endpoint: the stable POST /http/message
-    chat surface. The admin chat endpoints are *not* consumed
-    here — assert their absence to keep science isolated."""
+    """C1 chat consumes the single-shot ``POST /http/message``
+    endpoint, plus (since G3) ``POST /http/message/stream`` as
+    the preferred path with one-shot fallback.
+
+    Admin endpoints are explicitly forbidden — the science
+    profile is intentionally isolated from the admin surface.
+    """
     text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
     assert "/http/message" in text, "chat.js must consult /http/message"
+    assert "/http/message/stream" in text, (
+        "chat.js must call the streaming endpoint (G3)"
+    )
     assert "/admin/" not in text, (
         "chat.js must NOT consume any admin endpoints; the science "
         "profile is intentionally isolated from the admin surface"
     )
+
+
+def test_science_chat_module_declares_streaming_toggle() -> None:
+    """G3 ships a per-user streaming toggle (default on) plus
+    a graceful fallback to the one-shot endpoint when the
+    stream fails. Pin both so a future refactor cannot remove
+    the fallback without explicit review."""
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    assert "streamingEnabled" in text
+    assert "_sendStreaming" in text
+    assert "_sendOneShot" in text
+    # Fallback path: on a non-ok streaming response the
+    # factory pops the placeholder and re-invokes the one-shot
+    # send.
+    assert "_sendOneShot(body)" in text
 
 
 def test_science_chat_module_persists_under_documented_keys() -> None:

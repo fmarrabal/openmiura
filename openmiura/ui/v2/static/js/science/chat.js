@@ -102,6 +102,14 @@
         return !!(window.omAuth && window.omAuth.state.token && userIdFromAuth());
       },
 
+      // Streaming on by default — the SSE endpoint pseudo-
+      // streams the response (chunks the final text into
+      // pieces with small inter-chunk delays). When the LLM
+      // clients gain native ``chat_stream``, the same client
+      // code wins real token streaming for free.
+      streamingEnabled: true,
+      _streamAbort: null,
+
       // ----- send -----
 
       async send() {
@@ -130,10 +138,17 @@
         };
         if (this.sessionId) body.session_id = this.sessionId;
 
+        if (this.streamingEnabled) {
+          await this._sendStreaming(body);
+        } else {
+          await this._sendOneShot(body);
+        }
+      },
+
+      async _sendOneShot(body) {
         const r = await window.omApi.post('/http/message', body);
         this.composer.busy = false;
         if (r.ok && r.data) {
-          // persist a session id the backend assigned (or kept)
           if (r.data.session_id) {
             this.sessionId = r.data.session_id;
             writeStored(STORAGE_KEY_SESSION, this.sessionId);
@@ -158,6 +173,162 @@
           this.lastTurnRaw = r.raw || JSON.stringify(r, null, 2);
         }
         this._persist();
+      },
+
+      async _sendStreaming(body) {
+        // EventSource only supports GET. We need POST + SSE,
+        // so we do it with fetch + ReadableStream + manual
+        // parsing. The result feeds an incrementally-growing
+        // agent turn in the transcript.
+        const agentTurn = {
+          role:    'agent',
+          text:    '',
+          ts:      nowIso(),
+          agent_id: null,
+          raw:     '',
+          streaming: true,
+        };
+        this.messages.push(agentTurn);
+        this._persist();
+
+        const base = (window.omAuth && window.omAuth.state && window.omAuth.state.baseUrl)
+          ? window.omAuth.state.baseUrl.replace(/\/$/, '')
+          : `${location.origin.replace(/\/$/, '')}/broker`;
+        const token = (window.omAuth && window.omAuth.state && window.omAuth.state.token) || '';
+        const url = `${base}/http/message/stream`;
+
+        let resp;
+        try {
+          resp = await fetch(url, {
+            method:  'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Accept: 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+            credentials: 'same-origin',
+          });
+        } catch (e) {
+          this.composer.busy = false;
+          agentTurn.streaming = false;
+          agentTurn.error = true;
+          agentTurn.text = `Network error: ${e && e.message || e}`;
+          this.error = agentTurn.text;
+          this._persist();
+          return;
+        }
+
+        if (!resp.ok || !resp.body) {
+          // Fall back to one-shot — preserves UX when the
+          // streaming endpoint is missing (older deployment).
+          this.messages.pop();  // remove the empty placeholder
+          this._persist();
+          await this._sendOneShot(body);
+          return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let currentEvent = null;
+        const dataLines = [];
+        let finalRaw = '';
+
+        const flushEvent = () => {
+          if (currentEvent === null) {
+            dataLines.length = 0;
+            return;
+          }
+          const dataStr = dataLines.join('\n');
+          dataLines.length = 0;
+          let payload = null;
+          if (dataStr) {
+            try { payload = JSON.parse(dataStr); }
+            catch (_) { payload = { raw: dataStr }; }
+          }
+          this._handleSseEvent(currentEvent, payload, agentTurn);
+          if (currentEvent === 'done') {
+            finalRaw = dataStr;
+          }
+          currentEvent = null;
+        };
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = buf.indexOf('\n')) !== -1) {
+              const line = buf.slice(0, nl).replace(/\r$/, '');
+              buf = buf.slice(nl + 1);
+              if (line === '') {
+                flushEvent();
+              } else if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7).trim();
+              } else if (line.startsWith('data: ')) {
+                dataLines.push(line.slice(6));
+              }
+              // ignore comment lines (": ...") and unknown fields
+            }
+          }
+          // Flush a final pending event if the stream ended
+          // without a terminating blank line.
+          if (currentEvent !== null) flushEvent();
+        } catch (e) {
+          agentTurn.streaming = false;
+          agentTurn.error = true;
+          agentTurn.text = (agentTurn.text || '') + `\n[stream error: ${e && e.message || e}]`;
+          this.error = `Stream error: ${e && e.message || e}`;
+        }
+
+        this.composer.busy = false;
+        agentTurn.streaming = false;
+        if (finalRaw) {
+          agentTurn.raw = finalRaw;
+          this.lastTurnRaw = finalRaw;
+        }
+        this._persist();
+      },
+
+      _handleSseEvent(event, payload, agentTurn) {
+        if (!event || !payload) return;
+        if (event === 'meta') {
+          if (payload.session_id) {
+            this.sessionId = payload.session_id;
+            try { writeStored(STORAGE_KEY_SESSION, this.sessionId); }
+            catch (_) { /* ignore */ }
+          }
+          agentTurn.streaming_mode = payload.streaming_mode || 'pseudo';
+        } else if (event === 'chunk') {
+          const delta = (payload && payload.delta) || '';
+          // Append with a space if both sides have content;
+          // matches the splitter's paragraph/sentence pacing.
+          if (agentTurn.text && delta && !agentTurn.text.endsWith(' ')) {
+            agentTurn.text += ' ';
+          }
+          agentTurn.text += delta;
+        } else if (event === 'heartbeat') {
+          agentTurn.last_heartbeat = payload.ts || null;
+        } else if (event === 'done') {
+          const m = (payload && payload.message) || {};
+          if (m.text) agentTurn.text = m.text;
+          if (m.agent_id) agentTurn.agent_id = m.agent_id;
+          if (m.session_id) {
+            this.sessionId = m.session_id;
+            try { writeStored(STORAGE_KEY_SESSION, this.sessionId); }
+            catch (_) { /* ignore */ }
+          }
+        } else if (event === 'error') {
+          agentTurn.error = true;
+          agentTurn.text = `Agent error: ${(payload && payload.error) || 'unknown'}`;
+          this.error = agentTurn.text;
+        }
+      },
+
+      toggleStreaming() {
+        this.streamingEnabled = !this.streamingEnabled;
       },
 
       // ----- conversation management -----
