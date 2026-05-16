@@ -259,6 +259,80 @@
         if (!d) return null;
         return d.restart_required === true;
       },
+
+      // ----- G2: send a test message through the channel -----
+
+      testForm: {
+        recipient: '',
+        text:      'openMiura test message — please ignore.',
+        open:      false,
+        busy:      false,
+        error:     '',
+      },
+      testResult: emptyCard(),
+      showTestRaw: false,
+
+      openTestDialog() {
+        const channel = (this.editor.channel || '').trim();
+        if (!channel) {
+          window.omToasts.warning('Pick a channel before sending a test');
+          return;
+        }
+        this.testForm = {
+          recipient: '',
+          text:      'openMiura test message — please ignore.',
+          open:      true,
+          busy:      false,
+          error:     '',
+        };
+        window.omModal.open('channels-test');
+      },
+
+      closeTestDialog() {
+        this.testForm.open = false;
+        window.omModal.close('channels-test');
+      },
+
+      async submitTest() {
+        const channel   = (this.editor.channel || '').trim();
+        const recipient = (this.testForm.recipient || '').trim();
+        const text      = (this.testForm.text || '').trim();
+        if (!channel) {
+          this.testForm.error = 'No channel selected';
+          return;
+        }
+        if (!recipient) {
+          this.testForm.error = 'recipient is required';
+          return;
+        }
+        if (!text) {
+          this.testForm.error = 'text is required';
+          return;
+        }
+        this.testForm.busy = true;
+        this.testForm.error = '';
+        const card = this.testResult;
+        card.state = 'loading';
+        card.error = null;
+        const r = await window.omApi.post(
+          `/admin/channels/${encodeURIComponent(channel)}/test`,
+          { recipient, text, actor: 'admin' }
+        );
+        this.testForm.busy = false;
+        if (r.ok) {
+          card.data = r.data;
+          card.raw = JSON.stringify(r.data, null, 2);
+          card.state = 'loaded';
+          window.omToasts.success(`Test sent on ${channel}`);
+          this.closeTestDialog();
+        } else {
+          card.data = null;
+          card.error = `HTTP ${r.status}: ${r.error}`;
+          card.raw = r.raw || JSON.stringify(r, null, 2);
+          card.state = 'error';
+          this.testForm.error = `HTTP ${r.status}: ${r.error}`;
+        }
+      },
     };
   };
 })();

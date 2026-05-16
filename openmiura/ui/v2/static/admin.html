@@ -1639,10 +1639,13 @@
                     <h2 class="text-base font-semibold">Editor</h2>
                     <span class="om-badge om-badge--neutral text-[10px]" x-text="editor.channel || 'no channel selected'"></span>
                   </div>
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 flex-wrap">
                     <button class="om-btn om-btn--ghost om-btn--sm" @click="submitValidate()" :disabled="validateResult.state === 'loading' || !editor.channel">
                       <span x-show="validateResult.state !== 'loading'">Validate</span>
                       <span x-show="validateResult.state === 'loading'">Validating…</span>
+                    </button>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="openTestDialog()" :disabled="!editor.channel">
+                      <span x-html="omIcon('send', 'w-3.5 h-3.5')"></span><span>Send test…</span>
                     </button>
                     <button class="om-btn om-btn--primary om-btn--sm" @click="openSaveDialog()" :disabled="!editor.channel">
                       <span x-html="omIcon('upload-cloud', 'w-3.5 h-3.5')"></span><span>Save…</span>
@@ -1728,6 +1731,67 @@
                     <button class="om-btn om-btn--primary" @click="submitSave()" :disabled="saveForm.busy">
                       <span x-show="!saveForm.busy">Save</span>
                       <span x-show="saveForm.busy">Saving…</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- G2: test result card -->
+              <template x-if="testResult.state === 'loaded' || testResult.state === 'error'">
+                <section class="om-card">
+                  <div class="flex items-center justify-between mb-2 gap-2">
+                    <h2 class="text-base font-semibold">Last test message</h2>
+                    <span class="text-[10px] font-mono text-surface-500 dark:text-surface-400">POST /admin/channels/&lt;name&gt;/test</span>
+                  </div>
+                  <template x-if="testResult.state === 'error'">
+                    <p class="text-sm text-danger-700 dark:text-danger-500" x-text="testResult.error"></p>
+                  </template>
+                  <template x-if="testResult.state === 'loaded'">
+                    <p class="text-sm flex items-center gap-2 flex-wrap">
+                      <span class="om-badge om-badge--success">delivered</span>
+                      <span class="text-surface-500 dark:text-surface-400 text-xs"
+                            x-text="testResult.data ? 'channel: ' + (testResult.data.channel || '—') + ' · recipient: ' + (testResult.data.recipient || '—') : ''"></span>
+                    </p>
+                  </template>
+                  <button class="text-[10px] font-mono text-surface-500 dark:text-surface-400 hover:underline mt-2"
+                          @click="showTestRaw = !showTestRaw">
+                    <span x-show="!showTestRaw">show raw</span><span x-show="showTestRaw">hide raw</span>
+                  </button>
+                  <pre x-show="showTestRaw" x-cloak class="mt-2 text-[10px] font-mono p-2 rounded bg-surface-100 dark:bg-surface-800 max-h-60 overflow-auto" x-text="testResult.raw"></pre>
+                </section>
+              </template>
+
+              <!-- G2: test modal -->
+              <div x-data="omModalFor('channels-test')" x-show="open" x-cloak class="om-modal-overlay" @click.self="close()">
+                <div class="om-modal" role="dialog" aria-modal="true" aria-labelledby="channels-test-title">
+                  <div class="om-modal__header">
+                    <h3 id="channels-test-title" class="text-base font-semibold">Send test message</h3>
+                    <button class="om-btn om-btn--ghost om-btn--sm" @click="close()" aria-label="Close">
+                      <span x-html="omIcon('x', 'w-4 h-4')"></span>
+                    </button>
+                  </div>
+                  <div class="om-modal__body space-y-3 text-sm">
+                    <p class="text-surface-600 dark:text-surface-300">
+                      Send a one-off test through channel <span class="font-mono text-xs" x-text="editor.channel"></span>. The attempt + outcome land on the audit trail.
+                    </p>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Recipient *</span>
+                      <input type="text" x-model="testForm.recipient"
+                             placeholder="slack: #channel  ·  telegram: chat_id"
+                             class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 font-mono text-xs" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Text *</span>
+                      <textarea x-model="testForm.text" rows="3"
+                                class="mt-1 w-full px-2 py-1.5 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-sm"></textarea>
+                    </label>
+                    <div x-show="testForm.error" class="text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="testForm.error"></div>
+                  </div>
+                  <div class="om-modal__footer">
+                    <button class="om-btn om-btn--ghost" @click="close()" :disabled="testForm.busy">Cancel</button>
+                    <button class="om-btn om-btn--primary" @click="submitTest()" :disabled="testForm.busy">
+                      <span x-show="!testForm.busy">Send</span>
+                      <span x-show="testForm.busy">Sending…</span>
                     </button>
                   </div>
                 </div>
