@@ -95,6 +95,15 @@
       error: '',
       sendingId: null,
       sendError: '',
+      uploadingId: null,
+      uploadError: '',
+
+      // Transient — only valid for files staged in this browser
+      // session. After a hard refresh the metadata in `staged`
+      // is still there but the actual File objects are gone, so
+      // entries that haven't been uploaded yet show "stale" and
+      // the upload button is disabled.
+      _files: {},  // { entryId: File }
 
       init() {
         this.staged = readStored();
@@ -174,8 +183,11 @@
           sha256:    sha,
           ts:        nowIso(),
           discussed: false,
+          uploaded:  false,
+          server_upload_id: null,
         };
         this.staged.unshift(entry);
+        this._files[entry.id] = file;
         writeStored(this.staged);
         this.progress.busy = false;
         this.progress.step = '';
@@ -184,12 +196,80 @@
 
       removeStaged(id) {
         this.staged = this.staged.filter((s) => s.id !== id);
+        delete this._files[id];
         writeStored(this.staged);
       },
 
       clearAll() {
         this.staged = [];
+        this._files = {};
         writeStored([]);
+      },
+
+      hasFileInMemory(id) {
+        return !!this._files[id];
+      },
+
+      // ----- upload to /science/uploads (real server-side persist) -----
+
+      async uploadToServer(id) {
+        if (!this.authenticated()) {
+          window.omToasts.warning('Connect first to upload');
+          return;
+        }
+        const entry = this.staged.find((s) => s.id === id);
+        if (!entry) return;
+        if (entry.uploaded) {
+          window.omToasts.info('Already uploaded');
+          return;
+        }
+        const file = this._files[id];
+        if (!file) {
+          this.uploadError = (
+            'File bytes not available — this entry was staged in a ' +
+            'previous browser session. Re-drop the file to upload.'
+          );
+          return;
+        }
+        this.uploadingId = id;
+        this.uploadError = '';
+        const userId = userIdFromAuth();
+        const fd = new FormData();
+        fd.append('file', file, entry.name);
+        fd.append('user_id', userId);
+        // Tie the upload to the current chat session if one
+        // exists, so a future audit query joining sessions ×
+        // uploads has a key to use.
+        try {
+          const sid = window.localStorage.getItem('openmiura.v2.science.session_id');
+          if (sid) fd.append('session_id', JSON.parse(sid));
+        } catch (_) { /* ignore */ }
+        // FormData → omApi.post leaves Content-Type unset so
+        // the browser builds the multipart boundary itself.
+        const r = await window.omApi.post('/science/uploads', fd);
+        this.uploadingId = null;
+        if (r.ok && r.data) {
+          entry.uploaded = true;
+          entry.server_upload_id = r.data.upload_id || null;
+          // Sanity check: server-side sha256 must match what
+          // we computed locally. If they disagree, surface a
+          // warning — the bytes might have been mangled in
+          // transit.
+          if (r.data.sha256 && entry.sha256 && r.data.sha256 !== entry.sha256) {
+            this.uploadError = (
+              `sha256 mismatch for ${entry.name}: ` +
+              `client=${entry.sha256.slice(0, 12)}… ` +
+              `server=${r.data.sha256.slice(0, 12)}…`
+            );
+            entry.uploaded = false;
+          }
+          writeStored(this.staged);
+          if (!this.uploadError) {
+            window.omToasts.success(`Uploaded "${entry.name}"`);
+          }
+        } else {
+          this.uploadError = `HTTP ${r.status}: ${r.error}`;
+        }
       },
 
       // ----- send a discussion turn -----
@@ -209,19 +289,24 @@
           `(${formatBytes(entry.size)}, type=${entry.mime}, ` +
           `sha256=${entry.sha256 || 'unavailable'}).\n` +
           `Please review it and draft what you'd do next.`;
+        const stagedMeta = {
+          name:   entry.name,
+          size:   entry.size,
+          mime:   entry.mime,
+          sha256: entry.sha256,
+          ts:     entry.ts,
+        };
+        // If the entry has been uploaded server-side, attach
+        // the server upload id so the agent can call back into
+        // /science/uploads/{id} to fetch the bytes.
+        if (entry.uploaded && entry.server_upload_id) {
+          stagedMeta.server_upload_id = entry.server_upload_id;
+        }
         const body = {
           channel: 'http',
           user_id: userId,
           text:    promptText,
-          metadata: {
-            staged_file: {
-              name:   entry.name,
-              size:   entry.size,
-              mime:   entry.mime,
-              sha256: entry.sha256,
-              ts:     entry.ts,
-            },
-          },
+          metadata: { staged_file: stagedMeta },
         };
         // Re-use the chat session id from C1 if present so the
         // discussion lands in the same conversation thread.

@@ -1436,14 +1436,20 @@ def test_science_upload_module_exposes_factory() -> None:
     assert "window.scienceUpload" in text
 
 
-def test_science_upload_module_uses_only_chat_endpoint() -> None:
-    """C2 piggy-backs on the same /http/message endpoint as C1
-    because openMiura has no dedicated upload endpoint yet.
-    Pinning this contract here surfaces the day someone wires
-    a real upload endpoint and needs to update the regression
-    on the science profile's surface boundary."""
+def test_science_upload_module_uses_documented_endpoints() -> None:
+    """The C2/G1 upload surface consumes:
+
+      - POST /http/message    (chat-turn integration, since C2)
+      - POST /science/uploads (real server-side persist, since G1)
+
+    No admin endpoint must creep in — the science profile
+    boundary is intentional.
+    """
     text = JS_SCIENCE_UPLOAD.read_text(encoding="utf-8")
     assert "/http/message" in text
+    assert "/science/uploads" in text, (
+        "upload.js must call /science/uploads (G1 contract)"
+    )
     assert "/admin/" not in text, (
         "upload.js must not consume admin endpoints"
     )

@@ -24,6 +24,7 @@ from openmiura.interfaces.channels.telegram.routes import router as telegram_rou
 from openmiura.gateway import Gateway
 from openmiura.infrastructure.bootstrap.container import build_gateway, resolve_gateway_factory
 from openmiura.interfaces.http.routes.admin import router as admin_router
+from openmiura.interfaces.http.routes.science import router as science_router
 from openmiura.observability import metrics_payload, update_memory_metrics
 from openmiura.pipeline import process_message
 
@@ -146,6 +147,7 @@ def create_app(
     app.include_router(telegram_router)
     app.include_router(slack_router)
     app.include_router(admin_router)
+    app.include_router(science_router)
 
     @app.get("/health")
     def health():

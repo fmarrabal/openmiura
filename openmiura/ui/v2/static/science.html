@@ -343,11 +343,22 @@
                         <p class="text-[10px] font-mono text-surface-500 dark:text-surface-400 mt-1 break-all"
                            x-text="'sha256: ' + (entry.sha256 || '(unavailable)')"></p>
                       </div>
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-2 flex-wrap">
                         <span class="om-badge text-[10px]"
-                              :class="entry.discussed ? 'om-badge--success' : 'om-badge--neutral'"
-                              x-text="entry.discussed ? 'sent to agent' : 'staged'"></span>
+                              :class="entry.uploaded ? 'om-badge--success' : entry.discussed ? 'om-badge--info' : 'om-badge--neutral'"
+                              x-text="entry.uploaded ? 'uploaded' : entry.discussed ? 'sent to agent' : 'staged'"></span>
+                        <span x-show="entry.server_upload_id"
+                              class="om-badge om-badge--neutral text-[10px] font-mono"
+                              x-text="entry.server_upload_id ? 'id:' + entry.server_upload_id.slice(0,8) : ''"></span>
                         <button class="om-btn om-btn--ghost om-btn--sm" @click="removeStaged(entry.id)">Remove</button>
+                        <button class="om-btn om-btn--ghost om-btn--sm"
+                                @click="uploadToServer(entry.id)"
+                                :disabled="uploadingId === entry.id || entry.uploaded || !authenticated() || !hasFileInMemory(entry.id)"
+                                :title="!hasFileInMemory(entry.id) ? 'Bytes not in memory (re-drop the file)' : ''">
+                          <span x-show="!entry.uploaded && uploadingId !== entry.id">Upload to server</span>
+                          <span x-show="entry.uploaded">Uploaded ✓</span>
+                          <span x-show="uploadingId === entry.id">Uploading…</span>
+                        </button>
                         <button class="om-btn om-btn--primary om-btn--sm"
                                 @click="discuss(entry.id)"
                                 :disabled="sendingId === entry.id || !authenticated()">
@@ -362,8 +373,10 @@
             </template>
 
             <div x-show="sendError" class="mt-3 text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="sendError"></div>
+            <div x-show="uploadError" class="mt-3 text-xs text-danger-700 dark:text-danger-500 bg-danger-500/10 rounded-md px-2 py-1.5" x-text="uploadError"></div>
             <p class="text-[10px] text-surface-500 dark:text-surface-400 mt-3">
-              "Discuss with agent" posts a chat turn to <span class="font-mono">POST /http/message</span> with the file metadata under <span class="font-mono">metadata.staged_file</span>. The bytes themselves stay in your browser.
+              <strong>Upload to server</strong> POSTs the bytes to <span class="font-mono">/science/uploads</span> (content-addressed, sha256-deduped server-side).
+              <strong>Discuss with agent</strong> sends a chat turn that references the staged metadata. If the file is uploaded, the agent gets the server <span class="font-mono">upload_id</span> too.
             </p>
           </section>
 
