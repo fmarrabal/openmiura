@@ -14,6 +14,7 @@ from . import (
     apps,
     approvals,
     canvas,
+    channels_test,
     core,
     cost_governance,
     evaluations,
@@ -39,6 +40,7 @@ router = APIRouter()
 router.include_router(apps.router)
 router.include_router(approvals.router)
 router.include_router(canvas.router)
+router.include_router(channels_test.router)
 router.include_router(core.router)
 router.include_router(cost_governance.router)
 router.include_router(evaluations.router)

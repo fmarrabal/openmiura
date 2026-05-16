@@ -1201,16 +1201,29 @@ def test_admin_channels_module_exposes_factory() -> None:
 
 
 def test_admin_channels_module_consults_documented_endpoints() -> None:
-    """B6 covers the three channels-wizard endpoints. The save
-    endpoint is the only B-phase write that touches disk; this
-    test pins the surface so an accidental rename surfaces here."""
+    """B6 covers the three channels-wizard endpoints + G2 adds
+    the per-channel test message. The save endpoint touches
+    disk; this test pins all four surface paths so an
+    accidental rename surfaces here."""
     text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
     for path in (
         "/admin/config-center/channels-wizard",
         "/admin/config-center/channels-wizard/validate",
         "/admin/config-center/channels-wizard/save",
+        # G2: per-channel test message
+        "/admin/channels/",
     ):
         assert path in text, f"channels.js must consult {path}"
+
+
+def test_admin_channels_module_declares_test_modal() -> None:
+    """G2: the Send-test modal is wired in channels.js with a
+    distinct id so it can't collide with the save modal."""
+    text = JS_ADMIN_CHANNELS.read_text(encoding="utf-8")
+    assert "testForm" in text
+    assert "submitTest" in text
+    assert "openTestDialog" in text
+    assert "channels-test" in text
 
 
 def test_admin_channels_module_declares_per_card_state_and_save_modal() -> None:
@@ -1264,6 +1277,8 @@ def test_admin_html_loads_channels_factory_and_renders_view() -> None:
         "showRaw.saveResult",
     ):
         assert key in html, f"admin.html channels view must wire {key}"
+    # G2: send-test modal is mounted in the channels view.
+    assert "omModalFor('channels-test')" in html
 
 
 # --------------------------------------------------------------------
