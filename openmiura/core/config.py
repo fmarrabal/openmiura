@@ -490,6 +490,20 @@ class OIDCSettings:
 
 
 @dataclass(frozen=True)
+class ScienceSettings:
+    """Configuration for the public science HTTP surface.
+
+    Even though ``/science/*`` reuses the admin token, the
+    caps live here so a deployment can tune them without
+    touching the admin block.
+    """
+    enabled: bool = True
+    upload_dir: str = "data/science_uploads"
+    max_upload_bytes: int = 50 * 1024 * 1024  # 50 MiB
+    rate_limit_per_minute: int = 30
+
+
+@dataclass(frozen=True)
 class AuthSettings:
     enabled: bool = False
     session_ttl_s: int = 86400
@@ -583,6 +597,7 @@ class Settings:
     sandbox: SandboxSettings | None = None
     evaluations: EvaluationSettings | None = None
     cost_governance: CostGovernanceSettings | None = None
+    science: ScienceSettings = field(default_factory=ScienceSettings)
     agents_path: str = "agents.yaml"
     policies_path: str = "policies.yaml"
     skills_path: str = "../skills"
@@ -880,6 +895,17 @@ def load_settings(path: str) -> Settings:
         rate_limit_per_minute=_as_int(admin_raw.get("rate_limit_per_minute", 60), 60),
     )
 
+    science_raw = raw_cfg.get("science", {}) or {}
+    science = ScienceSettings(
+        enabled=_as_bool(science_raw.get("enabled", True), True),
+        upload_dir=str(science_raw.get("upload_dir", "data/science_uploads")),
+        max_upload_bytes=_as_int(
+            science_raw.get("max_upload_bytes", 50 * 1024 * 1024),
+            50 * 1024 * 1024,
+        ),
+        rate_limit_per_minute=_as_int(science_raw.get("rate_limit_per_minute", 30), 30),
+    )
+
     mcp_raw = raw_cfg.get("mcp", {}) or {}
     mcp = MCPSettings(
         enabled=_env_bool_override("OPENMIURA_MCP_ENABLED", mcp_raw.get("enabled", False), False),
@@ -1048,6 +1074,7 @@ def load_settings(path: str) -> Settings:
         sandbox=sandbox,
         evaluations=evaluations,
         cost_governance=cost_governance,
+        science=science,
         agents_path=str(raw_cfg.get("agents_path") or "agents.yaml"),
         policies_path=str(raw_cfg.get("policies_path") or "policies.yaml"),
         skills_path=str(raw_cfg.get("skills_path") or "../skills"),
