@@ -1451,6 +1451,69 @@ def test_science_upload_module_exposes_factory() -> None:
     assert "window.scienceUpload" in text
 
 
+JS_SCIENCE_NMR = UI_V2 / "static" / "js" / "science" / "nmr.js"
+
+
+def test_science_nmr_module_exposes_parser_and_renderer() -> None:
+    """G4: the NMR mini-viewer module ships three pure
+    functions on ``window.scienceNmr``. The module is the
+    seam between the file format (JCAMP-DX) and the SVG
+    rendering — keeping it module-scoped means upload.js
+    stays domain-agnostic."""
+    assert JS_SCIENCE_NMR.exists(), f"missing {JS_SCIENCE_NMR}"
+    text = JS_SCIENCE_NMR.read_text(encoding="utf-8")
+    assert "window.scienceNmr" in text
+    for fn in ("parseJcampDx", "renderSvg", "isLikelyJcamp"):
+        assert fn in text, f"nmr.js must declare {fn}"
+    # The renderer must respect NMR convention (high ppm on
+    # left). The reverseX flag implements that — pin it so a
+    # future refactor doesn't silently flip the axis.
+    assert "reverseX" in text
+
+
+def test_science_nmr_module_refuses_asdf_compression() -> None:
+    """JCAMP-DX ASDF compression (SQZ/DIF/DUP) is widespread
+    in cFreq exports but not implemented here. The parser must
+    bail with a readable message rather than render garbage."""
+    text = JS_SCIENCE_NMR.read_text(encoding="utf-8")
+    assert "ASDF" in text
+    # Both supported layouts mentioned in the parser body.
+    assert "(XY..XY)" in text or "XY..XY" in text
+    assert "(X++(Y..Y))" in text or "X++(Y..Y)" in text
+
+
+def test_science_html_loads_nmr_module_and_wires_preview_modal() -> None:
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    assert "./js/science/nmr.js" in html
+    assert "openPreview(entry.id)" in html
+    assert "omModalFor('upload-preview')" in html
+    # The upload.js factory exposes looksLikeSpectrum.
+    assert "looksLikeSpectrum(entry)" in html
+
+
+def test_nmr_sample_fixture_exists_and_is_valid_jcamp() -> None:
+    """A tiny synthetic 1D NMR sample lives under tests/fixtures
+    so a reviewer can drop it into the science Upload view and
+    eyeball the rendered SVG without needing a real Bruker
+    export.
+
+    We don't parse it in Python (the parser is JS); we just
+    pin the file's JCAMP-DX headers so a careless edit doesn't
+    invalidate the fixture."""
+    fixture = ROOT / "tests" / "fixtures" / "nmr_sample.jdx"
+    assert fixture.exists(), f"missing {fixture}"
+    text = fixture.read_text(encoding="utf-8")
+    for marker in (
+        "##TITLE=",
+        "##JCAMP-DX=",
+        "##DATA TYPE= NMR SPECTRUM",
+        "##XUNITS= PPM",
+        "##XYDATA= (XY..XY)",
+        "##END=",
+    ):
+        assert marker in text, f"fixture must contain '{marker}'"
+
+
 def test_science_upload_module_uses_documented_endpoints() -> None:
     """The C2/G1 upload surface consumes:
 

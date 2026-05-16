@@ -1,0 +1,35 @@
+##TITLE= openMiura synthetic NMR sample
+##JCAMP-DX= 5.01
+##DATA TYPE= NMR SPECTRUM
+##ORIGIN= openMiura test fixture
+##OWNER= openmiura
+##XUNITS= PPM
+##YUNITS= ARBITRARY UNITS
+##XFACTOR= 1.0
+##YFACTOR= 1.0
+##FIRSTX= 10.0
+##LASTX= 0.0
+##NPOINTS= 21
+##XYDATA= (XY..XY)
+10.0 5
+9.5  6
+9.0  8
+8.5  10
+8.0  12
+7.5  14
+7.26 95
+7.0  16
+6.5  18
+6.0  20
+5.5  22
+5.0  24
+4.5  26
+4.0  28
+3.5  30
+3.0  35
+2.5  85
+2.0  40
+1.5  45
+1.0  55
+0.0  10
+##END=
