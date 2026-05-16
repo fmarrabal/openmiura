@@ -210,6 +210,111 @@
         return !!this._files[id];
       },
 
+      // ----- G4: NMR spectrum preview -----
+
+      previewId: null,
+      previewBusy: false,
+      previewSvg: '',
+      previewMeta: null,
+      previewError: '',
+
+      looksLikeSpectrum(entry) {
+        if (!entry) return false;
+        const name = (entry.name || '').toLowerCase();
+        return name.endsWith('.jdx') || name.endsWith('.dx') ||
+               name.endsWith('.jcamp') || name.endsWith('.jcm') ||
+               (entry.mime || '').toLowerCase().includes('jcamp');
+      },
+
+      async openPreview(id) {
+        if (!window.scienceNmr) {
+          this.previewError = 'NMR viewer module not loaded.';
+          return;
+        }
+        const entry = this.staged.find((s) => s.id === id);
+        if (!entry) return;
+        this.previewId = id;
+        this.previewBusy = true;
+        this.previewError = '';
+        this.previewSvg = '';
+        this.previewMeta = null;
+        window.omModal.open('upload-preview');
+
+        let text = '';
+        // Prefer the in-memory file (zero round-trip). Fall
+        // back to the server upload when only the metadata
+        // survived a refresh.
+        const file = this._files[id];
+        if (file) {
+          try {
+            text = await file.text();
+          } catch (e) {
+            this.previewError = `Failed to read file: ${e && e.message || e}`;
+            this.previewBusy = false;
+            return;
+          }
+        } else if (entry.uploaded && entry.server_upload_id) {
+          // Fetch the bytes back from /science/uploads/{id}.
+          // We use omApi.request directly so the response is
+          // returned as text rather than parsed as JSON.
+          const url = `/science/uploads/${encodeURIComponent(entry.server_upload_id)}`;
+          const r = await window.omApi.get(url);
+          if (!r.ok) {
+            this.previewError = `Fetch failed: HTTP ${r.status}: ${r.error}`;
+            this.previewBusy = false;
+            return;
+          }
+          // omApi.get returns the parsed JSON; for binary it
+          // falls through to `data: { raw }`. Use `r.raw` here.
+          text = r.raw || '';
+          if (!text && r.data && typeof r.data.raw === 'string') {
+            text = r.data.raw;
+          }
+        } else {
+          this.previewError = (
+            'File bytes not available — upload it first or re-drop ' +
+            'the file in this browser session.'
+          );
+          this.previewBusy = false;
+          return;
+        }
+
+        if (!window.scienceNmr.isLikelyJcamp(text)) {
+          this.previewError = (
+            'This file is not JCAMP-DX (no ##TITLE= header). ' +
+            'The viewer only supports JCAMP-DX 5.01 exports.'
+          );
+          this.previewBusy = false;
+          return;
+        }
+        const parsed = window.scienceNmr.parseJcampDx(text);
+        if (!parsed.ok) {
+          this.previewError = parsed.error || 'Parse failed.';
+          this.previewBusy = false;
+          return;
+        }
+        this.previewMeta = {
+          title:    parsed.title,
+          dataType: parsed.dataType,
+          xunits:   parsed.xunits,
+          yunits:   parsed.yunits,
+          firstx:   parsed.firstx,
+          lastx:    parsed.lastx,
+          npoints:  parsed.points.length,
+          xydataKind: parsed.xydataKind,
+        };
+        this.previewSvg = window.scienceNmr.renderSvg(parsed);
+        this.previewBusy = false;
+      },
+
+      closePreview() {
+        this.previewId = null;
+        this.previewSvg = '';
+        this.previewMeta = null;
+        this.previewError = '';
+        window.omModal.close('upload-preview');
+      },
+
       // ----- upload to /science/uploads (real server-side persist) -----
 
       async uploadToServer(id) {
