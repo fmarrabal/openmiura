@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 
-StreamEventKind = Literal["delta", "tool_call", "usage", "done", "error"]
+StreamEventKind = Literal["delta", "tool_call", "tool_result", "usage", "done", "error"]
 
 
 @dataclass
@@ -40,6 +40,26 @@ class ToolCall:
     name: str
     arguments: dict[str, Any]
     id: str | None = None
+
+
+@dataclass
+class ToolResult:
+    """Outcome of a tool execution, surfaced to the streaming
+    consumer between LLM rounds.
+
+    The runtime emits one ``LlmStreamEvent(kind="tool_result")``
+    per executed tool call so the UI can show "tool X
+    completed" before the next LLM round resumes streaming
+    text. ``output`` is the tool's string output (truncated
+    by the consumer for display); ``error`` is non-empty
+    when the tool raised. ``call_id`` lets the consumer
+    match the result back to the originating tool_call event.
+    """
+
+    name: str
+    output: str
+    call_id: str | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -51,19 +71,28 @@ class ChatResponse:
 
 @dataclass
 class LlmStreamEvent:
-    """One canonical streaming event yielded by ``chat_stream``.
+    """One canonical streaming event yielded by ``chat_stream``
+    (LLM clients) and ``generate_reply_stream`` (the agent
+    runtime).
 
-    Exactly one of (``delta`` / ``tool_call`` / ``usage`` /
-    ``error`` / ``final``) carries a meaningful value for any
-    given ``kind``; the rest are ``None``. We do NOT use
-    ``Optional`` unions over a base class because the
-    consuming code (HTTP SSE emitter, agent runtime) wants
-    cheap attribute access without isinstance checks.
+    Exactly one of (``delta`` / ``tool_call`` / ``tool_result`` /
+    ``usage`` / ``error`` / ``final``) carries a meaningful
+    value for any given ``kind``; the rest are ``None``. We
+    do NOT use ``Optional`` unions over a base class because
+    the consuming code (HTTP SSE emitter, science chat UI)
+    wants cheap attribute access without isinstance checks.
+
+    The LLM clients only emit (``delta`` / ``tool_call`` /
+    ``usage`` / ``done`` / ``error``). The ``tool_result``
+    kind is emitted exclusively by the agent runtime after
+    it executes a tool the LLM requested — this lets the
+    UI render a "tool X finished" badge between LLM rounds.
     """
 
     kind: StreamEventKind
     delta: str | None = None
     tool_call: ToolCall | None = None
+    tool_result: ToolResult | None = None
     usage: dict[str, int] | None = None
     error: str | None = None
     final: ChatResponse | None = None
@@ -77,6 +106,10 @@ class LlmStreamEvent:
     @classmethod
     def make_tool_call(cls, tc: ToolCall) -> "LlmStreamEvent":
         return cls(kind="tool_call", tool_call=tc)
+
+    @classmethod
+    def make_tool_result(cls, tr: ToolResult) -> "LlmStreamEvent":
+        return cls(kind="tool_result", tool_result=tr)
 
     @classmethod
     def make_usage(cls, usage: dict[str, int]) -> "LlmStreamEvent":

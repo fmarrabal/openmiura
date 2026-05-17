@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import Any
+from typing import Any, AsyncIterator
 
 try:
     from openmiura.agents.skills import SkillLoader
@@ -14,6 +15,12 @@ from openmiura.observability import record_error, record_tokens
 from .audit import AuditStore
 from .config import Settings, resolve_config_related_path
 from .llm import AnthropicClient, OllamaClient, OpenAICompatibleClient
+from .llm.types import (
+    ChatResponse,
+    LlmStreamEvent,
+    ToolCall,
+    ToolResult,
+)
 
 _MAX_EXTRA_SYSTEM_CHARS = 3000
 _MAX_TOOL_ROUNDS = 3
@@ -300,6 +307,275 @@ class AgentRuntime:
                 trace_collector['status'] = 'completed'
                 trace_collector.setdefault('decisions', {})['tool_round_limit_reached'] = bool(getattr(result, 'tool_calls', None) and rounds >= _MAX_TOOL_ROUNDS)
             return final if final else '(empty response)'
+        finally:
+            if had_model_attr:
+                self.llm.model = original_model
+
+    # ------------------------------------------------------------------
+    # H1.4 — Async streaming reply with tool loop
+    # ------------------------------------------------------------------
+
+    def supports_streaming(self) -> bool:
+        """Whether the underlying LLM client exposes a
+        ``chat_stream`` method (i.e. native streaming is
+        available end-to-end). Consumers (the HTTP SSE
+        endpoint) should call this to decide whether to flip
+        ``streaming_mode`` to ``"native"`` or fall back to
+        the pseudo path."""
+        return callable(getattr(self.llm, 'chat_stream', None))
+
+    async def generate_reply_stream(
+        self,
+        agent_id: str,
+        session_id: str,
+        user_text: str,
+        extra_system: str | None = None,
+        *,
+        tools_runtime=None,
+        user_key: str | None = None,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+        channel: str | None = None,
+    ) -> AsyncIterator[LlmStreamEvent]:
+        """Async-generator sibling of ``generate_reply``.
+
+        Streams ``LlmStreamEvent``s through the full tool loop:
+
+          1. Build the same message list as the sync path.
+          2. Open an LLM stream (``llm.chat_stream``).
+          3. Forward delta / tool_call / usage events to the
+             caller as they arrive.
+          4. When the LLM's per-round stream finishes
+             (``kind="done"``) AND yielded tool calls, execute
+             those tools in a threadpool (so we don't block
+             the event loop), emit a ``tool_result`` event
+             per tool, append tool messages to the
+             conversation, and re-open the LLM stream.
+          5. Repeat until the LLM round finishes with no tool
+             calls, or ``_MAX_TOOL_ROUNDS`` is hit.
+          6. Emit a final ``kind="done"`` event with the
+             concatenated ChatResponse.
+
+        Raises ``RuntimeError`` if the configured LLM client
+        does not expose a ``chat_stream`` method — the SSE
+        endpoint catches this and falls back to the
+        pseudo-streaming path.
+
+        Errors at LLM level surface as ``kind="error"``
+        events; tool execution failures surface as
+        ``tool_result`` events with the ``error`` field set
+        (the loop continues so the LLM can recover).
+        """
+        if not self.supports_streaming():
+            raise RuntimeError(
+                "Configured LLM client does not support chat_stream; "
+                "use generate_reply (sync) instead."
+            )
+
+        messages = self._build_messages(
+            agent_id=agent_id,
+            session_id=session_id,
+            user_text=user_text,
+            extra_system=extra_system,
+        )
+        agent_cfg = self._agent_cfg(agent_id)
+
+        had_model_attr = hasattr(self.llm, 'model')
+        original_model = getattr(self.llm, 'model', None)
+        agent_model = str(agent_cfg.get('model') or '').strip()
+        if agent_model and had_model_attr:
+            self.llm.model = agent_model
+
+        # Tool schemas (reuse the same fallback chain as the
+        # sync path so a misbehaving tools_runtime doesn't
+        # break the stream).
+        tool_schemas: list[dict[str, Any]] = []
+        if tools_runtime is not None and user_key:
+            try:
+                tool_schemas = tools_runtime.available_tool_schemas(
+                    agent_id,
+                    user_key=user_key,
+                    tenant_id=tenant_id,
+                    workspace_id=workspace_id,
+                    environment=environment,
+                    channel=channel,
+                )
+            except TypeError:
+                try:
+                    tool_schemas = tools_runtime.available_tool_schemas(agent_id, user_key=user_key)
+                except TypeError:
+                    try:
+                        tool_schemas = tools_runtime.available_tool_schemas(agent_id)
+                    except Exception:
+                        tool_schemas = []
+                except Exception:
+                    tool_schemas = []
+            except Exception:
+                tool_schemas = []
+
+        content_accum = ''
+        usage_accum = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+        loop = asyncio.get_running_loop()
+
+        try:
+            rounds = 0
+            while True:
+                # Open a stream for this round.
+                stream = (
+                    self.llm.chat_stream(messages, tools=tool_schemas)
+                    if tool_schemas else
+                    self.llm.chat_stream(messages)
+                )
+
+                round_tool_calls: list[ToolCall] = []
+                round_content = ''
+                stream_failed = False
+
+                async for ev in stream:
+                    if ev.kind == "delta":
+                        round_content += ev.delta or ''
+                        content_accum += ev.delta or ''
+                        yield ev
+                    elif ev.kind == "tool_call" and ev.tool_call is not None:
+                        round_tool_calls.append(ev.tool_call)
+                        yield ev
+                    elif ev.kind == "usage" and ev.usage:
+                        # Accumulate across rounds — emit at the
+                        # end as one consolidated usage event.
+                        for k in ('prompt_tokens', 'completion_tokens', 'total_tokens'):
+                            usage_accum[k] += int(ev.usage.get(k) or 0)
+                        try:
+                            record_tokens(getattr(self.llm, 'model', self.settings.llm.model), **ev.usage)
+                        except Exception:
+                            pass
+                        # Don't forward intermediate usage events —
+                        # the consumer gets one rolled-up usage at
+                        # the end.
+                    elif ev.kind == "error":
+                        yield ev
+                        stream_failed = True
+                        break
+                    elif ev.kind == "done":
+                        # End of this round.
+                        break
+
+                if stream_failed:
+                    return
+
+                # No tool calls → we're done with the whole
+                # interaction.
+                if not round_tool_calls:
+                    break
+
+                rounds += 1
+                if rounds > _MAX_TOOL_ROUNDS:
+                    # Same behaviour as sync path: we stop
+                    # looping but DON'T treat this as an error
+                    # — the partial content is the best we
+                    # have. Emit a marker tool_result.
+                    yield LlmStreamEvent.make_tool_result(
+                        ToolResult(
+                            name='_loop_limit',
+                            output=(
+                                f'Tool-call loop limit ({_MAX_TOOL_ROUNDS}) '
+                                f'reached; further calls dropped.'
+                            ),
+                            call_id=None,
+                            error='tool_round_limit',
+                        )
+                    )
+                    break
+
+                # Append assistant turn with the tool calls to
+                # the conversation.
+                messages.append({
+                    'role':    'assistant',
+                    'content': round_content,
+                    'tool_calls': [
+                        {
+                            'id':       tc.id,
+                            'function': {
+                                'name':      tc.name,
+                                'arguments': json.dumps(tc.arguments, ensure_ascii=False),
+                            },
+                        }
+                        for tc in round_tool_calls
+                    ],
+                })
+
+                # Execute each tool in a thread (the runtime is
+                # sync) and yield a tool_result event per tool.
+                for tc in round_tool_calls:
+                    output = ''
+                    error_msg: str | None = None
+                    if tools_runtime is None or not user_key:
+                        error_msg = 'No tools_runtime / user_key configured'
+                        output = error_msg
+                    else:
+                        def _run(tc=tc):
+                            return tools_runtime.run_tool(
+                                agent_id=agent_id,
+                                session_id=session_id,
+                                user_key=user_key,
+                                tool_name=tc.name,
+                                args=tc.arguments or {},
+                                tenant_id=tenant_id,
+                                workspace_id=workspace_id,
+                                environment=environment,
+                                channel=channel,
+                            )
+                        try:
+                            output = await loop.run_in_executor(None, _run)
+                        except TypeError:
+                            # Older tools_runtime signature.
+                            def _run_legacy(tc=tc):
+                                return tools_runtime.run_tool(
+                                    agent_id=agent_id,
+                                    session_id=session_id,
+                                    user_key=user_key,
+                                    tool_name=tc.name,
+                                    args=tc.arguments or {},
+                                )
+                            try:
+                                output = await loop.run_in_executor(None, _run_legacy)
+                            except ToolConfirmationRequired as e:
+                                output = str(e)
+                            except Exception as e:
+                                record_error(type(e).__name__)
+                                error_msg = f'{type(e).__name__}: {e!r}'
+                                output = f'Tool {tc.name} failed: {e!r}'
+                        except ToolConfirmationRequired as e:
+                            output = str(e)
+                        except Exception as e:
+                            record_error(type(e).__name__)
+                            error_msg = f'{type(e).__name__}: {e!r}'
+                            output = f'Tool {tc.name} failed: {e!r}'
+
+                    yield LlmStreamEvent.make_tool_result(
+                        ToolResult(
+                            name=tc.name,
+                            output=str(output),
+                            call_id=tc.id,
+                            error=error_msg,
+                        )
+                    )
+                    messages.append({
+                        'role':    'tool',
+                        'name':    tc.name,
+                        'content': str(output),
+                    })
+
+            # End of all rounds — emit consolidated usage + done.
+            if usage_accum['total_tokens'] > 0:
+                yield LlmStreamEvent.make_usage(dict(usage_accum))
+            final = ChatResponse(
+                content=(content_accum or '').strip() or '(empty response)',
+                tool_calls=[],
+                usage=dict(usage_accum) if usage_accum['total_tokens'] > 0 else None,
+            )
+            yield LlmStreamEvent.make_done(final)
+
         finally:
             if had_model_attr:
                 self.llm.model = original_model
