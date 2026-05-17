@@ -187,6 +187,12 @@
           agent_id: null,
           raw:     '',
           streaming: true,
+          // Native streaming (H1.5/H1.6) carries inline
+          // tool_call + tool_result events. We render them
+          // as an "activity" timeline above the text inside
+          // the turn bubble.
+          streaming_mode: null,   // 'native' | 'pseudo'
+          tool_events:    [],     // [{ kind, name, id|call_id, arguments|output, error, ts }]
         };
         this.messages.push(agentTurn);
         this._persist();
@@ -303,12 +309,48 @@
           agentTurn.streaming_mode = payload.streaming_mode || 'pseudo';
         } else if (event === 'chunk') {
           const delta = (payload && payload.delta) || '';
-          // Append with a space if both sides have content;
-          // matches the splitter's paragraph/sentence pacing.
-          if (agentTurn.text && delta && !agentTurn.text.endsWith(' ')) {
-            agentTurn.text += ' ';
+          if (!delta) return;
+          // Native streaming: LLM tokens come pre-spaced
+          // ("hello" + " world"). Concatenate verbatim.
+          // Pseudo streaming: the backend splitter sliced the
+          // text along sentence boundaries; we re-insert a
+          // space between chunks if the previous one didn't
+          // end with whitespace.
+          if (agentTurn.streaming_mode === 'native') {
+            agentTurn.text += delta;
+          } else {
+            if (agentTurn.text && !agentTurn.text.endsWith(' ') && !delta.startsWith(' ')) {
+              agentTurn.text += ' ';
+            }
+            agentTurn.text += delta;
           }
-          agentTurn.text += delta;
+        } else if (event === 'tool_call') {
+          // H1.6: native-only event. The runtime tells us the
+          // LLM is invoking a tool. Render an inline badge so
+          // the operator sees the action without having to
+          // open the raw payload.
+          agentTurn.tool_events = agentTurn.tool_events || [];
+          agentTurn.tool_events.push({
+            kind:      'call',
+            name:      payload.name || '',
+            id:        payload.id || null,
+            arguments: payload.arguments || {},
+            ts:        nowIso(),
+          });
+        } else if (event === 'tool_result') {
+          // H1.6: native-only event. The runtime ran the tool;
+          // the output (or error) lands here. We match it back
+          // to the originating tool_call by call_id so the UI
+          // shows them as a pair.
+          agentTurn.tool_events = agentTurn.tool_events || [];
+          agentTurn.tool_events.push({
+            kind:    'result',
+            name:    payload.name || '',
+            call_id: payload.call_id || null,
+            output:  payload.output || '',
+            error:   payload.error || null,
+            ts:      nowIso(),
+          });
         } else if (event === 'heartbeat') {
           agentTurn.last_heartbeat = payload.ts || null;
         } else if (event === 'done') {
@@ -325,6 +367,14 @@
           agentTurn.text = `Agent error: ${(payload && payload.error) || 'unknown'}`;
           this.error = agentTurn.text;
         }
+      },
+
+      // Small UI helper: truncate a tool_result output for the
+      // inline badge (keep the full string in raw).
+      truncateOutput(s, n) {
+        const t = String(s || '');
+        if (t.length <= n) return t;
+        return t.slice(0, n) + '…';
       },
 
       toggleStreaming() {

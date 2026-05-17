@@ -1416,6 +1416,44 @@ def test_science_chat_module_declares_streaming_toggle() -> None:
     assert "_sendOneShot(body)" in text
 
 
+def test_science_chat_module_handles_native_streaming_events() -> None:
+    """H1.6: the chat factory must handle tool_call,
+    tool_result, and the streaming_mode badge from the native
+    SSE path. Without these branches the agent turn loses the
+    "agent is using X tool" visibility that H1.5 emits."""
+    text = JS_SCIENCE_CHAT.read_text(encoding="utf-8")
+    assert "'tool_call'" in text, (
+        "chat.js must handle the SSE tool_call event"
+    )
+    assert "'tool_result'" in text, (
+        "chat.js must handle the SSE tool_result event"
+    )
+    # Agent turn stores tool events for inline render.
+    assert "tool_events" in text
+    # Streaming mode is captured on the turn so the UI can
+    # render the native/pseudo badge.
+    assert "streaming_mode" in text
+    # Chunk concatenation branches on streaming mode so
+    # native LLM tokens don't get space-padded.
+    assert "streaming_mode === 'native'" in text
+
+
+def test_science_html_renders_tool_event_timeline_and_mode_badge() -> None:
+    """H1.6: the agent-turn template must render a tool-event
+    timeline and the streaming-mode badge so the operator
+    sees what the agent is doing in real time."""
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    # The mode badge.
+    assert "m.streaming_mode" in html
+    # The tool-event activity timeline.
+    assert "m.tool_events" in html
+    # Each entry distinguishes call vs result + flags errors.
+    assert "te.kind === 'call'" in html
+    assert "te.kind === 'result'" in html
+    # truncateOutput helper is wired into the template.
+    assert "truncateOutput" in html
+
+
 def test_science_chat_module_persists_under_documented_keys() -> None:
     """The localStorage keys are part of the public contract;
     downstream debug tools may inspect them."""

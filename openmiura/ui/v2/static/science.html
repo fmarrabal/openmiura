@@ -229,8 +229,35 @@
                              x-text="m.role === 'user' ? 'you' : m.role === 'agent' ? 'AI' : 'sys'"></div>
                         <div class="min-w-0 max-w-[80%] space-y-1"
                              :class="m.role === 'user' ? 'text-right' : ''">
-                          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400"
-                             x-text="(m.role === 'agent' && m.agent_id ? m.agent_id + ' · ' : '') + (m.ts ? new Date(m.ts).toLocaleTimeString() : '')"></p>
+                          <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400 flex items-center gap-2 flex-wrap"
+                             :class="m.role === 'user' ? 'justify-end' : ''">
+                            <span x-text="(m.role === 'agent' && m.agent_id ? m.agent_id + ' · ' : '') + (m.ts ? new Date(m.ts).toLocaleTimeString() : '')"></span>
+                            <!-- H1.6: streaming mode badge for the agent turn -->
+                            <span x-show="m.role === 'agent' && m.streaming_mode"
+                                  class="om-badge text-[9px] font-mono"
+                                  :class="m.streaming_mode === 'native' ? 'om-badge--success' : 'om-badge--neutral'"
+                                  x-text="m.streaming_mode"></span>
+                          </p>
+
+                          <!-- H1.6: tool-event activity timeline (native streaming only) -->
+                          <template x-if="m.role === 'agent' && m.tool_events && m.tool_events.length > 0">
+                            <ul class="space-y-1 text-[11px]">
+                              <template x-for="(te, ti) in m.tool_events" :key="ti">
+                                <li class="flex items-start gap-2">
+                                  <span class="om-badge text-[9px] font-mono shrink-0"
+                                        :class="te.kind === 'call' ? 'om-badge--info'
+                                              : te.kind === 'result' && te.error ? 'om-badge--danger'
+                                              : 'om-badge--success'"
+                                        x-text="te.kind === 'call' ? '→ ' + (te.name || 'tool') : '✓ ' + (te.name || 'tool')"></span>
+                                  <span class="text-surface-600 dark:text-surface-400 font-mono break-words"
+                                        x-text="te.kind === 'call'
+                                                  ? JSON.stringify(te.arguments || {})
+                                                  : (te.error ? ('error: ' + te.error) : truncateOutput(te.output, 200))"></span>
+                                </li>
+                              </template>
+                            </ul>
+                          </template>
+
                           <div class="inline-block text-left text-sm rounded-md px-3 py-2 whitespace-pre-wrap break-words"
                                :class="m.role === 'user' ? 'bg-primary-50 dark:bg-primary-900/20 text-surface-900 dark:text-surface-100'
                                      : m.role === 'agent' ? 'bg-surface-100 dark:bg-surface-800 text-surface-900 dark:text-surface-100'
