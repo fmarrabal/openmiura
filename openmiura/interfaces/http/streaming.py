@@ -49,8 +49,11 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
+from dataclasses import asdict
 from typing import Any, AsyncIterator, Callable
 
+from openmiura.core.llm.types import LlmStreamEvent
 from openmiura.core.schema import InboundMessage, OutboundMessage
 
 
@@ -202,4 +205,179 @@ async def stream_message(
     yield _sse_event("done", {"message": full})
 
 
-__all__ = ["split_into_chunks", "stream_message"]
+async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]:
+    """Native streaming path for /http/message/stream (H1.5).
+
+    Bypasses the heavier branches of ``process_message``
+    (command parsing, allow-list checks, special routing)
+    and goes directly: audit the user turn → call the
+    runtime's async ``generate_reply_stream`` → forward
+    every LlmStreamEvent as an SSE event → audit the
+    assistant turn at the end.
+
+    SSE event taxonomy (in addition to the pseudo path):
+
+      event: meta         streaming_mode = "native"
+      event: chunk        per-LLM-token delta, no pacing
+      event: tool_call    LLM requested a tool
+      event: tool_result  runtime ran the tool, emits output
+      event: usage        consolidated token usage
+      event: done         full OutboundMessage
+      event: error        any error along the way
+
+    The runtime's tool loop runs inside this generator, so
+    by the time we emit ``done`` all rounds + tool
+    executions are complete and the audit trail is intact.
+    """
+    # ----- Identity + scope resolution (mirrors pipeline) -----
+    try:
+        channel_user_id = msg.user_id
+        user_key = gw.effective_user_key(channel_user_id) if hasattr(gw, "effective_user_key") else channel_user_id
+
+        scope_meta = dict((msg.metadata or {}).get("_scope") or {})
+        tenant_id = str(scope_meta.get("tenant_id") or "").strip() or None
+        workspace_id = str(scope_meta.get("workspace_id") or "").strip() or None
+        environment = str(scope_meta.get("environment") or "").strip() or None
+        channel = msg.channel or "http"
+
+        derived_session_id = (
+            gw.derive_session_id(msg, user_key)
+            if hasattr(gw, "derive_session_id")
+            else (msg.session_id or "")
+        )
+        session_id = gw.audit.get_or_create_session(
+            channel=channel,
+            user_id=user_key,
+            session_id=derived_session_id,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        )
+    except Exception as exc:
+        yield _sse_event("error", {"error": f"setup failed: {exc!r}"})
+        return
+
+    # ----- Initial meta event -----
+    yield _sse_event("meta", {
+        "session_id":     session_id,
+        "user_id":        msg.user_id,
+        "streaming_mode": "native",
+    })
+
+    # ----- Agent + tools resolution -----
+    metadata = msg.metadata or {}
+    agent_id = str(metadata.get("agent_id") or "default")
+    tools_runtime = getattr(gw, "tools", None)
+
+    # ----- Audit user turn BEFORE streaming -----
+    try:
+        gw.audit.append_message(session_id=session_id, role="user", content=msg.text)
+        gw.audit.log_event(
+            direction="in",
+            channel=channel,
+            user_id=user_key,
+            session_id=session_id,
+            payload={"text": msg.text, "metadata_keys": sorted(list(metadata.keys()))},
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        )
+    except Exception:
+        # Audit failures must NOT abort the stream — the
+        # user still gets a reply; the operator catches the
+        # silent audit miss in the metrics view.
+        pass
+
+    # ----- Stream LLM events through the runtime -----
+    content_accum = ""
+    usage: dict[str, int] | None = None
+    saw_error = False
+
+    try:
+        async for ev in gw.runtime.generate_reply_stream(
+            agent_id=agent_id,
+            session_id=session_id,
+            user_text=msg.text,
+            extra_system=None,
+            tools_runtime=tools_runtime,
+            user_key=user_key,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            channel=channel,
+        ):
+            if ev.kind == "delta":
+                content_accum += ev.delta or ""
+                yield _sse_event("chunk", {"delta": ev.delta or "", "index": -1})
+            elif ev.kind == "tool_call" and ev.tool_call is not None:
+                yield _sse_event("tool_call", {
+                    "name":      ev.tool_call.name,
+                    "id":        ev.tool_call.id,
+                    "arguments": ev.tool_call.arguments,
+                })
+            elif ev.kind == "tool_result" and ev.tool_result is not None:
+                # Truncate the output for the SSE event — UI
+                # only needs a preview; the full output is in
+                # the audit trail.
+                output_preview = (ev.tool_result.output or "")[:1000]
+                yield _sse_event("tool_result", {
+                    "name":    ev.tool_result.name,
+                    "call_id": ev.tool_result.call_id,
+                    "output":  output_preview,
+                    "error":   ev.tool_result.error,
+                })
+            elif ev.kind == "usage" and ev.usage:
+                usage = ev.usage
+                yield _sse_event("usage", ev.usage)
+            elif ev.kind == "done" and ev.final is not None:
+                # The runtime's done event carries the
+                # full consolidated ChatResponse. Don't
+                # forward it here — we build our own done
+                # event with the OutboundMessage shape.
+                if ev.final.content:
+                    content_accum = ev.final.content
+                if ev.final.usage:
+                    usage = ev.final.usage
+                break
+            elif ev.kind == "error":
+                yield _sse_event("error", {"error": ev.error or "unknown"})
+                saw_error = True
+                break
+    except Exception as exc:
+        yield _sse_event("error", {"error": f"stream failed: {exc!r}"})
+        return
+
+    if saw_error:
+        return
+
+    final_text = (content_accum or "").strip() or "(empty response)"
+
+    # ----- Audit assistant turn -----
+    try:
+        gw.audit.append_message(session_id=session_id, role="assistant", content=final_text)
+        gw.audit.log_event(
+            direction="out",
+            channel=channel,
+            user_id=msg.user_id,
+            session_id=session_id,
+            payload={"text": final_text, "usage": usage},
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+        )
+    except Exception:
+        pass
+
+    # ----- Emit final done event with OutboundMessage shape -----
+    outbound = OutboundMessage(
+        channel=channel,
+        user_id=msg.user_id,
+        session_id=session_id,
+        agent_id=agent_id,
+        text=final_text,
+        metadata={"usage": usage} if usage else {},
+    )
+    yield _sse_event("done", {"message": outbound.model_dump()})
+
+
+__all__ = ["split_into_chunks", "stream_message", "stream_message_native"]

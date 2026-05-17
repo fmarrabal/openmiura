@@ -118,6 +118,16 @@ def _parse_sse(raw: str) -> list[dict]:
     return events
 
 
+def _force_pseudo(app) -> None:
+    """Pin ``runtime.supports_streaming`` to False on the
+    live gateway so the endpoint goes through the pseudo
+    path — needed for the pre-H1.5 tests that scripted the
+    sync ``handler`` shape."""
+    runtime = getattr(app.state.gw, "runtime", None)
+    if runtime is not None:
+        runtime.supports_streaming = lambda: False  # type: ignore[attr-defined]
+
+
 def _echo_handler(gw, msg: InboundMessage) -> OutboundMessage:
     """Synchronous test handler — returns a deterministic
     OutboundMessage so we can assert chunk boundaries and the
@@ -139,6 +149,7 @@ def _echo_handler(gw, msg: InboundMessage) -> OutboundMessage:
 def test_stream_emits_meta_chunks_done_in_order():
     app = _build_app(handler=_echo_handler)
     with TestClient(app) as client:
+        _force_pseudo(app)
         r = client.post(
             "/http/message/stream",
             json={
@@ -179,6 +190,7 @@ def test_stream_errors_become_error_event():
         raise RuntimeError("upstream LLM unreachable")
     app = _build_app(handler=_explode)
     with TestClient(app) as client:
+        _force_pseudo(app)
         r = client.post(
             "/http/message/stream",
             json={"channel": "http", "user_id": "curro", "text": "x"},
@@ -204,6 +216,7 @@ def test_stream_concatenated_chunks_match_full_text():
     ``done``."""
     app = _build_app(handler=_echo_handler)
     with TestClient(app) as client:
+        _force_pseudo(app)
         r = client.post(
             "/http/message/stream",
             json={"channel": "http", "user_id": "curro", "text": "hi"},
@@ -227,9 +240,141 @@ def test_stream_concatenated_chunks_match_full_text():
 def test_stream_meta_event_reflects_input_user_id():
     app = _build_app(handler=_echo_handler)
     with TestClient(app) as client:
+        _force_pseudo(app)
         r = client.post(
             "/http/message/stream",
             json={"channel": "http", "user_id": "alice@lab", "text": "x"},
         )
     events = _parse_sse(r.text)
     assert events[0]["data"]["user_id"] == "alice@lab"
+
+
+# ------------------------------------------------------------------
+# H1.5 — native streaming path
+# ------------------------------------------------------------------
+
+
+class _FakeStreamingRuntime:
+    """Stand-in for AgentRuntime that supports streaming.
+
+    The runtime is monkey-patched onto the live gateway
+    after app startup so the H1.5 endpoint detects
+    ``supports_streaming() == True`` and uses the native
+    path.
+    """
+
+    def __init__(self, events):
+        self._events = events
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    async def generate_reply_stream(self, **_kwargs):
+        from openmiura.core.llm.types import LlmStreamEvent
+        for ev in self._events:
+            yield ev
+
+
+def test_native_streaming_meta_event_declares_mode():
+    """When the runtime supports streaming, the meta event
+    must say ``streaming_mode = "native"``."""
+    from openmiura.core.llm.types import ChatResponse, LlmStreamEvent
+
+    app = _build_app(handler=_echo_handler)
+    fake_runtime = _FakeStreamingRuntime([
+        LlmStreamEvent.make_delta("Hello"),
+        LlmStreamEvent.make_done(ChatResponse(content="Hello", tool_calls=[], usage=None)),
+    ])
+    with TestClient(app) as client:
+        # Override the runtime AFTER app startup so the
+        # capability check returns True.
+        app.state.gw.runtime = fake_runtime
+        r = client.post(
+            "/http/message/stream",
+            json={"channel": "http", "user_id": "curro", "text": "hi"},
+        )
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    assert events[0]["event"] == "meta"
+    assert events[0]["data"]["streaming_mode"] == "native"
+
+
+def test_native_streaming_forwards_deltas_and_tool_events():
+    """Native path emits ``chunk`` events for deltas plus
+    ``tool_call`` and ``tool_result`` events between tool
+    rounds."""
+    from openmiura.core.llm.types import (
+        ChatResponse,
+        LlmStreamEvent,
+        ToolCall,
+        ToolResult,
+    )
+
+    app = _build_app(handler=_echo_handler)
+    fake_runtime = _FakeStreamingRuntime([
+        LlmStreamEvent.make_delta("Let me check."),
+        LlmStreamEvent.make_tool_call(ToolCall(name="lookup", arguments={"q": "x"}, id="c1")),
+        LlmStreamEvent.make_tool_result(ToolResult(name="lookup", output="x=42", call_id="c1")),
+        LlmStreamEvent.make_delta(" The answer is 42."),
+        LlmStreamEvent.make_usage({"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}),
+        LlmStreamEvent.make_done(ChatResponse(
+            content="Let me check. The answer is 42.",
+            tool_calls=[],
+            usage={"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        )),
+    ])
+    with TestClient(app) as client:
+        app.state.gw.runtime = fake_runtime
+        r = client.post(
+            "/http/message/stream",
+            json={"channel": "http", "user_id": "curro", "text": "hi"},
+        )
+    events = _parse_sse(r.text)
+    kinds = [e["event"] for e in events]
+
+    assert kinds[0] == "meta"
+    assert "chunk" in kinds
+    assert "tool_call" in kinds
+    assert "tool_result" in kinds
+    assert "usage" in kinds
+    assert kinds[-1] == "done"
+
+    # The tool_call event carries the name + arguments.
+    tc_evs = [e for e in events if e["event"] == "tool_call"]
+    assert len(tc_evs) == 1
+    assert tc_evs[0]["data"]["name"] == "lookup"
+    assert tc_evs[0]["data"]["arguments"] == {"q": "x"}
+
+    # The tool_result event carries the output + call_id.
+    tr_evs = [e for e in events if e["event"] == "tool_result"]
+    assert len(tr_evs) == 1
+    assert tr_evs[0]["data"]["name"] == "lookup"
+    assert tr_evs[0]["data"]["output"] == "x=42"
+    assert tr_evs[0]["data"]["call_id"] == "c1"
+
+    # The final done event carries an OutboundMessage with
+    # the consolidated text.
+    done = [e for e in events if e["event"] == "done"][0]
+    assert "answer is 42" in done["data"]["message"]["text"]
+
+
+def test_native_streaming_falls_back_to_pseudo_when_runtime_lacks_capability():
+    """If the runtime doesn't expose supports_streaming or
+    returns False, the endpoint silently falls back to the
+    pseudo path — same behaviour as before H1.5."""
+    app = _build_app(handler=_echo_handler)
+    with TestClient(app) as client:
+        # The live runtime built by the test app uses Ollama
+        # by default (which DOES support streaming after
+        # H1.1), so we have to override it with something
+        # that doesn't.
+        class _SyncRuntime:
+            def supports_streaming(self):
+                return False
+        app.state.gw.runtime = _SyncRuntime()
+        r = client.post(
+            "/http/message/stream",
+            json={"channel": "http", "user_id": "curro", "text": "hi"},
+        )
+    events = _parse_sse(r.text)
+    assert events[0]["data"]["streaming_mode"] == "pseudo"

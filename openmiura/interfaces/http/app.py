@@ -25,7 +25,7 @@ from openmiura.gateway import Gateway
 from openmiura.infrastructure.bootstrap.container import build_gateway, resolve_gateway_factory
 from openmiura.interfaces.http.routes.admin import router as admin_router
 from openmiura.interfaces.http.routes.science import router as science_router
-from openmiura.interfaces.http.streaming import stream_message
+from openmiura.interfaces.http.streaming import stream_message, stream_message_native
 from openmiura.observability import metrics_payload, update_memory_metrics
 from openmiura.pipeline import process_message
 
@@ -169,24 +169,44 @@ def create_app(
 
     @app.post("/http/message/stream")
     async def http_message_stream(msg: InboundMessage):
-        """SSE pseudo-streaming sibling of /http/message.
+        """SSE streaming sibling of /http/message.
 
         Same input shape, same auth surface (none — both rely
-        on the broker for upstream auth). Output is a stream
-        of SSE events (``meta``, ``heartbeat``, ``chunk``,
-        ``done`` / ``error``). The full ``OutboundMessage``
-        lands in the ``done`` event's payload, so a client
-        that doesn't care about the streaming UX can wait for
-        ``done`` and consume the same shape as the single-
-        shot endpoint.
+        on the broker for upstream auth). Two modes:
+
+          - **native** — when the configured LLM client
+            supports ``chat_stream`` (Ollama, OpenAI-compat,
+            Anthropic). Forwards LLM token deltas as they
+            arrive, surfaces ``tool_call`` / ``tool_result``
+            events between tool rounds, no artificial pacing.
+
+          - **pseudo** — fallback for runtimes that don't
+            support native streaming. Runs the synchronous
+            ``process_message`` in a thread, emits heartbeats
+            while it works, then chunks the final text into
+            paragraph- and sentence-shaped pieces.
+
+        The mode is declared in the initial ``meta`` event so
+        the client can render a "native" / "pseudo" badge.
 
         See ``openmiura/interfaces/http/streaming.py`` for the
-        SSE taxonomy and the streaming_mode contract.
+        full SSE event taxonomy.
         """
         gw: Gateway | None = getattr(app.state, "gw", None)
         if gw is None:
             raise HTTPException(status_code=503, detail="Service not initialized")
-        generator = stream_message(gw, msg, handler=handler)
+
+        # Use native streaming when the runtime supports it.
+        runtime = getattr(gw, "runtime", None)
+        supports_native = (
+            runtime is not None
+            and hasattr(runtime, "supports_streaming")
+            and runtime.supports_streaming()
+        )
+        if supports_native:
+            generator = stream_message_native(gw, msg)
+        else:
+            generator = stream_message(gw, msg, handler=handler)
         return StreamingResponse(
             generator,
             media_type="text/event-stream",
