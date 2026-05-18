@@ -16,6 +16,7 @@
   <script src="./js/shell.js"></script>
   <script src="./js/science/chat.js"></script>
   <script src="./js/science/nmr_asdf.js"></script>
+  <script src="./js/science/nmr_csv.js"></script>
   <script src="./js/science/nmr.js"></script>
   <script src="./js/science/upload.js"></script>
   <script src="./js/science/review.js"></script>
@@ -447,6 +448,15 @@
                     <div>
                       <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Data type</p>
                       <p x-text="previewMeta.dataType || '—'"></p>
+                    </div>
+                    <div x-show="previewMeta.format">
+                      <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Format</p>
+                      <p>
+                        <span class="om-badge om-badge--neutral text-[9px]" x-text="previewMeta.format"></span>
+                        <span x-show="previewMeta.vendor_hint && previewMeta.vendor_hint !== 'unknown'"
+                              class="om-badge om-badge--info text-[9px] ml-1"
+                              x-text="previewMeta.vendor_hint"></span>
+                      </p>
                     </div>
                     <div>
                       <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">X range</p>

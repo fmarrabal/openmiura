@@ -221,9 +221,19 @@
       looksLikeSpectrum(entry) {
         if (!entry) return false;
         const name = (entry.name || '').toLowerCase();
-        return name.endsWith('.jdx') || name.endsWith('.dx') ||
-               name.endsWith('.jcamp') || name.endsWith('.jcm') ||
-               (entry.mime || '').toLowerCase().includes('jcamp');
+        if (name.endsWith('.jdx') || name.endsWith('.dx') ||
+            name.endsWith('.jcamp') || name.endsWith('.jcm')) return true;
+        // H2.2: also accept CSV / XY plain text. Filter by
+        // a few heuristic suffixes (.csv, .tsv, .xy, .txt
+        // when paired with an "nmr" hint in the filename or
+        // the JCAMP mime).
+        if (name.endsWith('.csv') || name.endsWith('.tsv') ||
+            name.endsWith('.xy')) return true;
+        if (name.endsWith('.txt') && (name.indexOf('nmr') !== -1 ||
+                                       name.indexOf('spec') !== -1)) {
+          return true;
+        }
+        return (entry.mime || '').toLowerCase().includes('jcamp');
       },
 
       async openPreview(id) {
@@ -279,29 +289,26 @@
           return;
         }
 
-        if (!window.scienceNmr.isLikelyJcamp(text)) {
-          this.previewError = (
-            'This file is not JCAMP-DX (no ##TITLE= header). ' +
-            'The viewer only supports JCAMP-DX 5.01 exports.'
-          );
-          this.previewBusy = false;
-          return;
-        }
-        const parsed = window.scienceNmr.parseJcampDx(text);
+        // H2.2: auto-detect format (JCAMP-DX or CSV/XY).
+        const parsed = window.scienceNmr.parseSpectrum
+          ? window.scienceNmr.parseSpectrum(text)
+          : window.scienceNmr.parseJcampDx(text);
         if (!parsed.ok) {
           this.previewError = parsed.error || 'Parse failed.';
           this.previewBusy = false;
           return;
         }
         this.previewMeta = {
-          title:    parsed.title,
-          dataType: parsed.dataType,
-          xunits:   parsed.xunits,
-          yunits:   parsed.yunits,
-          firstx:   parsed.firstx,
-          lastx:    parsed.lastx,
-          npoints:  parsed.points.length,
+          title:      parsed.title,
+          dataType:   parsed.dataType,
+          xunits:     parsed.xunits,
+          yunits:     parsed.yunits,
+          firstx:     parsed.firstx,
+          lastx:      parsed.lastx,
+          npoints:    parsed.points.length,
           xydataKind: parsed.xydataKind,
+          format:     parsed.format || 'JCAMP-DX',
+          vendor_hint: parsed.vendor_hint || null,
         };
         this.previewSvg = window.scienceNmr.renderSvg(parsed);
         this.previewBusy = false;
