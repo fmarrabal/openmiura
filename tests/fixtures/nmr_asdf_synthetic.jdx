@@ -1,0 +1,17 @@
+##TITLE= openMiura synthetic ASDF-compressed NMR
+##JCAMP-DX= 5.01
+##DATA TYPE= NMR SPECTRUM
+##ORIGIN= openMiura test fixture (ASDF)
+##OWNER= openmiura
+##XUNITS= PPM
+##YUNITS= ARBITRARY UNITS
+##XFACTOR= 1.0
+##YFACTOR= 1.0
+##FIRSTX= 10.0
+##LASTX= 0.0
+##NPOINTS= 21
+##XYDATA= (X++(Y..Y))
+10.0 E W I5
+6.5  E W S
+3.0  E H5 E V
+##END=

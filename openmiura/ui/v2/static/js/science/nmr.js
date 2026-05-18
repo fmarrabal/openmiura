@@ -130,21 +130,22 @@
     const npoints = _toNumber(headers.NPOINTS);
 
     const points = [];
+    const warnings = [];
 
-    // ASDF compression sigil check — refuse cleanly.
-    // ASDF uses characters @, A..I (positive SQZ) / a..i (negative SQZ),
-    // J..R (positive DIF) / j..r (negative DIF), S..Z + s..z (DUP),
-    // + and -. We just look for any letter outside scientific-notation
-    // E/e in the body and bail out.
+    // ASDF detection helper — delegates to the H2.1 module
+    // when available. Falls back to "no ASDF" if the module
+    // isn't loaded (the test page can still parse plain
+    // (XY..XY) data this way).
+    const asdf = (typeof window !== 'undefined' && window.scienceNmrAsdf) || null;
     function _looksAsdf(line) {
-      // Scientific notation is 1.23e-4 or 1.23E-4; allow those.
-      // ASDF letters appear inside number tokens without a leading digit.
-      // Heuristic: a token of letters between digits is ASDF.
-      return /\d[a-zA-Z][^Ee0-9+\-.\s]/.test(line) ||
-             /[a-df-ik-rt-zA-DF-IK-RT-Z][0-9+\-.]/.test(line);
+      return asdf ? asdf.lineHasAsdf(line) : false;
     }
 
     if (mode === 'XY..XY') {
+      // (XY..XY) lines are plain "x y x y ..." pairs by spec.
+      // ASDF in this layout is not standardised and we don't
+      // see it in the wild — keep the bail to surface a
+      // file that violates the spec.
       for (let i = dataStart; i < lines.length; i++) {
         const raw = lines[i].trim();
         if (!raw) continue;
@@ -154,11 +155,10 @@
         if (_looksAsdf(raw)) {
           return {
             ok: false,
-            error: 'Detected ASDF compression. Re-export without compression.',
+            error: 'ASDF compression detected inside an (XY..XY) block; ' +
+                   'this layout is not supported. Re-export as (X++(Y..Y)).',
           };
         }
-        // Each line is one or more "x y" pairs separated by
-        // whitespace, comma or semicolon.
         const tokens = raw.split(/[\s,;]+/).filter(Boolean);
         for (let j = 0; j + 1 < tokens.length; j += 2) {
           const x = _toNumber(tokens[j]);
@@ -169,34 +169,72 @@
         }
       }
     } else {
-      // X++(Y..Y): each line is <x_start> y0 y1 y2 ...
-      // We compute the per-step dx from the header. If npoints
-      // and lastx are present we use the consistent dx; otherwise
-      // we fall back to xfactor.
+      // X++(Y..Y): plain-or-ASDF lines. We pick per line
+      // based on whether ASDF letters appear; that way a
+      // file that uses ASDF only in some lines (rare but
+      // legal) still parses correctly.
       let dx = xfactor;
       if (_isFiniteNumber(firstx) && _isFiniteNumber(lastx) && _isFiniteNumber(npoints) && npoints > 1) {
         dx = (lastx - firstx) / (npoints - 1);
       }
+
+      // ASDF cross-line continuity: the LAST Y of line N
+      // is conventionally the first Y of line N+1. The
+      // decoder uses prev_last_y to validate that.
+      let asdfLastY = null;
+      // Cumulative Y-index across all lines so the X
+      // increments correctly when lines are ASDF-encoded
+      // (each ASDF line yields a variable number of Ys).
+      let cumulativeIdx = 0;
+
       for (let i = dataStart; i < lines.length; i++) {
         const raw = lines[i].trim();
         if (!raw) continue;
         if (raw.startsWith('##END')) break;
         if (raw.startsWith('##')) break;
         if (raw.startsWith('$$')) continue;
-        if (_looksAsdf(raw)) {
-          return {
-            ok: false,
-            error: 'Detected ASDF compression. Re-export without compression.',
-          };
+
+        if (asdf && _looksAsdf(raw)) {
+          // ASDF-encoded line. Delegate to the H2.1 decoder
+          // which extracts the leading X (if any), the Y
+          // sequence, and the cross-line check digit.
+          const decoded = asdf.decodeAsdfLine(raw, asdfLastY);
+          if (decoded.warnings && decoded.warnings.length) {
+            for (const w of decoded.warnings) warnings.push(w);
+          }
+          // We use the explicit X from the line if present,
+          // else fall back to cumulativeIdx-based dx.
+          let x0 = _isFiniteNumber(decoded.x) ? decoded.x : null;
+          if (x0 === null && _isFiniteNumber(firstx)) {
+            x0 = firstx + cumulativeIdx * dx;
+          }
+          for (let k = 0; k < decoded.ys.length; k++) {
+            const xk = (x0 !== null)
+              ? (x0 + k * dx)
+              : (cumulativeIdx * dx);
+            points.push({ x: xk, y: decoded.ys[k] * yfactor });
+            cumulativeIdx += 1;
+          }
+          asdfLastY = decoded.lastY;
+          continue;
         }
+
+        // Plain (no ASDF) X++(Y..Y) line.
         const tokens = raw.split(/[\s,;]+/).filter(Boolean);
         if (tokens.length === 0) continue;
         const x0 = _toNumber(tokens[0]);
         if (!_isFiniteNumber(x0)) continue;
+        // Reset cumulativeIdx based on x0 so subsequent
+        // ASDF or plain lines keep numbering correct.
+        if (_isFiniteNumber(firstx) && _isFiniteNumber(dx) && dx !== 0) {
+          cumulativeIdx = Math.round((x0 - firstx) / dx);
+        }
         for (let j = 1; j < tokens.length; j++) {
           const y = _toNumber(tokens[j]);
           if (_isFiniteNumber(y)) {
             points.push({ x: (x0 + (j - 1) * dx), y: y * yfactor });
+            asdfLastY = y;
+            cumulativeIdx += 1;
           }
         }
       }
@@ -217,6 +255,7 @@
       firstx, lastx, npoints,
       xydataKind: mode,
       points,
+      warnings,
     };
   }
 

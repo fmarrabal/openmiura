@@ -1531,15 +1531,40 @@ def test_science_nmr_module_exposes_parser_and_renderer() -> None:
     assert "reverseX" in text
 
 
-def test_science_nmr_module_refuses_asdf_compression() -> None:
-    """JCAMP-DX ASDF compression (SQZ/DIF/DUP) is widespread
-    in cFreq exports but not implemented here. The parser must
-    bail with a readable message rather than render garbage."""
+def test_science_nmr_module_supports_asdf_via_h21_decoder() -> None:
+    """Post-H2.1: ASDF compression (SQZ/DIF/DUP) is supported
+    via the dedicated ``scienceNmrAsdf`` module. The main
+    parser delegates to it when ASDF letters are detected on
+    a line. We pin the delegation point so a future refactor
+    can't silently restore the old "bail on ASDF" path."""
     text = JS_SCIENCE_NMR.read_text(encoding="utf-8")
-    assert "ASDF" in text
+    # Delegation to the H2.1 module.
+    assert "scienceNmrAsdf" in text, (
+        "nmr.js must consume window.scienceNmrAsdf (H2.1)"
+    )
+    assert "decodeAsdfLine" in text, (
+        "nmr.js must call decodeAsdfLine per line"
+    )
+    # Cross-line continuity carrier.
+    assert "asdfLastY" in text
     # Both supported layouts mentioned in the parser body.
     assert "(XY..XY)" in text or "XY..XY" in text
     assert "(X++(Y..Y))" in text or "X++(Y..Y)" in text
+
+
+def test_science_html_loads_nmr_asdf_module_before_nmr() -> None:
+    """Load-order matters — the H2.1 module exposes
+    ``window.scienceNmrAsdf`` which the main nmr.js parser
+    feature-detects at parse time."""
+    html = SCIENCE_HTML.read_text(encoding="utf-8")
+    asdf_line = html.find("./js/science/nmr_asdf.js")
+    nmr_line = html.find("./js/science/nmr.js")
+    assert asdf_line >= 0, "science.html must load nmr_asdf.js"
+    assert nmr_line >= 0, "science.html must load nmr.js"
+    assert asdf_line < nmr_line, (
+        "nmr_asdf.js must load BEFORE nmr.js so the parser "
+        "can feature-detect window.scienceNmrAsdf"
+    )
 
 
 def test_science_html_loads_nmr_module_and_wires_preview_modal() -> None:
