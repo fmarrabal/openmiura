@@ -368,8 +368,46 @@
     }[c]));
   }
 
+  /**
+   * Auto-detect format and dispatch to the right parser.
+   *
+   * Order of preference:
+   *   1. JCAMP-DX (the documented openMiura format) — detected
+   *      by the ``##TITLE=`` magic.
+   *   2. CSV / XY plain text — when at least 3 of the first 10
+   *      non-blank lines parse to numeric columns. Handled by
+   *      the H2.2 module ``scienceNmrCsv`` when available.
+   *
+   * Returns the canonical parsed shape (see ``parseJcampDx``);
+   * adds a ``format`` field so the upload-preview UI can show
+   * "JCAMP-DX" vs "CSV/XY" in the metadata grid.
+   */
+  function parseSpectrum(text) {
+    if (typeof text !== 'string' || !text) {
+      return { ok: false, error: 'Empty input.' };
+    }
+    if (isLikelyJcamp(text)) {
+      const parsed = parseJcampDx(text);
+      if (parsed.ok) parsed.format = 'JCAMP-DX';
+      return parsed;
+    }
+    const csv = (typeof window !== 'undefined' && window.scienceNmrCsv) || null;
+    if (csv && csv.isLikelyCsv(text)) {
+      const parsed = csv.parseCsvXy(text);
+      if (parsed.ok) parsed.format = 'CSV/XY';
+      return parsed;
+    }
+    return {
+      ok: false,
+      error:
+        'Unrecognised file format. Supported: JCAMP-DX 5.01 (.jdx/.dx) ' +
+        'and plain CSV / XY ASCII columns.',
+    };
+  }
+
   window.scienceNmr = {
     parseJcampDx,
+    parseSpectrum,
     renderSvg,
     isLikelyJcamp,
   };
