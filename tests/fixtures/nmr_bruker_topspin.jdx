@@ -1,0 +1,22 @@
+##TITLE= openMiura synthetic Bruker TopSpin 1H sample
+##JCAMP-DX= 5.01
+##DATA TYPE= NMR SPECTRUM
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= openmiura
+##$NUC1= <1H>
+##$BF1= 400.0
+##$SF= 400.0
+##XUNITS= HZ
+##YUNITS= ARBITRARY UNITS
+##XFACTOR= 1.0
+##YFACTOR= 1.0
+##FIRSTX= 4000.0
+##LASTX= 0.0
+##NPOINTS= 5
+##XYDATA= (XY..XY)
+4000.0 5
+3000.0 14
+2000.0 95
+1000.0 40
+0.0    10
+##END=

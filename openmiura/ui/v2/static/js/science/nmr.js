@@ -244,7 +244,7 @@
       return { ok: false, error: 'No data points parsed from XYDATA section.' };
     }
 
-    return {
+    const parsed = {
       ok:         true,
       title:      headers.TITLE || '',
       dataType:   headers['DATA TYPE'] || headers.DATATYPE || '',
@@ -257,6 +257,79 @@
       points,
       warnings,
     };
+
+    // H2.3 — Bruker TopSpin enhancements. Runs unconditionally
+    // because Bruker-specific headers are namespaced under
+    // ``##$`` and are absent on non-Bruker files (no-op there).
+    _brukerEnhance(parsed, headers, lines);
+
+    return parsed;
+  }
+
+  // ------------------------------------------------------------------
+  // H2.3 — Bruker TopSpin edge cases
+  // ------------------------------------------------------------------
+
+  /**
+   * Mutate a parsed-spectrum object with TopSpin-specific
+   * enhancements:
+   *
+   *   1. Count ``##XYDATA=`` blocks — warn if > 1 (real +
+   *      imaginary; we only render the first / real channel).
+   *   2. Parse the Bruker-private ``##$NUC1`` header (typical
+   *      shape: ``<1H>``) into a ``nuclei`` field.
+   *   3. When the X axis is in Hz AND ``##$BF1`` (base
+   *      frequency, MHz) is present, convert each point's X
+   *      from Hz to ppm via ``ppm = Hz / BF1``. Stash the
+   *      original unit so a future toggle UI could swap back.
+   *
+   * Non-Bruker files are unaffected because none of the
+   * trigger headers are present.
+   */
+  function _brukerEnhance(parsed, headers, allLines) {
+    parsed.warnings = parsed.warnings || [];
+
+    // 1. Multi-block detection.
+    let xydataCount = 0;
+    for (let i = 0; i < allLines.length; i++) {
+      if (allLines[i].trim().startsWith('##XYDATA=')) xydataCount += 1;
+    }
+    if (xydataCount > 1) {
+      parsed.warnings.push(
+        `Multi-block XYDATA detected (${xydataCount} blocks). ` +
+        `Rendering the first block only; subsequent blocks ` +
+        `(typically the imaginary channel) are ignored.`
+      );
+    }
+    parsed.xydataBlockCount = xydataCount;
+
+    // 2. Nuclei.
+    const nuc1Raw = headers['$NUC1'];
+    if (nuc1Raw) {
+      // Strip angle brackets if present: "<1H>" → "1H".
+      const m = String(nuc1Raw).match(/^<\s*(.+?)\s*>$/);
+      parsed.nuclei = m ? m[1] : String(nuc1Raw).trim();
+    } else {
+      parsed.nuclei = null;
+    }
+
+    // 3. Hz → ppm conversion. ``##$BF1`` is the base
+    // frequency in MHz; dividing Hz by it gives ppm.
+    const bf1 = _toNumber(headers['$BF1']);
+    const xunitsUp = String(parsed.xunits || '').toUpperCase();
+    if (_isFiniteNumber(bf1) && bf1 > 0 && xunitsUp.indexOf('HZ') !== -1) {
+      for (let i = 0; i < parsed.points.length; i++) {
+        parsed.points[i].x = parsed.points[i].x / bf1;
+      }
+      if (_isFiniteNumber(parsed.firstx)) parsed.firstx = parsed.firstx / bf1;
+      if (_isFiniteNumber(parsed.lastx))  parsed.lastx  = parsed.lastx  / bf1;
+      parsed.xunits_original = parsed.xunits;
+      parsed.xunits = 'PPM';
+      parsed.bf1 = bf1;
+      parsed.warnings.push(
+        `Converted X axis from Hz to ppm using \$BF1=${bf1} MHz.`
+      );
+    }
   }
 
   // ------------------------------------------------------------------
