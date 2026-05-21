@@ -18,6 +18,7 @@
   <script src="./js/science/nmr_asdf.js"></script>
   <script src="./js/science/nmr_csv.js"></script>
   <script src="./js/science/nmr.js"></script>
+  <script src="./js/science/nmr_vendor.js"></script>
   <script src="./js/science/upload.js"></script>
   <script src="./js/science/review.js"></script>
   <script src="./js/science/approvals.js"></script>
@@ -453,10 +454,15 @@
                       <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Format</p>
                       <p>
                         <span class="om-badge om-badge--neutral text-[9px]" x-text="previewMeta.format"></span>
-                        <span x-show="previewMeta.vendor_hint && previewMeta.vendor_hint !== 'unknown'"
+                        <span x-show="previewMeta.vendor && previewMeta.vendor !== 'unknown'"
                               class="om-badge om-badge--info text-[9px] ml-1"
-                              x-text="previewMeta.vendor_hint"></span>
+                              x-text="previewMeta.vendor_label"
+                              :title="'Detected from: ' + (previewMeta.vendor_hint || 'parsed headers')"></span>
                       </p>
+                    </div>
+                    <div x-show="previewMeta.nuclei">
+                      <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">Nucleus</p>
+                      <p x-text="previewMeta.nuclei || '—'"></p>
                     </div>
                     <div>
                       <p class="text-[10px] uppercase tracking-wider text-surface-500 dark:text-surface-400">X range</p>
