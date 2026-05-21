@@ -29,6 +29,7 @@
 - [Security guide](security.md)
 - [LLM providers](llm_providers.md)
 - [MCP and HTTP broker integration](mcp_broker_integration.md)
+- [Science profile — NMR parsers and vendor support](science_nmr_parsers.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Operational guides

@@ -298,6 +298,15 @@
           this.previewBusy = false;
           return;
         }
+        // H2.5: vendor detection. Resolves a single
+        // ``vendor`` tag from the cross-vendor fields the
+        // H2.2 / H2.3 / H2.4 passes populated on ``parsed``.
+        const vendor = (window.scienceNmrVendor && window.scienceNmrVendor.detectVendor)
+          ? window.scienceNmrVendor.detectVendor(parsed)
+          : 'unknown';
+        const vendorLabel = (window.scienceNmrVendor && window.scienceNmrVendor.vendorLabel)
+          ? window.scienceNmrVendor.vendorLabel(vendor)
+          : 'Unknown';
         this.previewMeta = {
           title:      parsed.title,
           dataType:   parsed.dataType,
@@ -309,6 +318,9 @@
           xydataKind: parsed.xydataKind,
           format:     parsed.format || 'JCAMP-DX',
           vendor_hint: parsed.vendor_hint || null,
+          vendor:       vendor,
+          vendor_label: vendorLabel,
+          nuclei:       parsed.nuclei || null,
         };
         this.previewSvg = window.scienceNmr.renderSvg(parsed);
         this.previewBusy = false;
