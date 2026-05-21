@@ -61,9 +61,16 @@ def test_bruker_enhancer_handles_hz_to_ppm_conversion() -> None:
     text = JS_NMR.read_text(encoding="utf-8")
     assert "xunits_original" in text
     assert "'PPM'" in text
-    # The conversion factor is a division by bf1.
-    assert re.search(r"\.x\s*/\s*bf1\b", text), (
-        "nmr.js must divide point.x by bf1 to get ppm"
+    # The conversion factor is a division by the base frequency.
+    # H2.4 extracted the body into a shared ``_convertHzToPpm``
+    # helper, so the division reads as ``.x / freqMHz`` there.
+    assert re.search(r"\.x\s*/\s*freqMHz\b", text), (
+        "nmr.js must divide point.x by the base frequency to get ppm"
+    )
+    # The Bruker enhancer must still hand ``$BF1`` to the
+    # shared helper.
+    assert re.search(r"_convertHzToPpm\([^)]*bf1", text), (
+        "nmr.js must call _convertHzToPpm with the Bruker $BF1 value"
     )
 
 
@@ -189,20 +196,25 @@ def test_bruker_fixture_peak_position() -> None:
 def test_enhancer_is_no_op_when_bf1_absent() -> None:
     """When ``$BF1`` is not in the header dict, the Hz→ppm
     branch must not run (it would multiply X by NaN otherwise).
-    The guard is ``_isFiniteNumber(bf1) && bf1 > 0``."""
+    H2.4 moved the guard inside ``_convertHzToPpm`` where the
+    expression is ``_isFiniteNumber(freqMHz)`` plus a
+    ``freqMHz <= 0`` early-return."""
     text = JS_NMR.read_text(encoding="utf-8")
-    # The guard expression as a whole, not piecewise.
-    assert re.search(r"_isFiniteNumber\(bf1\)\s*&&\s*bf1\s*>\s*0", text), (
-        "nmr.js must guard the Hz→ppm branch with "
-        "_isFiniteNumber(bf1) && bf1 > 0"
+    assert re.search(r"_isFiniteNumber\(freqMHz\)", text), (
+        "nmr.js must guard the Hz→ppm helper with "
+        "_isFiniteNumber(freqMHz)"
+    )
+    assert re.search(r"freqMHz\s*<=\s*0", text), (
+        "nmr.js must early-return when freqMHz <= 0"
     )
 
 
 def test_enhancer_is_no_op_when_xunits_not_hz() -> None:
     """If the fixture's X axis is already in ppm, the
-    conversion must not run. Pin the HZ-check."""
+    conversion must not run. The shared helper uses an
+    ``indexOf('HZ') === -1`` early-return."""
     text = JS_NMR.read_text(encoding="utf-8")
-    assert re.search(r"xunitsUp\.indexOf\(\s*['\"]HZ['\"]\s*\)\s*!==\s*-1", text), (
+    assert re.search(r"xunitsUp\.indexOf\(\s*['\"]HZ['\"]\s*\)\s*===\s*-1", text), (
         "nmr.js must require xunits to contain 'HZ' before "
         "running the conversion"
     )

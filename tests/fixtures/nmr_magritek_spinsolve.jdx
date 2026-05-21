@@ -1,0 +1,24 @@
+##TITLE= openMiura synthetic Magritek SpinSolve 1H sample
+##JCAMP-DX= 5.01
+##DATA TYPE= NMR SPECTRUM
+##ORIGIN= Magritek Spinsolve
+##OWNER= openmiura
+##.OBSERVE NUCLEUS= 1H
+##.OBSERVE FREQUENCY= 60.49
+##SPECTROMETER FREQUENCY= 60.49
+##XUNITS= HZ
+##YUNITS= ARBITRARY UNITS
+##XFACTOR= 1.0
+##YFACTOR= 1.0
+##FIRSTX= 604.9
+##LASTX= 0.0
+##NPOINTS= 5
+$$ Lock substance: D2O
+$$ Temperature: 298.15 K
+##XYDATA= (XY..XY)
+604.9 5
+453.675 14
+302.45 95
+151.225 40
+0.0 10
+##END=
