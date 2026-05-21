@@ -263,6 +263,11 @@
     // ``##$`` and are absent on non-Bruker files (no-op there).
     _brukerEnhance(parsed, headers, lines);
 
+    // H2.4 — Magritek SpinSolve enhancements. Same no-op
+    // contract: skips silently on files that don't carry
+    // SpinSolve-flavoured headers.
+    _magritekEnhance(parsed, headers, lines);
+
     return parsed;
   }
 
@@ -316,20 +321,116 @@
     // 3. Hz → ppm conversion. ``##$BF1`` is the base
     // frequency in MHz; dividing Hz by it gives ppm.
     const bf1 = _toNumber(headers['$BF1']);
-    const xunitsUp = String(parsed.xunits || '').toUpperCase();
-    if (_isFiniteNumber(bf1) && bf1 > 0 && xunitsUp.indexOf('HZ') !== -1) {
-      for (let i = 0; i < parsed.points.length; i++) {
-        parsed.points[i].x = parsed.points[i].x / bf1;
-      }
-      if (_isFiniteNumber(parsed.firstx)) parsed.firstx = parsed.firstx / bf1;
-      if (_isFiniteNumber(parsed.lastx))  parsed.lastx  = parsed.lastx  / bf1;
-      parsed.xunits_original = parsed.xunits;
-      parsed.xunits = 'PPM';
+    if (_convertHzToPpm(parsed, bf1, '$BF1')) {
       parsed.bf1 = bf1;
-      parsed.warnings.push(
-        `Converted X axis from Hz to ppm using \$BF1=${bf1} MHz.`
-      );
     }
+  }
+
+  // ------------------------------------------------------------------
+  // H2.4 — Magritek SpinSolve edge cases
+  // ------------------------------------------------------------------
+
+  /**
+   * Mutate a parsed-spectrum object with SpinSolve-specific
+   * enhancements:
+   *
+   *   1. Record ``##ORIGIN`` when it advertises Magritek /
+   *      SpinSolve into ``vendor_origin`` for the H2.5 vendor
+   *      detector.
+   *   2. Populate ``nuclei`` from the JCAMP-standard
+   *      ``##.OBSERVE NUCLEUS`` header when the Bruker pass
+   *      didn't set it (SpinSolve doesn't ship ``##$NUC1``).
+   *   3. When the X axis is in Hz and Bruker's ``$BF1`` was
+   *      absent, fall back to ``##SPECTROMETER FREQUENCY`` (or
+   *      ``##.OBSERVE FREQUENCY``) — both report the base
+   *      frequency in MHz — to drive the same Hz→ppm
+   *      conversion.
+   *   4. Pull ``$$ Lock substance:`` and ``$$ Temperature:``
+   *      out of the comment block.
+   *
+   * Non-Magritek files are unaffected because none of the
+   * trigger headers / comments are present.
+   */
+  function _magritekEnhance(parsed, headers, allLines) {
+    parsed.warnings = parsed.warnings || [];
+
+    // 1. Vendor origin string.
+    const origin = headers['ORIGIN'];
+    if (origin) {
+      const lo = String(origin).toLowerCase();
+      if (lo.indexOf('magritek') !== -1 || lo.indexOf('spinsolve') !== -1) {
+        parsed.vendor_origin = String(origin).trim();
+      }
+    }
+
+    // 2. Nuclei fallback. JCAMP standard puts this in
+    // ``##.OBSERVE NUCLEUS``; Bruker uses ``##$NUC1``. Only
+    // overwrite if the Bruker pass left it null.
+    if (!parsed.nuclei) {
+      const obsNuc = headers['.OBSERVE NUCLEUS'];
+      if (obsNuc) {
+        parsed.nuclei = String(obsNuc).trim();
+      }
+    }
+
+    // 3. Hz → ppm fallback via ``##SPECTROMETER FREQUENCY``
+    // (preferred) or ``##.OBSERVE FREQUENCY``. Skip if the
+    // Bruker pass already ran the conversion (xunits is now
+    // ``PPM`` and ``xunits_original`` is populated).
+    const alreadyConverted = !!parsed.xunits_original;
+    if (!alreadyConverted) {
+      const specFreq = _toNumber(
+        headers['SPECTROMETER FREQUENCY'] || headers['.OBSERVE FREQUENCY']
+      );
+      if (_convertHzToPpm(parsed, specFreq, 'SPECTROMETER FREQUENCY')) {
+        parsed.spectrometer_freq = specFreq;
+      }
+    }
+
+    // 4. Lock substance + temperature from the ``$$`` comment
+    // block. SpinSolve exports stash run metadata there
+    // rather than in headers.
+    const lockRe = /^\$\$\s*Lock\s+substance\s*[:=]\s*(.+?)\s*$/i;
+    const tempRe = /^\$\$\s*Temperature\s*[:=]\s*([0-9eE.+-]+)\s*([A-Za-z]*)\s*$/;
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i].trim();
+      if (!line.startsWith('$$')) continue;
+      let m = line.match(lockRe);
+      if (m && !parsed.lock_substance) {
+        parsed.lock_substance = m[1].trim();
+        continue;
+      }
+      m = line.match(tempRe);
+      if (m && parsed.temperature === undefined) {
+        const v = _toNumber(m[1]);
+        if (_isFiniteNumber(v)) {
+          parsed.temperature = v;
+          if (m[2]) parsed.temperature_unit = m[2].toUpperCase();
+        }
+      }
+    }
+  }
+
+  /**
+   * Shared Hz → ppm converter. Returns true if the conversion
+   * ran (so callers can stash their vendor-specific frequency
+   * field), false otherwise.
+   */
+  function _convertHzToPpm(parsed, freqMHz, sourceLabel) {
+    const xunitsUp = String(parsed.xunits || '').toUpperCase();
+    if (!_isFiniteNumber(freqMHz) || freqMHz <= 0) return false;
+    if (xunitsUp.indexOf('HZ') === -1) return false;
+    for (let i = 0; i < parsed.points.length; i++) {
+      parsed.points[i].x = parsed.points[i].x / freqMHz;
+    }
+    if (_isFiniteNumber(parsed.firstx)) parsed.firstx = parsed.firstx / freqMHz;
+    if (_isFiniteNumber(parsed.lastx))  parsed.lastx  = parsed.lastx  / freqMHz;
+    parsed.xunits_original = parsed.xunits;
+    parsed.xunits = 'PPM';
+    parsed.warnings.push(
+      `Converted X axis from Hz to ppm using ${sourceLabel}=${freqMHz} MHz.`
+    );
+    return true;
   }
 
   // ------------------------------------------------------------------
