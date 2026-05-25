@@ -5,7 +5,58 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
-from .types import ChatResponse, LlmStreamEvent, ToolCall
+from .types import Attachment, ChatResponse, LlmStreamEvent, ToolCall
+
+
+def _ollama_payload_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Translate openMiura messages into Ollama's wire format.
+
+    Ollama accepts image attachments via a top-level ``images``
+    field on a message, holding a list of base64-encoded strings
+    (no ``data:`` prefix). It sniffs the media type from the
+    bytes so we don't need to forward it.
+
+    We strip our internal ``attachments`` field from the
+    outgoing message because Ollama would silently ignore it
+    but the audit layer cares that the outbound payload is
+    minimal.
+
+    Non-image attachments (none today, audio in a future H3
+    slice) are dropped here with no warning — H3.3b in
+    OpenAI / Anthropic does the same. The audit layer is the
+    source of truth for what *was* attached; the LLM only
+    receives what it can consume.
+    """
+    out: List[Dict[str, Any]] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            out.append(msg)
+            continue
+        # Strip the key whether or not we end up adding any
+        # images — an empty / dropped ``attachments`` field
+        # should never reach the wire.
+        if "attachments" not in msg:
+            out.append(msg)
+            continue
+        attachments = msg.get("attachments") or []
+        images: List[str] = []
+        for a in attachments:
+            if isinstance(a, dict):
+                if str(a.get("kind") or "").lower() == "image":
+                    data = str(a.get("data_b64") or "")
+                    if data:
+                        images.append(data)
+            elif isinstance(a, Attachment):
+                if a.kind == "image" and a.data_b64:
+                    images.append(a.data_b64)
+        new_msg = {k: v for k, v in msg.items() if k != "attachments"}
+        if images:
+            # Preserve any pre-existing ``images`` field the
+            # caller might have set (rare; tests do it).
+            existing = list(new_msg.get("images") or [])
+            new_msg["images"] = existing + images
+        out.append(new_msg)
+    return out
 
 
 def _parse_tool_call(item: Any) -> ToolCall | None:
@@ -110,7 +161,7 @@ class OllamaClient:
         url = f"{self.base_url}/api/chat"
         payload: Dict[str, Any] = {
             'model':    self.model,
-            'messages': messages,
+            'messages': _ollama_payload_messages(messages),
             'stream':   False,
         }
         if tools:
@@ -186,7 +237,7 @@ class OllamaClient:
         url = f"{self.base_url}/api/chat"
         payload: Dict[str, Any] = {
             'model':    self.model,
-            'messages': messages,
+            'messages': _ollama_payload_messages(messages),
             'stream':   True,
         }
         if tools:

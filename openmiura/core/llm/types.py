@@ -28,11 +28,80 @@ Two flavours live here:
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Literal
 
 
 StreamEventKind = Literal["delta", "tool_call", "tool_result", "usage", "done", "error"]
+
+AttachmentKind = Literal["image"]
+
+
+@dataclass
+class Attachment:
+    """A binary attachment carried by a chat message — currently
+    only images (pasted spectra screenshots, lab-notebook scans,
+    drawn structures…). Multi-modal LLMs consume them via
+    provider-specific wire shapes; the per-provider client owns
+    that translation.
+
+    Fields:
+
+      - ``kind`` — discriminator. Today only ``'image'``. Audio
+        and arbitrary binary attachments are reserved for
+        future H3 slices.
+      - ``media_type`` — MIME type (``image/png``, ``image/jpeg``,
+        ``image/webp``, etc). Used to set the right wire field
+        on Anthropic / OpenAI; ignored by Ollama which sniffs
+        the bytes itself.
+      - ``data_b64`` — base64-encoded payload without any
+        ``data:...;base64,`` prefix.
+      - ``sha256`` — optional precomputed hex digest. The
+        audit layer fills this so the same bytes don't get
+        rehashed downstream.
+    """
+
+    kind: AttachmentKind
+    media_type: str
+    data_b64: str
+    sha256: str | None = None
+
+
+def attachment_from_dict(d: Any) -> Attachment | None:
+    """Best-effort dict → Attachment. Returns ``None`` on
+    malformed input so caller can skip silently rather than
+    raise (HTTP payloads from the wild can be ragged).
+    """
+    if not isinstance(d, dict):
+        return None
+    kind = str(d.get("kind") or "").strip().lower()
+    if kind != "image":
+        return None
+    media = str(d.get("media_type") or "").strip()
+    if not media.startswith("image/"):
+        return None
+    data = str(d.get("data_b64") or "").strip()
+    if not data:
+        return None
+    sha = str(d.get("sha256") or "").strip() or None
+    return Attachment(
+        kind="image",
+        media_type=media,
+        data_b64=data,
+        sha256=sha,
+    )
+
+
+def attachment_sha256(att: Attachment) -> str:
+    """Compute the SHA-256 of the raw (post-base64) bytes.
+
+    Cheap: a 1 MiB image hashes in ~5 ms. The result is hex-
+    encoded so it can live in a JSON audit record.
+    """
+    raw = base64.b64decode(att.data_b64, validate=False)
+    return hashlib.sha256(raw).hexdigest()
 
 
 @dataclass
