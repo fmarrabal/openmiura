@@ -259,6 +259,46 @@ class AnthropicClient:
                 })
                 continue
 
+            # H3.3b — multi-modal attachments. When the
+            # message carries an ``attachments`` field, promote
+            # ``content`` to a list of blocks: text block first
+            # (if any), then one ``image`` source-block per
+            # image attachment. Non-image kinds are silently
+            # dropped here — audit layer is the source of
+            # truth for what *was* attached.
+            attachments = msg.get('attachments') or []
+            if attachments:
+                blocks: list[dict[str, Any]] = []
+                content = msg.get('content')
+                if isinstance(content, str) and content:
+                    blocks.append({'type': 'text', 'text': content})
+                elif isinstance(content, list):
+                    blocks.extend(b for b in content if isinstance(b, dict))
+                for a in attachments:
+                    if isinstance(a, dict):
+                        kind = str(a.get('kind') or '').lower()
+                        media = str(a.get('media_type') or '').strip()
+                        data = str(a.get('data_b64') or '')
+                    else:
+                        kind = getattr(a, 'kind', '')
+                        media = getattr(a, 'media_type', '')
+                        data = getattr(a, 'data_b64', '')
+                    if kind != 'image' or not data or not media.startswith('image/'):
+                        continue
+                    blocks.append({
+                        'type':   'image',
+                        'source': {
+                            'type':       'base64',
+                            'media_type': media,
+                            'data':       data,
+                        },
+                    })
+                anthropic_messages.append({
+                    'role':    role if role in {'user', 'assistant'} else 'user',
+                    'content': blocks,
+                })
+                continue
+
             content = msg.get('content')
             if isinstance(content, list):
                 anthropic_messages.append({'role': role if role in {'user', 'assistant'} else 'user', 'content': content})

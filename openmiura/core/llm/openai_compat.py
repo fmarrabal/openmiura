@@ -6,7 +6,84 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
-from .types import ChatResponse, LlmStreamEvent, ToolCall
+from .types import Attachment, ChatResponse, LlmStreamEvent, ToolCall
+
+
+# ------------------------------------------------------------------
+# H3.3b — Message translation for multi-modal input
+# ------------------------------------------------------------------
+
+
+def _openai_payload_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translate openMiura messages into OpenAI's wire format.
+
+    OpenAI's multi-modal Chat Completions accepts image content
+    via a list-of-blocks ``content`` field:
+
+        {
+          "role": "user",
+          "content": [
+            {"type": "text", "text": "..."},
+            {"type": "image_url",
+             "image_url": {"url": "data:image/png;base64,..."}}
+          ]
+        }
+
+    When a message has no ``attachments`` field we pass it
+    through unchanged so text-only callers see no payload
+    change. Otherwise we promote ``content`` to a list and
+    append one ``image_url`` block per image attachment, then
+    strip the ``attachments`` key so it doesn't reach the
+    wire.
+
+    Non-image kinds (audio, future) are silently dropped on
+    the OpenAI path — the audit layer remains the source of
+    truth for what *was* attached.
+    """
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            out.append(msg)
+            continue
+        if "attachments" not in msg:
+            out.append(msg)
+            continue
+        attachments = msg.get("attachments") or []
+        blocks: list[dict[str, Any]] = []
+        # Lift any existing string content into a text block
+        # first so the text precedes images in the chat
+        # transcript.
+        original_content = msg.get("content")
+        if isinstance(original_content, str) and original_content:
+            blocks.append({"type": "text", "text": original_content})
+        elif isinstance(original_content, list):
+            # Caller already used the block form — preserve as-is.
+            blocks.extend(b for b in original_content if isinstance(b, dict))
+        # Append image blocks.
+        for a in attachments:
+            if isinstance(a, dict):
+                kind = str(a.get("kind") or "").lower()
+                media = str(a.get("media_type") or "").strip()
+                data = str(a.get("data_b64") or "")
+            elif isinstance(a, Attachment):
+                kind, media, data = a.kind, a.media_type, a.data_b64
+            else:
+                continue
+            if kind != "image" or not data or not media.startswith("image/"):
+                continue
+            blocks.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{media};base64,{data}"},
+            })
+        new_msg = {k: v for k, v in msg.items() if k != "attachments"}
+        # Always set content to the assembled blocks list when
+        # we have any image; if no images and original content
+        # was a string, keep the string form.
+        had_image = any(b.get("type") == "image_url" for b in blocks)
+        if had_image:
+            new_msg["content"] = blocks
+        out.append(new_msg)
+    return out
 
 
 # ------------------------------------------------------------------
@@ -197,7 +274,7 @@ class OpenAICompatibleClient:
         url = f"{self.base_url}/chat/completions"
         payload: dict[str, Any] = {
             'model':    self.model,
-            'messages': messages,
+            'messages': _openai_payload_messages(messages),
         }
         if tools:
             payload['tools'] = tools
@@ -270,7 +347,7 @@ class OpenAICompatibleClient:
         url = f"{self.base_url}/chat/completions"
         payload: dict[str, Any] = {
             'model':          self.model,
-            'messages':       messages,
+            'messages':       _openai_payload_messages(messages),
             'stream':         True,
             'stream_options': {'include_usage': True},
         }
