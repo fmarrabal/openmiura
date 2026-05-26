@@ -19,6 +19,18 @@ jobs:
       # classification and no fixed version has been released. Tracked
       # so we can drop the ignore when the advisory resolves.
       - run: pip-audit --ignore-vuln PYSEC-2025-183
+      # Defense-in-depth against MAL-2026-4750. The supply-chain
+      # attack route was ``fastapi[standard]==0.136.3`` pulling in
+      # the undocumented ``fastar`` package. We pin fastapi
+      # ``<0.136.3`` in requirements/pyproject so this should
+      # already be unreachable, but a fresh assert keeps a future
+      # bad un-pin from silently re-introducing the threat.
+      - name: Reject malicious 'fastar' package
+        run: |
+          if pip show fastar >/dev/null 2>&1; then
+            echo "::error::malicious package 'fastar' is installed (MAL-2026-4750 vector); refusing to continue"
+            exit 1
+          fi
 
   secret-scan:
     permissions:
