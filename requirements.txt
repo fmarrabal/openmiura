@@ -1,4 +1,9 @@
-fastapi>=0.110
+# fastapi 0.136.3 was withdrawn / flagged MAL-2026-4750:
+# it ships an undocumented ``fastar>=0.9.0`` dependency in
+# the ``[standard]`` extras group (supply-chain attack).
+# Pin BELOW the malicious release until upstream republishes
+# a clean 0.136.4+ or 0.137.
+fastapi>=0.110,<0.136.3
 uvicorn[standard]>=0.23
 httpx>=0.27
 numpy>=1.26
