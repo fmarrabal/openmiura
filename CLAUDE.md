@@ -565,6 +565,7 @@ El proyecto está "listo para mostrar" cuando se cumple **todo** lo siguiente:
 - **No reintroducir "OpenClaw"** ni en marketing ni en docs.
 - **No mezclar configuración personal de Curro** (`configs/personal/`) con el código del core. La capa "asistente personal" vive aislada.
 - **No usar Claude Code para generar bibliografía falsa.** Cada referencia del paper debe verificarse manualmente con DOI / arXiv.
+- **No introducir cambios motivados por amenazas de seguridad sin verificación externa.** Toda alerta de vulnerabilidad o paquete malicioso debe contrastarse con al menos dos de las siguientes fuentes antes de proponer hotfix: (a) registro oficial del paquete en PyPI/npm con metadata coherente, (b) entrada concreta en osv.dev o GitHub Advisory Database con ID verificable y URL directa, (c) reporte público de un proveedor reconocido (Snyk, ReversingLabs, OSSF, Sonatype). En la propuesta de hotfix se cita la URL exacta de cada fuente y se incluye el extracto literal relevante. Sin esa verificación, Claude Code informa la sospecha en chat pero NO abre PR de hotfix, NO modifica requirements ni constraints, y NO bloquea trabajo en curso.
 
 ---
 
