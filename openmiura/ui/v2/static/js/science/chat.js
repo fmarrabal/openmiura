@@ -69,6 +69,89 @@
     return me.principal_id || me.username || me.user_key || null;
   }
 
+  // ----- H3.3c: multi-modal attachment helpers -----
+
+  // 10 MiB per attachment is enough for a typical 2D NMR
+  // screenshot or a lab-notebook page scan; above that we
+  // refuse client-side rather than spending bandwidth.
+  const _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+  // Up to 4 attachments per turn. Vision-capable LLMs handle
+  // multi-image prompts but charge per image; capping is a
+  // cost gate that lives in the UI alongside the visual cap
+  // (4 thumbnails fit in the composer strip).
+  const _MAX_ATTACHMENTS_PER_TURN = 4;
+
+  function _arrayBufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    const chunk = 0x8000; // avoid stack overflow on large blobs
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  async function _sha256Hex(buf) {
+    if (!(window.crypto && window.crypto.subtle && window.crypto.subtle.digest)) {
+      return null;
+    }
+    const digest = await window.crypto.subtle.digest('SHA-256', buf);
+    const bytes = new Uint8Array(digest);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+
+  /**
+   * Convert a File (from paste / drop / file-picker) into the
+   * attachment dict shape the backend's `InboundMessage`
+   * accepts: { kind, media_type, data_b64, sha256? }.
+   *
+   * Returns null on validation failure (non-image MIME, too
+   * large) so the caller can surface a toast and skip.
+   */
+  async function _fileToAttachment(file) {
+    if (!file) return null;
+    const media = file.type || '';
+    if (!media.startsWith('image/')) {
+      return { _error: `${file.name || 'file'} is not an image (${media || 'no MIME'}).` };
+    }
+    if (file.size > _MAX_ATTACHMENT_BYTES) {
+      return { _error: `${file.name || 'file'} exceeds 10 MiB attachment cap.` };
+    }
+    const buf = await file.arrayBuffer();
+    const data_b64 = _arrayBufferToBase64(buf);
+    let sha256 = null;
+    try { sha256 = await _sha256Hex(buf); } catch (_) { /* optional */ }
+    return {
+      kind:       'image',
+      media_type: media,
+      data_b64:   data_b64,
+      sha256:     sha256,
+      // Display-only fields, never sent to the LLM:
+      _name:      file.name || 'image',
+      _size:      file.size,
+      _preview:   `data:${media};base64,${data_b64}`,
+    };
+  }
+
+  function _attachmentForWire(att) {
+    // Strip the leading-underscore "display only" fields so
+    // the wire payload matches the InboundMessage shape
+    // exactly (Pydantic accepts extra fields silently, but
+    // the audit layer would log them).
+    const out = {
+      kind:       att.kind,
+      media_type: att.media_type,
+      data_b64:   att.data_b64,
+    };
+    if (att.sha256) out.sha256 = att.sha256;
+    return out;
+  }
+
   window.scienceChat = function () {
     return {
       messages: [],
@@ -77,6 +160,12 @@
       error: '',
       showRaw: false,
       lastTurnRaw: '',
+
+      // H3.3c — staged attachments awaiting send. Each entry
+      // is the dict returned by ``_fileToAttachment``;
+      // ``send()`` strips display fields before posting.
+      pendingAttachments: [],
+      dragging: false,
 
       init() {
         this.messages = readStored(STORAGE_KEY_MESSAGES, []);
@@ -114,19 +203,34 @@
 
       async send() {
         const text = (this.composer.text || '').trim();
-        if (!text) return;
+        const hasAttachments = (this.pendingAttachments || []).length > 0;
+        // H3.3c — an attachment-only turn (operator drops a
+        // spectrum image, hits send without typing) is valid.
+        // Only refuse if BOTH text and attachments are empty.
+        if (!text && !hasAttachments) return;
         if (!this.authenticated()) {
           window.omToasts.warning('Connect first to chat with the agent');
           return;
         }
         const userId = userIdFromAuth();
-        // append user turn locally
+        // Snapshot attachments before resetting the staged list
+        // so a re-send (after error) starts from a clean slate.
+        const attachments = (this.pendingAttachments || []).map(_attachmentForWire);
+        const attachmentPreviews = (this.pendingAttachments || []).map((a) => ({
+          name:    a._name,
+          size:    a._size,
+          preview: a._preview,
+        }));
+        // append user turn locally (carries previews for the
+        // transcript thumbnails; never the raw base64 bytes).
         this.messages.push({
           role: 'user',
           text,
           ts:   nowIso(),
+          attachments: attachmentPreviews,
         });
         this.composer.text = '';
+        this.pendingAttachments = [];
         this.composer.busy = true;
         this.error = '';
         this._persist();
@@ -137,12 +241,91 @@
           text,
         };
         if (this.sessionId) body.session_id = this.sessionId;
+        if (attachments.length) body.attachments = attachments;
 
         if (this.streamingEnabled) {
           await this._sendStreaming(body);
         } else {
           await this._sendOneShot(body);
         }
+      },
+
+      // ----- H3.3c: attachment intake (paste / drag-drop / picker) -----
+
+      async _ingestFiles(files) {
+        if (!files || !files.length) return;
+        for (const f of files) {
+          if (this.pendingAttachments.length >= _MAX_ATTACHMENTS_PER_TURN) {
+            window.omToasts.warning(
+              `Attachment cap reached (${_MAX_ATTACHMENTS_PER_TURN}). Remove some before adding more.`
+            );
+            break;
+          }
+          try {
+            const att = await _fileToAttachment(f);
+            if (!att) continue;
+            if (att._error) {
+              window.omToasts.warning(att._error);
+              continue;
+            }
+            this.pendingAttachments.push(att);
+          } catch (e) {
+            window.omToasts.error(
+              `Failed to stage ${f && f.name || 'file'}: ${e && e.message || e}`
+            );
+          }
+        }
+      },
+
+      async onComposerPaste(ev) {
+        const items = (ev && ev.clipboardData && ev.clipboardData.items) || [];
+        const files = [];
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (it.kind === 'file') {
+            const f = it.getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (!files.length) return;  // plain text paste — let default handler run
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        await this._ingestFiles(files);
+      },
+
+      onComposerDragOver(ev) {
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        this.dragging = true;
+      },
+
+      onComposerDragLeave() {
+        this.dragging = false;
+      },
+
+      async onComposerDrop(ev) {
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        this.dragging = false;
+        const dt = ev && ev.dataTransfer;
+        const files = (dt && dt.files) ? Array.from(dt.files) : [];
+        await this._ingestFiles(files);
+      },
+
+      async onComposerFilePicker(ev) {
+        const input = ev && ev.target;
+        const files = (input && input.files) ? Array.from(input.files) : [];
+        await this._ingestFiles(files);
+        if (input) input.value = '';
+      },
+
+      removeAttachment(idx) {
+        if (idx < 0 || idx >= this.pendingAttachments.length) return;
+        this.pendingAttachments.splice(idx, 1);
+      },
+
+      _formatAttBytes(n) {
+        if (typeof n !== 'number' || !isFinite(n) || n < 0) return '—';
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+        return `${(n / (1024 * 1024)).toFixed(2)} MiB`;
       },
 
       async _sendOneShot(body) {

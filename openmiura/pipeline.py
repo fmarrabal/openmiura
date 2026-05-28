@@ -173,7 +173,11 @@ def process_message(gw: Gateway, msg: InboundMessage) -> OutboundMessage:
                 channel=msg.channel,
                 user_id=user_key,
                 session_id=session_id,
-                payload=msg.model_dump(),
+                # H3.3c — strip attachment bytes before audit so
+                # the events table doesn't balloon. The
+                # ``attachments_meta`` field carries sha256 +
+                # size + media_type per attachment.
+                payload=msg.model_dump_for_audit(),
                 tenant_id=tenant_id,
                 workspace_id=workspace_id,
                 environment=environment,
@@ -294,6 +298,10 @@ def process_message(gw: Gateway, msg: InboundMessage) -> OutboundMessage:
                 extra_system = gw.memory.format_context(hits)
 
             runtime_t0 = time.perf_counter()
+            # H3.3c — only pass attachments through if the
+            # runtime accepts the kwarg. Older runtimes (or
+            # test doubles) without the new signature fall
+            # through to the legacy call below.
             try:
                 reply_text = gw.runtime.generate_reply(
                     agent_id=agent_id,
@@ -307,6 +315,7 @@ def process_message(gw: Gateway, msg: InboundMessage) -> OutboundMessage:
                     environment=environment,
                     channel=msg.channel,
                     trace_collector=trace_payload,
+                    attachments=(msg.attachments or None),
                 ) + gw.link_hint(channel_user_id)
             except TypeError:
                 reply_text = gw.runtime.generate_reply(

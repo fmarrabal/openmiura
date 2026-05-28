@@ -272,12 +272,23 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
     # ----- Audit user turn BEFORE streaming -----
     try:
         gw.audit.append_message(session_id=session_id, role="user", content=msg.text)
+        # H3.3c — include attachments_meta (byte-free) in the
+        # audit payload when the user attached images. The raw
+        # base64 bytes are forwarded to the LLM via the runtime
+        # call below but never persisted in the events table.
+        in_payload: dict[str, Any] = {
+            "text":          msg.text,
+            "metadata_keys": sorted(list(metadata.keys())),
+        }
+        att_meta = msg.attachments_audit_meta()
+        if att_meta:
+            in_payload["attachments_meta"] = att_meta
         gw.audit.log_event(
             direction="in",
             channel=channel,
             user_id=user_key,
             session_id=session_id,
-            payload={"text": msg.text, "metadata_keys": sorted(list(metadata.keys()))},
+            payload=in_payload,
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             environment=environment,
@@ -293,19 +304,25 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
     usage: dict[str, int] | None = None
     saw_error = False
 
+    # H3.3c — only forward attachments if the runtime
+    # accepts the kwarg. Older runtimes / test doubles fall
+    # back to the legacy signature.
+    stream_kwargs: dict[str, Any] = dict(
+        agent_id=agent_id,
+        session_id=session_id,
+        user_text=msg.text,
+        extra_system=None,
+        tools_runtime=tools_runtime,
+        user_key=user_key,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        environment=environment,
+        channel=channel,
+    )
+    if msg.attachments:
+        stream_kwargs["attachments"] = msg.attachments
     try:
-        async for ev in gw.runtime.generate_reply_stream(
-            agent_id=agent_id,
-            session_id=session_id,
-            user_text=msg.text,
-            extra_system=None,
-            tools_runtime=tools_runtime,
-            user_key=user_key,
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            channel=channel,
-        ):
+        async for ev in gw.runtime.generate_reply_stream(**stream_kwargs):
             if ev.kind == "delta":
                 content_accum += ev.delta or ""
                 yield _sse_event("chunk", {"delta": ev.delta or "", "index": -1})
