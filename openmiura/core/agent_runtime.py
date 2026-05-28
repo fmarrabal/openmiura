@@ -88,6 +88,7 @@ class AgentRuntime:
         session_id: str,
         user_text: str,
         extra_system: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         agent_cfg = self._agent_cfg(agent_id)
         system_prompt = agent_cfg.get('system_prompt', 'You are openMiura.')
@@ -116,7 +117,18 @@ class AgentRuntime:
             or messages[-1]['role'] != 'user'
             or messages[-1]['content'] != user_text
         ):
-            messages.append({'role': 'user', 'content': user_text})
+            user_msg: dict[str, Any] = {'role': 'user', 'content': user_text}
+            # H3.3c — attach the multi-modal blobs to the live
+            # user turn only. History is text-only (we don't
+            # round-trip bytes through the audit DB), so
+            # attachments don't leak into prior turns. The
+            # per-provider translators in ``openmiura.core.llm.*``
+            # know how to lift this into their wire shape (Ollama
+            # ``images: []``, OpenAI ``image_url`` blocks,
+            # Anthropic ``image source`` blocks).
+            if attachments:
+                user_msg['attachments'] = attachments
+            messages.append(user_msg)
 
         return messages
 
@@ -134,6 +146,7 @@ class AgentRuntime:
         environment: str | None = None,
         channel: str | None = None,
         trace_collector: dict[str, Any] | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> str:
         import time
 
@@ -143,6 +156,7 @@ class AgentRuntime:
             session_id=session_id,
             user_text=user_text,
             extra_system=extra_system,
+            attachments=attachments,
         )
 
         agent_cfg = self._agent_cfg(agent_id)
@@ -337,6 +351,7 @@ class AgentRuntime:
         workspace_id: str | None = None,
         environment: str | None = None,
         channel: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[LlmStreamEvent]:
         """Async-generator sibling of ``generate_reply``.
 
@@ -378,6 +393,7 @@ class AgentRuntime:
             session_id=session_id,
             user_text=user_text,
             extra_system=extra_system,
+            attachments=attachments,
         )
         agent_cfg = self._agent_cfg(agent_id)
 

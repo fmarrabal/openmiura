@@ -281,28 +281,56 @@
               </section>
 
               <!-- composer -->
-              <section class="om-card">
+              <section class="om-card"
+                       @dragover="onComposerDragOver($event)"
+                       @dragleave="onComposerDragLeave()"
+                       @drop="onComposerDrop($event)"
+                       :class="dragging ? 'ring-2 ring-accent-400' : ''">
                 <label class="block">
                   <span class="text-xs uppercase tracking-wider text-surface-500 dark:text-surface-400">Your message</span>
                   <textarea x-model="composer.text" rows="3" spellcheck="true"
-                            placeholder="Ask the agent — e.g. 'Process the NMR file I uploaded yesterday and draft the assignment.'"
+                            placeholder="Ask the agent — e.g. 'Process the NMR file I uploaded yesterday and draft the assignment.' Paste or drop images directly."
                             class="mt-1 w-full px-3 py-2 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 text-sm"
                             @keydown.ctrl.enter.prevent="send()"
-                            @keydown.meta.enter.prevent="send()"></textarea>
+                            @keydown.meta.enter.prevent="send()"
+                            @paste="onComposerPaste($event)"></textarea>
                 </label>
+                <!-- H3.3c — staged attachments strip -->
+                <div x-show="pendingAttachments.length" x-cloak class="mt-2 flex flex-wrap gap-2">
+                  <template x-for="(att, idx) in pendingAttachments" :key="idx">
+                    <div class="relative inline-flex items-center gap-2 p-1 pr-2 rounded-md border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800">
+                      <img :src="att._preview" :alt="att._name"
+                           class="w-12 h-12 object-cover rounded-sm" />
+                      <div class="text-[10px] font-mono leading-tight max-w-[160px]">
+                        <p class="truncate" x-text="att._name"></p>
+                        <p class="text-surface-500 dark:text-surface-400" x-text="_formatAttBytes(att._size) + ' · ' + att.media_type"></p>
+                      </div>
+                      <button type="button"
+                              class="om-btn om-btn--ghost om-btn--sm text-[10px] !px-1.5 !py-0.5"
+                              @click="removeAttachment(idx)"
+                              :aria-label="'Remove ' + att._name">×</button>
+                    </div>
+                  </template>
+                </div>
                 <div class="mt-2 flex items-center justify-between gap-2 flex-wrap">
                   <div class="flex items-center gap-3">
-                    <span class="text-[10px] text-surface-500 dark:text-surface-400">Ctrl/⌘ + Enter to send</span>
+                    <span class="text-[10px] text-surface-500 dark:text-surface-400">Ctrl/⌘ + Enter to send · paste / drop images</span>
                     <label class="inline-flex items-center gap-1 text-[10px] text-surface-500 dark:text-surface-400 cursor-pointer">
                       <input type="checkbox" x-model="streamingEnabled" class="cursor-pointer" />
                       <span>stream</span>
+                    </label>
+                    <label class="inline-flex items-center gap-1 text-[10px] text-accent-700 dark:text-accent-300 cursor-pointer hover:underline"
+                           title="Attach images (PNG/JPEG/WebP, ≤10 MiB each, ≤4 per turn)">
+                      <input type="file" accept="image/*" multiple class="hidden"
+                             @change="onComposerFilePicker($event)" />
+                      <span>+ attach image</span>
                     </label>
                   </div>
                   <div class="flex items-center gap-2">
                     <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw = !showRaw" :disabled="!lastTurnRaw">
                       <span x-show="!showRaw">show last response raw</span><span x-show="showRaw">hide raw</span>
                     </button>
-                    <button class="om-btn om-btn--primary om-btn--sm" @click="send()" :disabled="composer.busy || !composer.text.trim()">
+                    <button class="om-btn om-btn--primary om-btn--sm" @click="send()" :disabled="composer.busy || (!composer.text.trim() && !pendingAttachments.length)">
                       <span x-show="!composer.busy">Send</span>
                       <span x-show="composer.busy">Sending…</span>
                     </button>
