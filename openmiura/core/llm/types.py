@@ -34,7 +34,15 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 
-StreamEventKind = Literal["delta", "tool_call", "tool_result", "usage", "done", "error"]
+StreamEventKind = Literal[
+    "delta",
+    "tool_call",
+    "tool_call_delta",
+    "tool_result",
+    "usage",
+    "done",
+    "error",
+]
 
 AttachmentKind = Literal["image"]
 
@@ -112,6 +120,59 @@ class ToolCall:
 
 
 @dataclass
+class ToolCallDelta:
+    """An incremental fragment of a tool call still being
+    streamed by the LLM, surfaced *before* the call is fully
+    assembled (H3.2).
+
+    Providers that stream tool-call arguments do so as a
+    sequence of JSON-string fragments:
+
+      - OpenAI: ``choices[].delta.tool_calls[].function.arguments``
+        — the name + id arrive in the first fragment, then
+        arguments accumulate piece by piece.
+      - Anthropic: ``content_block_start`` (name + id, no args)
+        followed by ``input_json_delta.partial_json`` fragments.
+
+    Forwarding these lets the UI show a call forming in real
+    time ("``search_pubmed({"query": "spin–…``") instead of
+    waiting for the whole JSON. It is purely additive
+    visibility: the fully-assembled ``ToolCall`` still arrives
+    later as a normal ``tool_call`` event, and *that* remains
+    the only trigger for execution. A consumer that ignores
+    ``tool_call_delta`` sees no behaviour change.
+
+    Fields:
+
+      - ``index`` — the provider's per-round tool-call index.
+        A single round can stream several calls; the index
+        lets a consumer group fragments belonging to the same
+        call. Stable for the lifetime of one call.
+      - ``id`` — the call id, present on the first fragment for
+        an index once known, ``None`` on subsequent
+        argument-only fragments.
+      - ``name`` — the function name, present on the first
+        fragment for an index, ``None`` on argument-only
+        fragments.
+      - ``arguments_delta`` — the raw JSON fragment for *this*
+        chunk (NOT cumulative). Concatenating every
+        ``arguments_delta`` for a given ``index`` reproduces
+        the full arguments JSON string. May be empty on the
+        opening fragment that only announces id + name.
+
+    Providers that deliver tool calls atomically (Ollama, which
+    returns a complete ``tool_calls`` array in the final
+    message) never emit ``tool_call_delta`` — they go straight
+    to ``tool_call``.
+    """
+
+    index: int
+    id: str | None = None
+    name: str | None = None
+    arguments_delta: str = ""
+
+
+@dataclass
 class ToolResult:
     """Outcome of a tool execution, surfaced to the streaming
     consumer between LLM rounds.
@@ -144,23 +205,29 @@ class LlmStreamEvent:
     (LLM clients) and ``generate_reply_stream`` (the agent
     runtime).
 
-    Exactly one of (``delta`` / ``tool_call`` / ``tool_result`` /
-    ``usage`` / ``error`` / ``final``) carries a meaningful
-    value for any given ``kind``; the rest are ``None``. We
-    do NOT use ``Optional`` unions over a base class because
-    the consuming code (HTTP SSE emitter, science chat UI)
-    wants cheap attribute access without isinstance checks.
+    Exactly one of (``delta`` / ``tool_call`` /
+    ``tool_call_delta`` / ``tool_result`` / ``usage`` /
+    ``error`` / ``final``) carries a meaningful value for any
+    given ``kind``; the rest are ``None``. We do NOT use
+    ``Optional`` unions over a base class because the consuming
+    code (HTTP SSE emitter, science chat UI) wants cheap
+    attribute access without isinstance checks.
 
-    The LLM clients only emit (``delta`` / ``tool_call`` /
-    ``usage`` / ``done`` / ``error``). The ``tool_result``
-    kind is emitted exclusively by the agent runtime after
-    it executes a tool the LLM requested — this lets the
-    UI render a "tool X finished" badge between LLM rounds.
+    The LLM clients emit (``delta`` / ``tool_call`` /
+    ``tool_call_delta`` / ``usage`` / ``done`` / ``error``).
+    ``tool_call_delta`` (H3.2) carries an incremental fragment
+    of a tool call still being streamed; it always precedes
+    the fully-assembled ``tool_call`` for the same call and is
+    optional visibility only. The ``tool_result`` kind is
+    emitted exclusively by the agent runtime after it executes
+    a tool the LLM requested — this lets the UI render a "tool
+    X finished" badge between LLM rounds.
     """
 
     kind: StreamEventKind
     delta: str | None = None
     tool_call: ToolCall | None = None
+    tool_call_delta: ToolCallDelta | None = None
     tool_result: ToolResult | None = None
     usage: dict[str, int] | None = None
     error: str | None = None
@@ -175,6 +242,10 @@ class LlmStreamEvent:
     @classmethod
     def make_tool_call(cls, tc: ToolCall) -> "LlmStreamEvent":
         return cls(kind="tool_call", tool_call=tc)
+
+    @classmethod
+    def make_tool_call_delta(cls, tcd: ToolCallDelta) -> "LlmStreamEvent":
+        return cls(kind="tool_call_delta", tool_call_delta=tcd)
 
     @classmethod
     def make_tool_result(cls, tr: ToolResult) -> "LlmStreamEvent":

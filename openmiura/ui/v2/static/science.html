@@ -254,7 +254,7 @@
                                         x-text="te.kind === 'call' ? '→ ' + (te.name || 'tool') : '✓ ' + (te.name || 'tool')"></span>
                                   <span class="text-surface-600 dark:text-surface-400 font-mono break-words"
                                         x-text="te.kind === 'call'
-                                                  ? JSON.stringify(te.arguments || {})
+                                                  ? (te.streaming && te.args_partial ? (te.args_partial + '…') : JSON.stringify(te.arguments || {}))
                                                   : (te.error ? ('error: ' + te.error) : truncateOutput(te.output, 200))"></span>
                                 </li>
                               </template>

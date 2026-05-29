@@ -302,7 +302,7 @@ def test_chat_stream_never_raises_pin_contract():
     client = _build_client(_connect_error)
     events = _collect(client)
     # Got an event, not an exception.
-    assert all(e.kind in ("delta", "tool_call", "usage", "done", "error") for e in events)
+    assert all(e.kind in ("delta", "tool_call", "tool_call_delta", "usage", "done", "error") for e in events)
     assert events[-1].kind == "error"
 
 
