@@ -219,6 +219,7 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
 
       event: meta         streaming_mode = "native"
       event: chunk        per-LLM-token delta, no pacing
+      event: tool_call_delta  incremental tool-argument fragment (H3.2)
       event: tool_call    LLM requested a tool
       event: tool_result  runtime ran the tool, emits output
       event: usage        consolidated token usage
@@ -326,6 +327,17 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
             if ev.kind == "delta":
                 content_accum += ev.delta or ""
                 yield _sse_event("chunk", {"delta": ev.delta or "", "index": -1})
+            elif ev.kind == "tool_call_delta" and ev.tool_call_delta is not None:
+                # H3.2 — incremental tool-argument fragment. The
+                # UI groups fragments by index and appends
+                # arguments_delta to show the call forming; the
+                # authoritative tool_call event follows.
+                yield _sse_event("tool_call_delta", {
+                    "index":           ev.tool_call_delta.index,
+                    "id":              ev.tool_call_delta.id,
+                    "name":            ev.tool_call_delta.name,
+                    "arguments_delta": ev.tool_call_delta.arguments_delta,
+                })
             elif ev.kind == "tool_call" and ev.tool_call is not None:
                 yield _sse_event("tool_call", {
                     "name":      ev.tool_call.name,

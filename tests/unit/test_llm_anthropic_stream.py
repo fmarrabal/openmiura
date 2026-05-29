@@ -215,14 +215,18 @@ def test_chat_stream_text_then_tool_use_mixed():
     events = _collect(client)
 
     kinds = [e.kind for e in events]
-    # Expect: delta (text) → tool_call → usage → done
-    assert kinds[0] == "delta"
-    assert kinds[1] == "tool_call"
-    assert kinds[2] == "usage"
-    assert kinds[3] == "done"
+    # H3.2: the tool_use block now streams tool_call_delta
+    # fragments (one opening fragment carrying id+name, then
+    # one per input_json_delta) BEFORE the assembled tool_call.
+    # Check the backbone sequence with the fragments filtered
+    # out, then assert the fragments actually appeared.
+    backbone = [k for k in kinds if k != "tool_call_delta"]
+    assert backbone == ["delta", "tool_call", "usage", "done"]
+    assert "tool_call_delta" in kinds
     assert events[0].delta == "I'll check that."
-    assert events[1].tool_call.name == "web_fetch"
-    assert events[1].tool_call.arguments == {"url": "https://e.x"}
+    tc = next(e for e in events if e.kind == "tool_call")
+    assert tc.tool_call.name == "web_fetch"
+    assert tc.tool_call.arguments == {"url": "https://e.x"}
 
 
 def test_chat_stream_tool_use_without_input_yields_empty_args():
@@ -337,7 +341,7 @@ def test_chat_stream_never_raises_pin_contract():
         raise httpx.ConnectError("nope", request=req)
     client = _build_client(_connect_error)
     events = _collect(client)
-    assert all(e.kind in ("delta", "tool_call", "usage", "done", "error") for e in events)
+    assert all(e.kind in ("delta", "tool_call", "tool_call_delta", "usage", "done", "error") for e in events)
 
 
 # ------------------------------------------------------------------

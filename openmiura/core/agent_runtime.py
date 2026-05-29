@@ -456,6 +456,12 @@ class AgentRuntime:
                     elif ev.kind == "tool_call" and ev.tool_call is not None:
                         round_tool_calls.append(ev.tool_call)
                         yield ev
+                    elif ev.kind == "tool_call_delta" and ev.tool_call_delta is not None:
+                        # H3.2 — incremental tool-argument fragment.
+                        # Pure visibility: forward as-is, never
+                        # accumulate into round_tool_calls (the
+                        # complete tool_call event does that).
+                        yield ev
                     elif ev.kind == "usage" and ev.usage:
                         # Accumulate across rounds — emit at the
                         # end as one consolidated usage event.

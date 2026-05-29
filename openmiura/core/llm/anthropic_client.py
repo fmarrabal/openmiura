@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
-from .types import ChatResponse, LlmStreamEvent, ToolCall
+from .types import ChatResponse, LlmStreamEvent, ToolCall, ToolCallDelta
 
 
 # ------------------------------------------------------------------
@@ -74,35 +74,51 @@ class _StreamingBlockAssembler:
     def __init__(self) -> None:
         self._slots: dict[int, dict[str, Any]] = {}
 
-    def ingest_start(self, idx: int, block: dict[str, Any]) -> None:
+    def ingest_start(self, idx: int, block: dict[str, Any]) -> ToolCallDelta | None:
+        """Register a content block. For tool_use blocks,
+        return an opening ``ToolCallDelta`` carrying the call's
+        id + name (no args yet) so the caller can announce the
+        call before its argument JSON streams in (H3.2)."""
         btype = block.get('type')
         if btype == 'text':
             self._slots[idx] = {'type': 'text', 'text': str(block.get('text') or '')}
         elif btype == 'tool_use':
+            cid = str(block.get('id') or '') or None
+            name = str(block.get('name') or '').strip()
             self._slots[idx] = {
                 'type':         'tool_use',
-                'id':           str(block.get('id') or '') or None,
-                'name':         str(block.get('name') or '').strip(),
+                'id':           cid,
+                'name':         name,
                 'partial_json': '',
             }
+            return ToolCallDelta(index=idx, id=cid, name=name or None, arguments_delta='')
+        return None
 
-    def ingest_delta(self, idx: int, delta: dict[str, Any]) -> str | None:
-        """Apply a content_block_delta. Returns the text
-        fragment to yield as a ``delta`` event, or None if
-        the delta belonged to a tool_use block (buffered)."""
+    def ingest_delta(self, idx: int, delta: dict[str, Any]) -> tuple[str | None, ToolCallDelta | None]:
+        """Apply a content_block_delta. Returns
+        ``(text_fragment, tool_call_delta)`` where at most one
+        is non-None: text blocks yield the text fragment to
+        emit as a ``delta`` event; tool_use blocks buffer the
+        partial JSON AND return a ``ToolCallDelta`` carrying
+        that raw fragment (H3.2) so the UI sees args forming."""
         if idx not in self._slots:
-            return None
+            return (None, None)
         slot = self._slots[idx]
         dtype = delta.get('type')
         if slot['type'] == 'text' and dtype == 'text_delta':
             text = str(delta.get('text') or '')
             if text:
                 slot['text'] += text
-                return text
+                return (text, None)
         elif slot['type'] == 'tool_use' and dtype == 'input_json_delta':
             piece = str(delta.get('partial_json') or '')
             slot['partial_json'] += piece
-        return None
+            if piece:
+                # id + name already delivered on the opening
+                # delta; argument-only fragments carry None for
+                # both (mirrors the OpenAI fragment shape).
+                return (None, ToolCallDelta(index=idx, arguments_delta=piece))
+        return (None, None)
 
     def finalise_block(self, idx: int) -> ToolCall | None:
         """Mark a block as complete. Returns the ToolCall to
@@ -465,13 +481,17 @@ class AnthropicClient:
                         elif ev == 'content_block_start':
                             idx = obj.get('index', 0)
                             block = obj.get('content_block') or {}
-                            assembler.ingest_start(int(idx), block)
+                            tcd = assembler.ingest_start(int(idx), block)
+                            if tcd is not None:
+                                yield LlmStreamEvent.make_tool_call_delta(tcd)
                         elif ev == 'content_block_delta':
                             idx = obj.get('index', 0)
                             delta = obj.get('delta') or {}
-                            text_piece = assembler.ingest_delta(int(idx), delta)
+                            text_piece, tcd = assembler.ingest_delta(int(idx), delta)
                             if text_piece:
                                 yield LlmStreamEvent.make_delta(text_piece)
+                            if tcd is not None:
+                                yield LlmStreamEvent.make_tool_call_delta(tcd)
                         elif ev == 'content_block_stop':
                             idx = obj.get('index', 0)
                             tc = assembler.finalise_block(int(idx))

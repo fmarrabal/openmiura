@@ -507,19 +507,73 @@
             }
             agentTurn.text += delta;
           }
+        } else if (event === 'tool_call_delta') {
+          // H3.2: native-only event. An incremental fragment of
+          // a tool call still being streamed by the LLM. We
+          // group fragments by index into a single "streaming"
+          // call badge so the operator watches the arguments
+          // JSON form in real time; the authoritative tool_call
+          // event finalises it in place below.
+          agentTurn.tool_events = agentTurn.tool_events || [];
+          const idx = (payload.index != null) ? payload.index : 0;
+          let slot = agentTurn.tool_events.find(
+            (e) => e.kind === 'call' && e.streaming && e.index === idx
+          );
+          if (!slot) {
+            slot = {
+              kind:         'call',
+              index:        idx,
+              name:         payload.name || '',
+              id:           payload.id || null,
+              arguments:    {},
+              args_partial: '',
+              streaming:    true,
+              ts:           nowIso(),
+            };
+            agentTurn.tool_events.push(slot);
+          }
+          if (payload.name) slot.name = payload.name;
+          if (payload.id) slot.id = payload.id;
+          slot.args_partial = (slot.args_partial || '') + (payload.arguments_delta || '');
         } else if (event === 'tool_call') {
           // H1.6: native-only event. The runtime tells us the
           // LLM is invoking a tool. Render an inline badge so
           // the operator sees the action without having to
           // open the raw payload.
+          //
+          // H3.2: if a streaming placeholder already exists for
+          // this call (built from tool_call_delta fragments),
+          // finalise it in place instead of pushing a duplicate.
+          // Match by id first, then by the first still-streaming
+          // call with the same name (covers providers that omit
+          // the id on the final event).
           agentTurn.tool_events = agentTurn.tool_events || [];
-          agentTurn.tool_events.push({
-            kind:      'call',
-            name:      payload.name || '',
-            id:        payload.id || null,
-            arguments: payload.arguments || {},
-            ts:        nowIso(),
-          });
+          let slot = null;
+          if (payload.id) {
+            slot = agentTurn.tool_events.find(
+              (e) => e.kind === 'call' && e.streaming && e.id === payload.id
+            );
+          }
+          if (!slot) {
+            slot = agentTurn.tool_events.find(
+              (e) => e.kind === 'call' && e.streaming && (e.name || '') === (payload.name || '')
+            );
+          }
+          if (slot) {
+            slot.name      = payload.name || slot.name;
+            slot.id        = payload.id || slot.id;
+            slot.arguments = payload.arguments || {};
+            slot.streaming = false;
+          } else {
+            agentTurn.tool_events.push({
+              kind:      'call',
+              name:      payload.name || '',
+              id:        payload.id || null,
+              arguments: payload.arguments || {},
+              streaming: false,
+              ts:        nowIso(),
+            });
+          }
         } else if (event === 'tool_result') {
           // H1.6: native-only event. The runtime ran the tool;
           // the output (or error) lands here. We match it back

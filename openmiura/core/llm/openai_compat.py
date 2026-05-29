@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
-from .types import Attachment, ChatResponse, LlmStreamEvent, ToolCall
+from .types import Attachment, ChatResponse, LlmStreamEvent, ToolCall, ToolCallDelta
 
 
 # ------------------------------------------------------------------
@@ -173,9 +173,16 @@ class _ToolCallAssembler:
     def __init__(self) -> None:
         self._slots: dict[int, dict[str, Any]] = {}
 
-    def absorb(self, deltas: Any) -> None:
+    def absorb(self, deltas: Any) -> list[ToolCallDelta]:
+        """Accumulate streamed fragments and return one
+        ``ToolCallDelta`` per fragment that carried new
+        information (id, name, or an argument piece). H3.2 — the
+        caller forwards these so the UI sees the call forming;
+        the assembler's own buffer (drained by ``flush``) is
+        still the source of the final ToolCall."""
+        out: list[ToolCallDelta] = []
         if not isinstance(deltas, list):
-            return
+            return out
         for d in deltas:
             if not isinstance(d, dict):
                 continue
@@ -187,22 +194,38 @@ class _ToolCallAssembler:
                 'id': None,
                 'function': {'name': None, 'arguments': ''},
             })
+            frag_id: str | None = None
+            frag_name: str | None = None
+            frag_args = ''
             if d.get('id'):
                 slot['id'] = str(d['id'])
+                frag_id = slot['id']
             fn = d.get('function') or {}
             if isinstance(fn, dict):
                 if fn.get('name'):
                     slot['function']['name'] = str(fn['name'])
+                    frag_name = slot['function']['name']
                 args = fn.get('arguments')
                 if isinstance(args, str):
                     slot['function']['arguments'] += args
+                    frag_args = args
                 elif isinstance(args, dict):
                     # Some providers send a complete dict in
                     # a single chunk. Marshal back to a
                     # JSON string so the final json.loads
                     # call in _parse_tool_call_dict yields
                     # the dict we want.
-                    slot['function']['arguments'] = json.dumps(args)
+                    marshalled = json.dumps(args)
+                    slot['function']['arguments'] = marshalled
+                    frag_args = marshalled
+            if frag_id or frag_name or frag_args:
+                out.append(ToolCallDelta(
+                    index=idx,
+                    id=frag_id,
+                    name=frag_name,
+                    arguments_delta=frag_args,
+                ))
+        return out
 
     def flush(self) -> list[ToolCall]:
         """Drain the assembler, returning all complete tool
@@ -446,9 +469,14 @@ class OpenAICompatibleClient:
                                 content_accum += text
                                 yield LlmStreamEvent.make_delta(text)
 
-                        # Tool call deltas — absorb piecewise.
+                        # Tool call deltas — absorb piecewise and
+                        # forward each fragment as a tool_call_delta
+                        # so the UI can render the call forming
+                        # (H3.2). The fully-assembled tool_call
+                        # still fires later on finish_reason.
                         if 'tool_calls' in delta and delta['tool_calls']:
-                            assembler.absorb(delta['tool_calls'])
+                            for tcd in assembler.absorb(delta['tool_calls']):
+                                yield LlmStreamEvent.make_tool_call_delta(tcd)
 
                         # finish_reason signals the end of a
                         # message. "tool_calls" is the right
