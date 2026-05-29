@@ -520,54 +520,70 @@ class AgentRuntime:
                     ],
                 })
 
-                # Execute each tool in a thread (the runtime is
-                # sync) and yield a tool_result event per tool.
-                for tc in round_tool_calls:
-                    output = ''
-                    error_msg: str | None = None
+                # H3.1 — Execute all tool calls in the round
+                # concurrently via ``asyncio.gather`` so a round
+                # with 3 tools that each take 2 s completes in
+                # ~2 s instead of 6 s.
+                #
+                # ``asyncio.gather`` preserves INPUT order in its
+                # returned list, so the audit + UI streams still
+                # see deterministic ordering (matches the
+                # request order, not the completion order). The
+                # legacy ``test_multiple_parallel_tool_calls_in_one_round``
+                # test pins this contract.
+                async def _execute_tool(
+                    tc=None,  # captured per-task below
+                ) -> tuple[ToolCall, str, str | None]:
+                    """Run one tool, return (tc, output, error_msg).
+                    Never raises — wraps every exception as the
+                    error_msg field so ``gather`` doesn't abort
+                    sibling tasks."""
+                    assert tc is not None
                     if tools_runtime is None or not user_key:
-                        error_msg = 'No tools_runtime / user_key configured'
-                        output = error_msg
-                    else:
-                        def _run(tc=tc):
-                            return tools_runtime.run_tool(
-                                agent_id=agent_id,
-                                session_id=session_id,
-                                user_key=user_key,
-                                tool_name=tc.name,
-                                args=tc.arguments or {},
-                                tenant_id=tenant_id,
-                                workspace_id=workspace_id,
-                                environment=environment,
-                                channel=channel,
-                            )
+                        msg = 'No tools_runtime / user_key configured'
+                        return tc, msg, msg
+                    def _run():
+                        return tools_runtime.run_tool(
+                            agent_id=agent_id,
+                            session_id=session_id,
+                            user_key=user_key,
+                            tool_name=tc.name,
+                            args=tc.arguments or {},
+                            tenant_id=tenant_id,
+                            workspace_id=workspace_id,
+                            environment=environment,
+                            channel=channel,
+                        )
+                    def _run_legacy():
+                        return tools_runtime.run_tool(
+                            agent_id=agent_id,
+                            session_id=session_id,
+                            user_key=user_key,
+                            tool_name=tc.name,
+                            args=tc.arguments or {},
+                        )
+                    try:
+                        out = await loop.run_in_executor(None, _run)
+                        return tc, str(out), None
+                    except TypeError:
                         try:
-                            output = await loop.run_in_executor(None, _run)
-                        except TypeError:
-                            # Older tools_runtime signature.
-                            def _run_legacy(tc=tc):
-                                return tools_runtime.run_tool(
-                                    agent_id=agent_id,
-                                    session_id=session_id,
-                                    user_key=user_key,
-                                    tool_name=tc.name,
-                                    args=tc.arguments or {},
-                                )
-                            try:
-                                output = await loop.run_in_executor(None, _run_legacy)
-                            except ToolConfirmationRequired as e:
-                                output = str(e)
-                            except Exception as e:
-                                record_error(type(e).__name__)
-                                error_msg = f'{type(e).__name__}: {e!r}'
-                                output = f'Tool {tc.name} failed: {e!r}'
+                            out = await loop.run_in_executor(None, _run_legacy)
+                            return tc, str(out), None
                         except ToolConfirmationRequired as e:
-                            output = str(e)
+                            return tc, str(e), None
                         except Exception as e:
                             record_error(type(e).__name__)
-                            error_msg = f'{type(e).__name__}: {e!r}'
-                            output = f'Tool {tc.name} failed: {e!r}'
+                            return tc, f'Tool {tc.name} failed: {e!r}', f'{type(e).__name__}: {e!r}'
+                    except ToolConfirmationRequired as e:
+                        return tc, str(e), None
+                    except Exception as e:
+                        record_error(type(e).__name__)
+                        return tc, f'Tool {tc.name} failed: {e!r}', f'{type(e).__name__}: {e!r}'
 
+                results = await asyncio.gather(
+                    *[_execute_tool(tc=tc) for tc in round_tool_calls]
+                )
+                for tc, output, error_msg in results:
                     yield LlmStreamEvent.make_tool_result(
                         ToolResult(
                             name=tc.name,
