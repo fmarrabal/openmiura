@@ -507,6 +507,16 @@
             }
             agentTurn.text += delta;
           }
+        } else if (event === 'thinking') {
+          // H3.4: native-only event. An incremental fragment of
+          // the model's extended-thinking reasoning trace. We
+          // accumulate it into a separate per-turn field the
+          // operator can expand (see the collapsible "thinking"
+          // section in the transcript). It is NEVER merged into
+          // agentTurn.text — the reasoning is not the answer.
+          const piece = (payload && payload.delta) || '';
+          if (!piece) return;
+          agentTurn.thinking = (agentTurn.thinking || '') + piece;
         } else if (event === 'tool_call_delta') {
           // H3.2: native-only event. An incremental fragment of
           // a tool call still being streamed by the LLM. We

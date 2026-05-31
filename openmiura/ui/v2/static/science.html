@@ -242,6 +242,20 @@
                                   x-text="m.streaming_mode"></span>
                           </p>
 
+                          <!-- H3.4: extended-thinking reasoning trace (collapsible, native streaming only) -->
+                          <template x-if="m.role === 'agent' && m.thinking">
+                            <div x-data="{ openThinking: false }" class="text-[11px]">
+                              <button type="button" @click="openThinking = !openThinking"
+                                      class="inline-flex items-center gap-1 cursor-pointer text-surface-500 dark:text-surface-400 hover:underline">
+                                <span class="om-badge om-badge--neutral text-[9px] font-mono">thinking</span>
+                                <span x-text="openThinking ? '▾ hide reasoning' : '▸ show reasoning'"></span>
+                              </button>
+                              <div x-show="openThinking" x-cloak
+                                   class="mt-1 pl-2 border-l-2 border-surface-300 dark:border-surface-700 text-surface-600 dark:text-surface-400 font-mono whitespace-pre-wrap break-words"
+                                   x-text="m.thinking"></div>
+                            </div>
+                          </template>
+
                           <!-- H1.6: tool-event activity timeline (native streaming only) -->
                           <template x-if="m.role === 'agent' && m.tool_events && m.tool_events.length > 0">
                             <ul class="space-y-1 text-[11px]">

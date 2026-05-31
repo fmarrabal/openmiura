@@ -219,6 +219,7 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
 
       event: meta         streaming_mode = "native"
       event: chunk        per-LLM-token delta, no pacing
+      event: thinking     extended-thinking reasoning fragment (H3.4)
       event: tool_call_delta  incremental tool-argument fragment (H3.2)
       event: tool_call    LLM requested a tool
       event: tool_result  runtime ran the tool, emits output
@@ -327,6 +328,14 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
             if ev.kind == "delta":
                 content_accum += ev.delta or ""
                 yield _sse_event("chunk", {"delta": ev.delta or "", "index": -1})
+            elif ev.kind == "thinking" and ev.thinking is not None:
+                # H3.4 — extended-thinking fragment. Pure
+                # visibility: the model's reasoning trace,
+                # surfaced so the operator can audit how it
+                # reached the answer. Never accumulated into
+                # content_accum (the assistant answer) — it is
+                # a separate, collapsible stream in the UI.
+                yield _sse_event("thinking", {"delta": ev.thinking})
             elif ev.kind == "tool_call_delta" and ev.tool_call_delta is not None:
                 # H3.2 — incremental tool-argument fragment. The
                 # UI groups fragments by index and appends

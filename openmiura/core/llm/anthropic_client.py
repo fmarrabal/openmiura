@@ -78,10 +78,24 @@ class _StreamingBlockAssembler:
         """Register a content block. For tool_use blocks,
         return an opening ``ToolCallDelta`` carrying the call's
         id + name (no args yet) so the caller can announce the
-        call before its argument JSON streams in (H3.2)."""
+        call before its argument JSON streams in (H3.2).
+
+        H3.4 — ``thinking`` blocks register a slot that buffers
+        the extended-thinking reasoning trace; their text
+        arrives as ``thinking_delta`` fragments (see
+        ``ingest_delta``). ``redacted_thinking`` blocks (whose
+        reasoning is encrypted server-side) register a slot too
+        so a stray stop/delta never KeyErrors, but their
+        content is never surfaced. Neither thinking variant is
+        ever folded into ``text_accum`` — the assistant answer
+        stays clean."""
         btype = block.get('type')
         if btype == 'text':
             self._slots[idx] = {'type': 'text', 'text': str(block.get('text') or '')}
+        elif btype == 'thinking':
+            self._slots[idx] = {'type': 'thinking', 'thinking': str(block.get('thinking') or ''), 'signature': ''}
+        elif btype == 'redacted_thinking':
+            self._slots[idx] = {'type': 'redacted_thinking'}
         elif btype == 'tool_use':
             cid = str(block.get('id') or '') or None
             name = str(block.get('name') or '').strip()
@@ -94,22 +108,34 @@ class _StreamingBlockAssembler:
             return ToolCallDelta(index=idx, id=cid, name=name or None, arguments_delta='')
         return None
 
-    def ingest_delta(self, idx: int, delta: dict[str, Any]) -> tuple[str | None, ToolCallDelta | None]:
+    def ingest_delta(self, idx: int, delta: dict[str, Any]) -> tuple[str | None, ToolCallDelta | None, str | None]:
         """Apply a content_block_delta. Returns
-        ``(text_fragment, tool_call_delta)`` where at most one
-        is non-None: text blocks yield the text fragment to
-        emit as a ``delta`` event; tool_use blocks buffer the
-        partial JSON AND return a ``ToolCallDelta`` carrying
-        that raw fragment (H3.2) so the UI sees args forming."""
+        ``(text_fragment, tool_call_delta, thinking_fragment)``
+        where at most one is non-None:
+
+          - text blocks (``text_delta``) yield the text
+            fragment to emit as a ``delta`` event;
+          - tool_use blocks (``input_json_delta``) buffer the
+            partial JSON AND return a ``ToolCallDelta`` carrying
+            that raw fragment (H3.2) so the UI sees args
+            forming;
+          - thinking blocks (``thinking_delta``) buffer the
+            reasoning AND return the raw thinking fragment
+            (H3.4) so the UI can stream the trace.
+
+        ``signature_delta`` (the cryptographic signature
+        Anthropic appends to a thinking block) is buffered for
+        completeness but never surfaced — it carries no
+        human-readable reasoning."""
         if idx not in self._slots:
-            return (None, None)
+            return (None, None, None)
         slot = self._slots[idx]
         dtype = delta.get('type')
         if slot['type'] == 'text' and dtype == 'text_delta':
             text = str(delta.get('text') or '')
             if text:
                 slot['text'] += text
-                return (text, None)
+                return (text, None, None)
         elif slot['type'] == 'tool_use' and dtype == 'input_json_delta':
             piece = str(delta.get('partial_json') or '')
             slot['partial_json'] += piece
@@ -117,8 +143,16 @@ class _StreamingBlockAssembler:
                 # id + name already delivered on the opening
                 # delta; argument-only fragments carry None for
                 # both (mirrors the OpenAI fragment shape).
-                return (None, ToolCallDelta(index=idx, arguments_delta=piece))
-        return (None, None)
+                return (None, ToolCallDelta(index=idx, arguments_delta=piece), None)
+        elif slot['type'] == 'thinking':
+            if dtype == 'thinking_delta':
+                piece = str(delta.get('thinking') or '')
+                if piece:
+                    slot['thinking'] += piece
+                    return (None, None, piece)
+            elif dtype == 'signature_delta':
+                slot['signature'] += str(delta.get('signature') or '')
+        return (None, None, None)
 
     def finalise_block(self, idx: int) -> ToolCall | None:
         """Mark a block as complete. Returns the ToolCall to
@@ -186,16 +220,58 @@ class AnthropicClient:
         api_key_env_var: str,
         anthropic_version: str = '2023-06-01',
         max_output_tokens: int = 2048,
+        thinking_budget_tokens: int = 0,
         timeout_s: int = 60,
         transport: httpx.BaseTransport | httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        # H3.4 — extended thinking. ``thinking_budget_tokens``
+        # is opt-in (0 = disabled, the default). When > 0 the
+        # request asks Anthropic to emit a ``thinking`` content
+        # block budgeted to that many tokens, surfaced to the
+        # consumer as ``thinking`` stream events. Anthropic
+        # imposes two hard constraints we validate up-front so a
+        # misconfiguration fails loudly here rather than as an
+        # opaque 400 mid-stream:
+        #   - the budget must be at least 1024 tokens;
+        #   - ``max_output_tokens`` must exceed the budget
+        #     (the thinking tokens are drawn from the same
+        #     output allowance as the answer).
+        #
+        # NOTE (honest limitation): extended thinking is not yet
+        # compatible with the agent runtime's multi-round tool
+        # loop. Anthropic requires the signed thinking block to
+        # be echoed back in the assistant turn that precedes a
+        # tool_result, and the runtime does not yet round-trip
+        # it — so enabling this alongside tool calls will make
+        # the follow-up request fail. Use it for plain
+        # reasoning turns until that round-tripping lands.
+        if thinking_budget_tokens:
+            if thinking_budget_tokens < 1024:
+                raise ValueError(
+                    'thinking_budget_tokens must be >= 1024 when enabled '
+                    f'(got {thinking_budget_tokens})'
+                )
+            if max_output_tokens <= thinking_budget_tokens:
+                raise ValueError(
+                    'max_output_tokens must exceed thinking_budget_tokens '
+                    f'(max_output_tokens={max_output_tokens}, '
+                    f'thinking_budget_tokens={thinking_budget_tokens})'
+                )
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.api_key_env_var = api_key_env_var
         self.anthropic_version = anthropic_version
         self.max_output_tokens = max_output_tokens
+        self.thinking_budget_tokens = thinking_budget_tokens
         self.timeout_s = timeout_s
         self._transport = transport
+
+    def _thinking_config(self) -> dict[str, Any] | None:
+        """The ``thinking`` request field when extended thinking
+        is enabled, else ``None`` (so the key is omitted)."""
+        if self.thinking_budget_tokens:
+            return {'type': 'enabled', 'budget_tokens': self.thinking_budget_tokens}
+        return None
 
     def _api_key(self) -> str:
         key = os.environ.get(self.api_key_env_var, '').strip()
@@ -348,6 +424,9 @@ class AnthropicClient:
         tool_defs = self._anthropic_tools(tools)
         if tool_defs:
             payload['tools'] = tool_defs
+        thinking = self._thinking_config()
+        if thinking:
+            payload['thinking'] = thinking
 
         try:
             client_kwargs: dict[str, Any] = {'timeout': self.timeout_s}
@@ -404,7 +483,9 @@ class AnthropicClient:
           - content_block_start   registers a block with the
                                   assembler
           - content_block_delta   text_delta → yield delta event;
-                                  input_json_delta → buffer
+                                  thinking_delta → yield thinking
+                                  event (H3.4); input_json_delta
+                                  → buffer + yield tool_call_delta
           - content_block_stop    if tool_use → flush ToolCall
           - message_delta         carries final output_tokens
           - message_stop          emit usage + done
@@ -426,6 +507,9 @@ class AnthropicClient:
         tool_defs = self._anthropic_tools(tools)
         if tool_defs:
             payload['tools'] = tool_defs
+        thinking = self._thinking_config()
+        if thinking:
+            payload['thinking'] = thinking
 
         try:
             headers = self._headers()
@@ -487,9 +571,11 @@ class AnthropicClient:
                         elif ev == 'content_block_delta':
                             idx = obj.get('index', 0)
                             delta = obj.get('delta') or {}
-                            text_piece, tcd = assembler.ingest_delta(int(idx), delta)
+                            text_piece, tcd, thinking_piece = assembler.ingest_delta(int(idx), delta)
                             if text_piece:
                                 yield LlmStreamEvent.make_delta(text_piece)
+                            if thinking_piece:
+                                yield LlmStreamEvent.make_thinking(thinking_piece)
                             if tcd is not None:
                                 yield LlmStreamEvent.make_tool_call_delta(tcd)
                         elif ev == 'content_block_stop':
