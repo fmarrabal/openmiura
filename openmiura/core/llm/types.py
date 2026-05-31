@@ -36,6 +36,7 @@ from typing import Any, Literal
 
 StreamEventKind = Literal[
     "delta",
+    "thinking",
     "tool_call",
     "tool_call_delta",
     "tool_result",
@@ -205,7 +206,7 @@ class LlmStreamEvent:
     (LLM clients) and ``generate_reply_stream`` (the agent
     runtime).
 
-    Exactly one of (``delta`` / ``tool_call`` /
+    Exactly one of (``delta`` / ``thinking`` / ``tool_call`` /
     ``tool_call_delta`` / ``tool_result`` / ``usage`` /
     ``error`` / ``final``) carries a meaningful value for any
     given ``kind``; the rest are ``None``. We do NOT use
@@ -213,19 +214,25 @@ class LlmStreamEvent:
     code (HTTP SSE emitter, science chat UI) wants cheap
     attribute access without isinstance checks.
 
-    The LLM clients emit (``delta`` / ``tool_call`` /
-    ``tool_call_delta`` / ``usage`` / ``done`` / ``error``).
-    ``tool_call_delta`` (H3.2) carries an incremental fragment
-    of a tool call still being streamed; it always precedes
-    the fully-assembled ``tool_call`` for the same call and is
-    optional visibility only. The ``tool_result`` kind is
-    emitted exclusively by the agent runtime after it executes
-    a tool the LLM requested — this lets the UI render a "tool
-    X finished" badge between LLM rounds.
+    The LLM clients emit (``delta`` / ``thinking`` /
+    ``tool_call`` / ``tool_call_delta`` / ``usage`` / ``done``
+    / ``error``). ``tool_call_delta`` (H3.2) carries an
+    incremental fragment of a tool call still being streamed;
+    it always precedes the fully-assembled ``tool_call`` for
+    the same call and is optional visibility only.
+    ``thinking`` (H3.4) carries an incremental fragment of the
+    model's extended-thinking reasoning trace (Anthropic
+    ``thinking_delta`` blocks); it is pure visibility and is
+    never merged into the assistant's answer text (``delta``)
+    or into ``ChatResponse.content``. The ``tool_result`` kind
+    is emitted exclusively by the agent runtime after it
+    executes a tool the LLM requested — this lets the UI render
+    a "tool X finished" badge between LLM rounds.
     """
 
     kind: StreamEventKind
     delta: str | None = None
+    thinking: str | None = None
     tool_call: ToolCall | None = None
     tool_call_delta: ToolCallDelta | None = None
     tool_result: ToolResult | None = None
@@ -238,6 +245,10 @@ class LlmStreamEvent:
     @classmethod
     def make_delta(cls, text: str) -> "LlmStreamEvent":
         return cls(kind="delta", delta=text)
+
+    @classmethod
+    def make_thinking(cls, text: str) -> "LlmStreamEvent":
+        return cls(kind="thinking", thinking=text)
 
     @classmethod
     def make_tool_call(cls, tc: ToolCall) -> "LlmStreamEvent":

@@ -462,6 +462,13 @@ class AgentRuntime:
                         # accumulate into round_tool_calls (the
                         # complete tool_call event does that).
                         yield ev
+                    elif ev.kind == "thinking" and ev.thinking is not None:
+                        # H3.4 — extended-thinking fragment. Pure
+                        # visibility: forward as-is; never folded
+                        # into round_content or content_accum (it
+                        # is the model's private reasoning, not the
+                        # assistant answer the audit trail records).
+                        yield ev
                     elif ev.kind == "usage" and ev.usage:
                         # Accumulate across rounds — emit at the
                         # end as one consolidated usage event.

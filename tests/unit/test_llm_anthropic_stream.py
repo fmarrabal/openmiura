@@ -341,7 +341,7 @@ def test_chat_stream_never_raises_pin_contract():
         raise httpx.ConnectError("nope", request=req)
     client = _build_client(_connect_error)
     events = _collect(client)
-    assert all(e.kind in ("delta", "tool_call", "tool_call_delta", "usage", "done", "error") for e in events)
+    assert all(e.kind in ("delta", "thinking", "tool_call", "tool_call_delta", "usage", "done", "error") for e in events)
 
 
 # ------------------------------------------------------------------
