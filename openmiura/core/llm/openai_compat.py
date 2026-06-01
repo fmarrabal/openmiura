@@ -140,18 +140,34 @@ def _parse_tool_call_dict(item: Any) -> ToolCall | None:
 
 
 def _usage_from_payload(payload: Any) -> Optional[dict[str, int]]:
-    """Extract token-usage stats from an OpenAI ``usage`` block."""
+    """Extract token-usage stats from an OpenAI ``usage`` block.
+
+    H3.6 — OpenAI reports prompt-cache hits as a SUBSET of
+    ``prompt_tokens`` under ``prompt_tokens_details.cached_tokens``.
+    To match the canonical convention (where ``prompt_tokens`` is
+    the full-rate, NON-cached input and cache reads live in their
+    own bucket), we split the cached count out of ``prompt_tokens``
+    so the cost estimator bills it at the cheaper cache-read rate
+    without double-counting. ``total_tokens`` is unchanged, and the
+    cache key only appears when non-zero, so an uncached call keeps
+    the canonical 3-key shape."""
     if not isinstance(payload, dict):
         return None
     prompt_tokens = int(payload.get('prompt_tokens') or 0)
     completion_tokens = int(payload.get('completion_tokens') or 0)
     total_tokens = int(payload.get('total_tokens') or (prompt_tokens + completion_tokens))
+    details = payload.get('prompt_tokens_details')
+    cached = int(details.get('cached_tokens') or 0) if isinstance(details, dict) else 0
+    cached = max(0, min(cached, prompt_tokens))  # defensive clamp
     if total_tokens:
-        return {
-            'prompt_tokens':     prompt_tokens,
+        usage: dict[str, int] = {
+            'prompt_tokens':     prompt_tokens - cached,
             'completion_tokens': completion_tokens,
             'total_tokens':      total_tokens,
         }
+        if cached:
+            usage['cache_read_tokens'] = cached
+        return usage
     return None
 
 

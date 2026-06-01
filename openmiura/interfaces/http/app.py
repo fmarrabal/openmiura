@@ -30,7 +30,7 @@ from openmiura.interfaces.http.streaming import (
     stream_message,
     stream_message_native,
 )
-from openmiura.observability import metrics_payload, update_memory_metrics
+from openmiura.observability import budget_snapshot, metrics_payload, update_memory_metrics
 from openmiura.pipeline import process_message
 
 try:  # pragma: no cover - optional dependency/runtime feature
@@ -163,6 +163,25 @@ def create_app(
         gw: Gateway | None = getattr(app.state, "gw", None)
         payload, content_type = metrics_payload(getattr(gw, "audit", None))
         return Response(content=payload, media_type=content_type)
+
+    @app.get("/http/budget")
+    def http_budget():
+        """Process-lifetime running estimate of token usage and
+        LLM spend (H3.6).
+
+        Returns ``{total_tokens, total_cost_usd, by_model}``.
+        Cost is an approximate list-price estimate (see
+        ``openmiura.core.llm.pricing``), not a billing record,
+        and the totals reset on restart. The persistent,
+        per-turn cost trail lives in the decision-trace cost
+        governance surface — this endpoint is a cheap live gauge.
+        """
+        snap = budget_snapshot()
+        snap["disclaimer"] = (
+            "Approximate list-price estimate; process-local and "
+            "resets on restart. Not a billing source of truth."
+        )
+        return snap
 
     @app.post("/http/message", response_model=OutboundMessage)
     def http_message(msg: InboundMessage):

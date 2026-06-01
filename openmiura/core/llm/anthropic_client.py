@@ -16,20 +16,35 @@ from .types import ChatResponse, LlmStreamEvent, ToolCall, ToolCallDelta
 
 
 def _usage_from_anthropic(payload: Any) -> Optional[dict[str, int]]:
-    """Convert Anthropic's ``{input_tokens, output_tokens}``
-    usage shape into our canonical ``{prompt_tokens,
-    completion_tokens, total_tokens}``."""
+    """Convert Anthropic's usage shape into our canonical
+    ``{prompt_tokens, completion_tokens, total_tokens}`` (plus
+    optional cache buckets).
+
+    H3.6 — Anthropic reports prompt-cache tokens SEPARATELY from
+    ``input_tokens`` (``input_tokens`` is already the non-cached
+    portion), so ``cache_read_input_tokens`` /
+    ``cache_creation_input_tokens`` add to the total rather than
+    overlapping it. The cache keys are only included when
+    non-zero so a plain (uncached) call keeps the canonical
+    3-key shape."""
     if not isinstance(payload, dict):
         return None
     prompt_tokens = int(payload.get('input_tokens') or 0)
     completion_tokens = int(payload.get('output_tokens') or 0)
-    total_tokens = prompt_tokens + completion_tokens
+    cache_read = int(payload.get('cache_read_input_tokens') or 0)
+    cache_write = int(payload.get('cache_creation_input_tokens') or 0)
+    total_tokens = prompt_tokens + completion_tokens + cache_read + cache_write
     if total_tokens:
-        return {
+        usage: dict[str, int] = {
             'prompt_tokens':     prompt_tokens,
             'completion_tokens': completion_tokens,
             'total_tokens':      total_tokens,
         }
+        if cache_read:
+            usage['cache_read_tokens'] = cache_read
+        if cache_write:
+            usage['cache_write_tokens'] = cache_write
+        return usage
     return None
 
 
@@ -518,7 +533,13 @@ class AnthropicClient:
             return
 
         assembler = _StreamingBlockAssembler()
-        usage_partial: dict[str, int] = {'input_tokens': 0, 'output_tokens': 0}
+        # Native Anthropic usage keys accumulate here; the
+        # _usage_from_anthropic conversion at message_stop turns
+        # them into the canonical shape (incl. H3.6 cache buckets).
+        usage_partial: dict[str, int] = {
+            'input_tokens': 0, 'output_tokens': 0,
+            'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0,
+        }
 
         client_kwargs: dict[str, Any] = {'timeout': self.timeout_s}
         if isinstance(self._transport, httpx.AsyncBaseTransport):
@@ -558,10 +579,16 @@ class AnthropicClient:
                         ev = current_event or obj.get('type')
                         if ev == 'message_start':
                             msg = obj.get('message') or {}
-                            u = _usage_from_anthropic(msg.get('usage'))
-                            if u:
-                                usage_partial['input_tokens'] = u.get('prompt_tokens', 0)
-                                usage_partial['output_tokens'] = u.get('completion_tokens', 0)
+                            mu = msg.get('usage') or {}
+                            if isinstance(mu, dict):
+                                # H3.6 — copy native usage keys (incl. the
+                                # cache buckets) verbatim so message_stop can
+                                # surface them. message_start carries the
+                                # input + cache counts; output may be 0 here.
+                                for _k in ('input_tokens', 'output_tokens',
+                                           'cache_read_input_tokens', 'cache_creation_input_tokens'):
+                                    if mu.get(_k) is not None:
+                                        usage_partial[_k] = int(mu.get(_k) or 0)
                         elif ev == 'content_block_start':
                             idx = obj.get('index', 0)
                             block = obj.get('content_block') or {}
@@ -587,10 +614,10 @@ class AnthropicClient:
                             # Carries running usage updates.
                             u_obj = obj.get('usage') or {}
                             if isinstance(u_obj, dict):
-                                if 'input_tokens' in u_obj:
-                                    usage_partial['input_tokens'] = int(u_obj.get('input_tokens') or 0)
-                                if 'output_tokens' in u_obj:
-                                    usage_partial['output_tokens'] = int(u_obj.get('output_tokens') or 0)
+                                for _k in ('input_tokens', 'output_tokens',
+                                           'cache_read_input_tokens', 'cache_creation_input_tokens'):
+                                    if _k in u_obj:
+                                        usage_partial[_k] = int(u_obj.get(_k) or 0)
                         elif ev == 'message_stop':
                             usage = _usage_from_anthropic(usage_partial)
                             if usage:

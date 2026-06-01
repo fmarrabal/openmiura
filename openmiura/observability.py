@@ -115,6 +115,32 @@ ERRORS_TOTAL = Counter(
     "Total errors observed by type.",
     labelnames=("type",),
 )
+CACHE_TOKENS_TOTAL = Counter(
+    "openmiura_cache_tokens_total",
+    "Prompt-cache tokens reported by the LLM backend, by model and kind (read|write).",
+    labelnames=("model", "kind"),
+)
+COST_USD_TOTAL = Counter(
+    "openmiura_cost_usd_total",
+    "Estimated LLM spend in USD by model (approximate list-price estimate, not billing truth).",
+    labelnames=("model",),
+)
+
+
+# H3.6 — process-local running budget. A cheap live estimate of
+# tokens + USD cost since start-up, exposed via /http/budget. It
+# resets on restart and is NOT a billing source of truth — the
+# persistent decision-trace cost governance is. Single-process
+# asyncio server → a plain dict needs no lock.
+_BUDGET: Dict[str, object] = {"total_tokens": 0, "total_cost_usd": 0.0, "by_model": {}}
+
+
+def _budget_model(model: str) -> Dict[str, float]:
+    by_model = _BUDGET["by_model"]  # type: ignore[assignment]
+    return by_model.setdefault(  # type: ignore[union-attr]
+        str(model or "unknown"),
+        {"tokens": 0, "cost_usd": 0.0, "cache_read_tokens": 0, "cache_write_tokens": 0},
+    )
 
 
 @contextmanager
@@ -145,6 +171,63 @@ def record_tokens(model: str, prompt_tokens: int | None = None, completion_token
         total = int(prompt_tokens or 0) + int(completion_tokens or 0)
     if total > 0:
         TOKENS_USED_TOTAL.labels(model=str(model or "unknown")).inc(total)
+        _BUDGET["total_tokens"] = int(_BUDGET["total_tokens"]) + total  # type: ignore[arg-type]
+        _budget_model(model)["tokens"] += total
+
+
+def record_cost(
+    model: str,
+    *,
+    cost_usd: float | None = None,
+    cache_read_tokens: int | None = None,
+    cache_write_tokens: int | None = None,
+) -> None:
+    """Record an estimated USD cost (and any prompt-cache tokens)
+    for one LLM exchange (H3.6). Pairs with ``record_tokens``;
+    the caller computes ``cost_usd`` from
+    :func:`openmiura.core.llm.pricing.estimate_cost`. Zero / falsy
+    figures are skipped so unknown-model turns (cost 0.0) don't
+    pollute the per-model breakdown with empty rows."""
+    m = str(model or "unknown")
+    cost = float(cost_usd or 0.0)
+    if cost > 0:
+        COST_USD_TOTAL.labels(model=m).inc(cost)
+        _BUDGET["total_cost_usd"] = float(_BUDGET["total_cost_usd"]) + cost  # type: ignore[arg-type]
+        _budget_model(m)["cost_usd"] += cost
+    cr = int(cache_read_tokens or 0)
+    cw = int(cache_write_tokens or 0)
+    if cr > 0:
+        CACHE_TOKENS_TOTAL.labels(model=m, kind="read").inc(cr)
+        _budget_model(m)["cache_read_tokens"] += cr
+    if cw > 0:
+        CACHE_TOKENS_TOTAL.labels(model=m, kind="write").inc(cw)
+        _budget_model(m)["cache_write_tokens"] += cw
+
+
+def budget_snapshot() -> dict:
+    """Process-lifetime running totals of tokens + estimated USD
+    cost, per model and overall (H3.6). Resets on restart; an
+    estimate for budget awareness, not a billing record."""
+    by_model = {}
+    for name, vals in _BUDGET["by_model"].items():  # type: ignore[union-attr]
+        by_model[name] = {
+            "tokens":             int(vals["tokens"]),
+            "cost_usd":           round(float(vals["cost_usd"]), 6),
+            "cache_read_tokens":  int(vals["cache_read_tokens"]),
+            "cache_write_tokens": int(vals["cache_write_tokens"]),
+        }
+    return {
+        "total_tokens":   int(_BUDGET["total_tokens"]),  # type: ignore[arg-type]
+        "total_cost_usd": round(float(_BUDGET["total_cost_usd"]), 6),  # type: ignore[arg-type]
+        "by_model":       by_model,
+    }
+
+
+def reset_budget() -> None:
+    """Clear the running budget (test/diagnostic helper)."""
+    _BUDGET["total_tokens"] = 0
+    _BUDGET["total_cost_usd"] = 0.0
+    _BUDGET["by_model"] = {}
 
 
 def update_memory_metrics(audit) -> None:
