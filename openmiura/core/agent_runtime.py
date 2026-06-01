@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 try:
     from openmiura.agents.skills import SkillLoader
@@ -352,6 +352,7 @@ class AgentRuntime:
         environment: str | None = None,
         channel: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> AsyncIterator[LlmStreamEvent]:
         """Async-generator sibling of ``generate_reply``.
 
@@ -381,6 +382,19 @@ class AgentRuntime:
         events; tool execution failures surface as
         ``tool_result`` events with the ``error`` field set
         (the loop continues so the LLM can recover).
+
+        H3.5 — cooperative cancellation. ``cancel_check`` is an
+        optional zero-arg predicate; when it returns truthy the
+        generator stops at the next checkpoint (between LLM
+        rounds and between streamed events), emits a single
+        terminal ``kind="cancelled"`` event and returns — no
+        ``done`` follows. This is *cooperative*: it fires at
+        event boundaries, not mid-token, so a stalled upstream
+        read is interrupted only when its next chunk arrives
+        (or when the whole task is cancelled by the transport
+        on client disconnect). The check is cheap and is only
+        consulted when supplied, so existing callers that omit
+        it see no behaviour change.
         """
         if not self.supports_streaming():
             raise RuntimeError(
@@ -434,9 +448,25 @@ class AgentRuntime:
         usage_accum = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
         loop = asyncio.get_running_loop()
 
+        def _should_cancel() -> bool:
+            # H3.5 — consult the caller's cancel predicate, if any.
+            # Defensive: a predicate that raises must not crash the
+            # stream, so swallow and treat as "not cancelled".
+            if cancel_check is None:
+                return False
+            try:
+                return bool(cancel_check())
+            except Exception:
+                return False
+
         try:
             rounds = 0
             while True:
+                # H3.5 — cancel between rounds, before opening a
+                # new (potentially expensive) LLM round.
+                if _should_cancel():
+                    yield LlmStreamEvent.make_cancelled()
+                    return
                 # Open a stream for this round.
                 stream = (
                     self.llm.chat_stream(messages, tools=tool_schemas)
@@ -449,6 +479,12 @@ class AgentRuntime:
                 stream_failed = False
 
                 async for ev in stream:
+                    # H3.5 — cancel between streamed events. The
+                    # partial content_accum so far is preserved by
+                    # the transport layer for the audit trail.
+                    if _should_cancel():
+                        yield LlmStreamEvent.make_cancelled()
+                        return
                     if ev.kind == "delta":
                         round_content += ev.delta or ''
                         content_accum += ev.delta or ''

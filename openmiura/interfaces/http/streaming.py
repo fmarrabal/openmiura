@@ -148,6 +148,52 @@ def _sse_event(name: str, payload: Any) -> bytes:
     return line.encode("utf-8")
 
 
+# ------------------------------------------------------------------
+# H3.5 — in-flight native-stream registry for client cancellation.
+#
+# Each native stream registers under a per-stream id (a uuid hex
+# surfaced in its ``meta`` event). A ``DELETE
+# /http/message/stream/{id}`` request looks the stream up here and
+# sets its cancel ``Event``; the streaming generator consults that
+# event cooperatively (via the runtime's ``cancel_check``) and
+# stops with a terminal ``cancelled`` event. The generator removes
+# its own entry in a ``finally`` so the table only ever holds
+# genuinely live streams.
+#
+# The whole HTTP app runs on a single asyncio loop, so a plain
+# dict is safe — there is no await between the get-and-set in
+# ``cancel_stream`` and no cross-thread access.
+# ------------------------------------------------------------------
+
+_ACTIVE_STREAMS: dict[str, asyncio.Event] = {}
+
+
+def register_stream(stream_id: str, event: asyncio.Event) -> None:
+    """Record a live stream so a later DELETE can cancel it."""
+    _ACTIVE_STREAMS[stream_id] = event
+
+
+def cancel_stream(stream_id: str) -> bool:
+    """Flag an in-flight stream for cancellation. Returns True if
+    the id was known (and is now flagged), False if it was unknown
+    or already finished."""
+    event = _ACTIVE_STREAMS.get(stream_id)
+    if event is None:
+        return False
+    event.set()
+    return True
+
+
+def unregister_stream(stream_id: str) -> None:
+    """Drop a stream's registry entry (idempotent)."""
+    _ACTIVE_STREAMS.pop(stream_id, None)
+
+
+def active_stream_count() -> int:
+    """Number of streams currently registered (test/diagnostic)."""
+    return len(_ACTIVE_STREAMS)
+
+
 async def stream_message(
     gw,
     msg: InboundMessage,
@@ -205,7 +251,13 @@ async def stream_message(
     yield _sse_event("done", {"message": full})
 
 
-async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]:
+async def stream_message_native(
+    gw,
+    msg: InboundMessage,
+    *,
+    stream_id: str | None = None,
+    cancel_event: asyncio.Event | None = None,
+) -> AsyncIterator[bytes]:
     """Native streaming path for /http/message/stream (H1.5).
 
     Bypasses the heavier branches of ``process_message``
@@ -217,19 +269,33 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
 
     SSE event taxonomy (in addition to the pseudo path):
 
-      event: meta         streaming_mode = "native"
+      event: meta         streaming_mode = "native", stream_id
       event: chunk        per-LLM-token delta, no pacing
       event: thinking     extended-thinking reasoning fragment (H3.4)
       event: tool_call_delta  incremental tool-argument fragment (H3.2)
       event: tool_call    LLM requested a tool
       event: tool_result  runtime ran the tool, emits output
       event: usage        consolidated token usage
+      event: cancelled    stream cancelled by the client (H3.5)
       event: done         full OutboundMessage
       event: error        any error along the way
 
     The runtime's tool loop runs inside this generator, so
     by the time we emit ``done`` all rounds + tool
     executions are complete and the audit trail is intact.
+
+    H3.5 — cancellation. The ``meta`` event carries a
+    ``stream_id``; a ``DELETE /http/message/stream/{stream_id}``
+    sets this stream's cancel ``Event`` (held in the module
+    registry), which the runtime consults cooperatively via
+    ``cancel_check``. On cancel the generator emits a terminal
+    ``cancelled`` event and audits the partial assistant turn
+    with ``cancelled: true``. The same partial-turn audit runs
+    if the client simply drops the connection (the transport
+    throws ``CancelledError``/``GeneratorExit`` into us) — so
+    the audit trail records cancelled turns either way, even
+    though the abrupt-disconnect path cannot emit a final SSE
+    event to a client that is already gone.
     """
     # ----- Identity + scope resolution (mirrors pipeline) -----
     try:
@@ -259,11 +325,22 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
         yield _sse_event("error", {"error": f"setup failed: {exc!r}"})
         return
 
+    # ----- H3.5 cancellation handle -----
+    # Mint a stream id + cancel Event up front so the id can ride
+    # the meta event; the actual registry registration is deferred
+    # to just before the streaming try/finally so we never leak an
+    # entry on an early disconnect (see below).
+    if stream_id is None:
+        stream_id = uuid.uuid4().hex
+    if cancel_event is None:
+        cancel_event = asyncio.Event()
+
     # ----- Initial meta event -----
     yield _sse_event("meta", {
         "session_id":     session_id,
         "user_id":        msg.user_id,
         "streaming_mode": "native",
+        "stream_id":      stream_id,
     })
 
     # ----- Agent + tools resolution -----
@@ -305,6 +382,34 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
     content_accum = ""
     usage: dict[str, int] | None = None
     saw_error = False
+    cancelled = False
+    cancel_reason: str | None = None
+
+    def _audit_assistant_turn(text: str, *, was_cancelled: bool, reason: str | None) -> None:
+        # Best-effort assistant-turn audit, shared by the normal,
+        # graceful-cancel and disconnect paths. A cancelled turn is
+        # flagged so the audit trail distinguishes a complete answer
+        # from a truncated one. Audit failures never propagate — the
+        # operator catches the silent miss in the metrics view.
+        try:
+            gw.audit.append_message(session_id=session_id, role="assistant", content=text)
+            payload: dict[str, Any] = {"text": text, "usage": usage}
+            if was_cancelled:
+                payload["cancelled"] = True
+                if reason:
+                    payload["cancel_reason"] = reason
+            gw.audit.log_event(
+                direction="out",
+                channel=channel,
+                user_id=msg.user_id,
+                session_id=session_id,
+                payload=payload,
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+            )
+        except Exception:
+            pass
 
     # H3.3c — only forward attachments if the runtime
     # accepts the kwarg. Older runtimes / test doubles fall
@@ -323,8 +428,24 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
     )
     if msg.attachments:
         stream_kwargs["attachments"] = msg.attachments
+    # H3.5 — give the runtime a cooperative cancel predicate
+    # backed by this stream's Event.
+    stream_kwargs["cancel_check"] = cancel_event.is_set
+
+    # Register only now, immediately before the guarded section, so
+    # the matching unregister in `finally` always runs and we never
+    # leak a registry entry if an early disconnect happened during
+    # the meta/audit steps above.
+    register_stream(stream_id, cancel_event)
     try:
-        async for ev in gw.runtime.generate_reply_stream(**stream_kwargs):
+        try:
+            gen = gw.runtime.generate_reply_stream(**stream_kwargs)
+        except TypeError:
+            # Older runtime / test double that doesn't accept
+            # cancel_check — retry on the legacy signature.
+            stream_kwargs.pop("cancel_check", None)
+            gen = gw.runtime.generate_reply_stream(**stream_kwargs)
+        async for ev in gen:
             if ev.kind == "delta":
                 content_accum += ev.delta or ""
                 yield _sse_event("chunk", {"delta": ev.delta or "", "index": -1})
@@ -367,6 +488,15 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
             elif ev.kind == "usage" and ev.usage:
                 usage = ev.usage
                 yield _sse_event("usage", ev.usage)
+            elif ev.kind == "cancelled":
+                # H3.5 — the runtime tripped its cancel check (a
+                # DELETE flipped this stream's Event). Emit a
+                # terminal cancelled event; the partial assistant
+                # turn is audited below.
+                cancelled = True
+                cancel_reason = cancel_reason or "cancelled_by_client"
+                yield _sse_event("cancelled", {"reason": cancel_reason})
+                break
             elif ev.kind == "done" and ev.final is not None:
                 # The runtime's done event carries the
                 # full consolidated ChatResponse. Don't
@@ -381,30 +511,37 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
                 yield _sse_event("error", {"error": ev.error or "unknown"})
                 saw_error = True
                 break
+    except (asyncio.CancelledError, GeneratorExit):
+        # H3.5 — the client dropped the connection mid-stream. The
+        # transport cancels us; audit whatever partial answer we
+        # streamed (flagged cancelled) before propagating. We can't
+        # emit a final SSE event — there is no one left to read it.
+        partial = (content_accum or "").strip()
+        if partial:
+            _audit_assistant_turn(partial, was_cancelled=True, reason="client_disconnected")
+        raise
     except Exception as exc:
         yield _sse_event("error", {"error": f"stream failed: {exc!r}"})
         return
+    finally:
+        # Always drop the registry entry — this stream can no
+        # longer be cancelled once we leave the guarded section.
+        unregister_stream(stream_id)
 
     if saw_error:
+        return
+
+    if cancelled:
+        # Graceful cancel: audit the partial turn (flagged) and
+        # stop. The cancelled event was already emitted; a
+        # cancelled stream gets no trailing done.
+        _audit_assistant_turn((content_accum or "").strip(), was_cancelled=True, reason=cancel_reason)
         return
 
     final_text = (content_accum or "").strip() or "(empty response)"
 
     # ----- Audit assistant turn -----
-    try:
-        gw.audit.append_message(session_id=session_id, role="assistant", content=final_text)
-        gw.audit.log_event(
-            direction="out",
-            channel=channel,
-            user_id=msg.user_id,
-            session_id=session_id,
-            payload={"text": final_text, "usage": usage},
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-        )
-    except Exception:
-        pass
+    _audit_assistant_turn(final_text, was_cancelled=False, reason=None)
 
     # ----- Emit final done event with OutboundMessage shape -----
     outbound = OutboundMessage(
@@ -418,4 +555,12 @@ async def stream_message_native(gw, msg: InboundMessage) -> AsyncIterator[bytes]
     yield _sse_event("done", {"message": outbound.model_dump()})
 
 
-__all__ = ["split_into_chunks", "stream_message", "stream_message_native"]
+__all__ = [
+    "split_into_chunks",
+    "stream_message",
+    "stream_message_native",
+    "register_stream",
+    "cancel_stream",
+    "unregister_stream",
+    "active_stream_count",
+]

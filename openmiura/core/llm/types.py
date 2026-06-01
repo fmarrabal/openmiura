@@ -43,6 +43,7 @@ StreamEventKind = Literal[
     "usage",
     "done",
     "error",
+    "cancelled",
 ]
 
 AttachmentKind = Literal["image"]
@@ -228,6 +229,12 @@ class LlmStreamEvent:
     is emitted exclusively by the agent runtime after it
     executes a tool the LLM requested — this lets the UI render
     a "tool X finished" badge between LLM rounds.
+    ``cancelled`` (H3.5) is emitted by the agent runtime when a
+    caller-supplied cancel check trips mid-stream; it is the
+    terminal event for that stream (no ``done`` follows) and
+    signals that the partial output so far is all there will
+    be. It carries no payload — the reason lives at the
+    transport/audit layer.
     """
 
     kind: StreamEventKind
@@ -273,3 +280,7 @@ class LlmStreamEvent:
     @classmethod
     def make_error(cls, message: str) -> "LlmStreamEvent":
         return cls(kind="error", error=message)
+
+    @classmethod
+    def make_cancelled(cls) -> "LlmStreamEvent":
+        return cls(kind="cancelled")
