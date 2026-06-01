@@ -25,7 +25,11 @@ from openmiura.gateway import Gateway
 from openmiura.infrastructure.bootstrap.container import build_gateway, resolve_gateway_factory
 from openmiura.interfaces.http.routes.admin import router as admin_router
 from openmiura.interfaces.http.routes.science import router as science_router
-from openmiura.interfaces.http.streaming import stream_message, stream_message_native
+from openmiura.interfaces.http.streaming import (
+    cancel_stream,
+    stream_message,
+    stream_message_native,
+)
 from openmiura.observability import metrics_payload, update_memory_metrics
 from openmiura.pipeline import process_message
 
@@ -215,6 +219,30 @@ def create_app(
                 "X-Accel-Buffering": "no",  # nginx hint
             },
         )
+
+    @app.delete("/http/message/stream/{stream_id}")
+    async def http_message_stream_cancel(stream_id: str):
+        """Cancel an in-flight native stream (H3.5).
+
+        The client learns the ``stream_id`` from the stream's
+        initial ``meta`` event. A DELETE flips that stream's
+        cancel flag; the streaming generator notices
+        cooperatively (between LLM events / tool rounds), emits a
+        terminal ``cancelled`` SSE event, audits the partial
+        assistant turn and closes. Cancellation via this endpoint
+        is graceful; abruptly closing the connection
+        (fetch ``AbortController``) also cancels the stream but
+        without the trailing ``cancelled`` event.
+
+        Returns 202 when the stream was found and flagged, 404
+        when the id is unknown or the stream already finished.
+        """
+        gw: Gateway | None = getattr(app.state, "gw", None)
+        if gw is None:
+            raise HTTPException(status_code=503, detail="Service not initialized")
+        if cancel_stream(stream_id):
+            return JSONResponse(status_code=202, content={"stream_id": stream_id, "cancelled": True})
+        raise HTTPException(status_code=404, detail="unknown or already-finished stream")
 
     @app.exception_handler(HTTPException)
     def _http_exception_handler(_, exc: HTTPException):

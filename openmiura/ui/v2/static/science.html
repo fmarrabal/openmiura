@@ -240,6 +240,9 @@
                                   class="om-badge text-[9px] font-mono"
                                   :class="m.streaming_mode === 'native' ? 'om-badge--success' : 'om-badge--neutral'"
                                   x-text="m.streaming_mode"></span>
+                            <!-- H3.5: cancelled badge -->
+                            <span x-show="m.role === 'agent' && m.cancelled"
+                                  class="om-badge om-badge--warning text-[9px] font-mono">cancelled</span>
                           </p>
 
                           <!-- H3.4: extended-thinking reasoning trace (collapsible, native streaming only) -->
@@ -343,6 +346,10 @@
                   <div class="flex items-center gap-2">
                     <button class="om-btn om-btn--ghost om-btn--sm" @click="showRaw = !showRaw" :disabled="!lastTurnRaw">
                       <span x-show="!showRaw">show last response raw</span><span x-show="showRaw">hide raw</span>
+                    </button>
+                    <!-- H3.5: stop an in-flight stream (cancel) -->
+                    <button class="om-btn om-btn--ghost om-btn--sm" x-show="composer.busy" @click="stop()" type="button">
+                      <span x-html="omIcon('x', 'w-3.5 h-3.5')"></span><span>Stop</span>
                     </button>
                     <button class="om-btn om-btn--primary om-btn--sm" @click="send()" :disabled="composer.busy || (!composer.text.trim() && !pendingAttachments.length)">
                       <span x-show="!composer.busy">Send</span>

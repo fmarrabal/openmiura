@@ -156,6 +156,12 @@
     return {
       messages: [],
       composer: { text: '', busy: false },
+      // H3.5 — handles for cancelling an in-flight native stream.
+      _abort: null,
+      _streamId: '',
+      _streamBase: '',
+      _streamToken: '',
+      _cancelRequested: false,
       sessionId: '',
       error: '',
       showRaw: false,
@@ -386,6 +392,16 @@
         const token = (window.omAuth && window.omAuth.state && window.omAuth.state.token) || '';
         const url = `${base}/http/message/stream`;
 
+        // H3.5 — wire an AbortController so stop() can cancel the
+        // fetch (the client-disconnect path). Remember base + token
+        // for the graceful DELETE call stop() makes first.
+        const controller = new AbortController();
+        this._abort = controller;
+        this._streamId = '';
+        this._streamBase = base;
+        this._streamToken = token;
+        this._cancelRequested = false;
+
         let resp;
         try {
           resp = await fetch(url, {
@@ -397,13 +413,20 @@
             },
             body: JSON.stringify(body),
             credentials: 'same-origin',
+            signal: controller.signal,
           });
         } catch (e) {
           this.composer.busy = false;
           agentTurn.streaming = false;
-          agentTurn.error = true;
-          agentTurn.text = `Network error: ${e && e.message || e}`;
-          this.error = agentTurn.text;
+          if (this._cancelRequested || (e && e.name === 'AbortError')) {
+            // Cancelled before the response headers arrived.
+            agentTurn.cancelled = true;
+          } else {
+            agentTurn.error = true;
+            agentTurn.text = `Network error: ${e && e.message || e}`;
+            this.error = agentTurn.text;
+          }
+          this._clearStreamHandles();
           this._persist();
           return;
         }
@@ -467,9 +490,17 @@
           if (currentEvent !== null) flushEvent();
         } catch (e) {
           agentTurn.streaming = false;
-          agentTurn.error = true;
-          agentTurn.text = (agentTurn.text || '') + `\n[stream error: ${e && e.message || e}]`;
-          this.error = `Stream error: ${e && e.message || e}`;
+          if (this._cancelRequested || (e && e.name === 'AbortError')) {
+            // H3.5 — user-initiated cancel (fetch aborted), not a
+            // failure. If the server got our DELETE first it will
+            // also have sent a `cancelled` event; either way the
+            // turn is flagged cancelled, not errored.
+            agentTurn.cancelled = true;
+          } else {
+            agentTurn.error = true;
+            agentTurn.text = (agentTurn.text || '') + `\n[stream error: ${e && e.message || e}]`;
+            this.error = `Stream error: ${e && e.message || e}`;
+          }
         }
 
         this.composer.busy = false;
@@ -478,7 +509,39 @@
           agentTurn.raw = finalRaw;
           this.lastTurnRaw = finalRaw;
         }
+        this._clearStreamHandles();
         this._persist();
+      },
+
+      _clearStreamHandles() {
+        this._abort = null;
+        this._streamId = '';
+        this._cancelRequested = false;
+      },
+
+      // H3.5 — stop an in-flight stream. Best-effort graceful
+      // cancel via DELETE first (so the server emits a `cancelled`
+      // event and audits the partial turn), then abort the fetch
+      // so the client stops reading even if the DELETE is slow or
+      // races the stream's registration.
+      async stop() {
+        if (!this.composer.busy) return;
+        this._cancelRequested = true;
+        const sid = this._streamId;
+        const base = this._streamBase;
+        const token = this._streamToken;
+        if (sid && base) {
+          try {
+            await fetch(`${base}/http/message/stream/${encodeURIComponent(sid)}`, {
+              method:  'DELETE',
+              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              credentials: 'same-origin',
+            });
+          } catch (_) { /* best-effort; the abort below guarantees a stop */ }
+        }
+        if (this._abort) {
+          try { this._abort.abort(); } catch (_) { /* ignore */ }
+        }
       },
 
       _handleSseEvent(event, payload, agentTurn) {
@@ -490,6 +553,8 @@
             catch (_) { /* ignore */ }
           }
           agentTurn.streaming_mode = payload.streaming_mode || 'pseudo';
+          // H3.5 — remember the stream id so stop() can DELETE it.
+          if (payload.stream_id) this._streamId = payload.stream_id;
         } else if (event === 'chunk') {
           const delta = (payload && payload.delta) || '';
           if (!delta) return;
@@ -609,6 +674,12 @@
             try { writeStored(STORAGE_KEY_SESSION, this.sessionId); }
             catch (_) { /* ignore */ }
           }
+        } else if (event === 'cancelled') {
+          // H3.5 — the server confirmed a graceful cancel. Flag
+          // the turn so the UI shows a "cancelled" badge; the
+          // partial text already streamed stays as-is.
+          agentTurn.cancelled = true;
+          agentTurn.cancel_reason = (payload && payload.reason) || 'cancelled';
         } else if (event === 'error') {
           agentTurn.error = true;
           agentTurn.text = `Agent error: ${(payload && payload.error) || 'unknown'}`;
