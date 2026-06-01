@@ -10,11 +10,12 @@ except Exception:  # pragma: no cover
     SkillLoader = None  # type: ignore
 
 from openmiura.tools.runtime import ToolConfirmationRequired
-from openmiura.observability import record_error, record_tokens
+from openmiura.observability import record_cost, record_error, record_tokens
 
 from .audit import AuditStore
 from .config import Settings, resolve_config_related_path
 from .llm import AnthropicClient, OllamaClient, OpenAICompatibleClient
+from .llm.pricing import estimate_cost
 from .llm.types import (
     ChatResponse,
     LlmStreamEvent,
@@ -445,7 +446,10 @@ class AgentRuntime:
                 tool_schemas = []
 
         content_accum = ''
-        usage_accum = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+        usage_accum = {
+            'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0,
+            'cache_read_tokens': 0, 'cache_write_tokens': 0,
+        }
         loop = asyncio.get_running_loop()
 
         def _should_cancel() -> bool:
@@ -508,10 +512,26 @@ class AgentRuntime:
                     elif ev.kind == "usage" and ev.usage:
                         # Accumulate across rounds — emit at the
                         # end as one consolidated usage event.
-                        for k in ('prompt_tokens', 'completion_tokens', 'total_tokens'):
+                        for k in ('prompt_tokens', 'completion_tokens', 'total_tokens',
+                                  'cache_read_tokens', 'cache_write_tokens'):
                             usage_accum[k] += int(ev.usage.get(k) or 0)
                         try:
-                            record_tokens(getattr(self.llm, 'model', self.settings.llm.model), **ev.usage)
+                            model_name = getattr(self.llm, 'model', self.settings.llm.model)
+                            record_tokens(
+                                model_name,
+                                prompt_tokens=ev.usage.get('prompt_tokens'),
+                                completion_tokens=ev.usage.get('completion_tokens'),
+                                total_tokens=ev.usage.get('total_tokens'),
+                            )
+                            # H3.6 — estimate + record USD cost and any
+                            # prompt-cache tokens for this round's usage.
+                            breakdown = estimate_cost(model_name, ev.usage)
+                            record_cost(
+                                model_name,
+                                cost_usd=breakdown.get('total_usd'),
+                                cache_read_tokens=ev.usage.get('cache_read_tokens'),
+                                cache_write_tokens=ev.usage.get('cache_write_tokens'),
+                            )
                         except Exception:
                             pass
                         # Don't forward intermediate usage events —
@@ -648,12 +668,24 @@ class AgentRuntime:
                     })
 
             # End of all rounds — emit consolidated usage + done.
+            # H3.6 — keep the canonical 3-key shape unless prompt
+            # caching actually happened, so consumers/tests that pin
+            # {prompt,completion,total} are unaffected.
+            consolidated_usage = {
+                'prompt_tokens':     usage_accum['prompt_tokens'],
+                'completion_tokens': usage_accum['completion_tokens'],
+                'total_tokens':      usage_accum['total_tokens'],
+            }
+            if usage_accum['cache_read_tokens'] > 0:
+                consolidated_usage['cache_read_tokens'] = usage_accum['cache_read_tokens']
+            if usage_accum['cache_write_tokens'] > 0:
+                consolidated_usage['cache_write_tokens'] = usage_accum['cache_write_tokens']
             if usage_accum['total_tokens'] > 0:
-                yield LlmStreamEvent.make_usage(dict(usage_accum))
+                yield LlmStreamEvent.make_usage(dict(consolidated_usage))
             final = ChatResponse(
                 content=(content_accum or '').strip() or '(empty response)',
                 tool_calls=[],
-                usage=dict(usage_accum) if usage_accum['total_tokens'] > 0 else None,
+                usage=dict(consolidated_usage) if usage_accum['total_tokens'] > 0 else None,
             )
             yield LlmStreamEvent.make_done(final)
 
