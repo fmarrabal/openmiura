@@ -665,10 +665,28 @@
           });
         } else if (event === 'heartbeat') {
           agentTurn.last_heartbeat = payload.ts || null;
+        } else if (event === 'usage') {
+          // H3.7 — token usage + estimated USD cost for this turn.
+          // Stored on the turn (so it persists with the transcript)
+          // and summed into the conversation total in the header.
+          agentTurn.usage = {
+            prompt_tokens:     payload.prompt_tokens || 0,
+            completion_tokens: payload.completion_tokens || 0,
+            total_tokens:      payload.total_tokens || 0,
+          };
+          if (payload.cache_read_tokens) agentTurn.usage.cache_read_tokens = payload.cache_read_tokens;
+          if (payload.cache_write_tokens) agentTurn.usage.cache_write_tokens = payload.cache_write_tokens;
+          if (payload.cost) agentTurn.cost = payload.cost;
         } else if (event === 'done') {
           const m = (payload && payload.message) || {};
           if (m.text) agentTurn.text = m.text;
           if (m.agent_id) agentTurn.agent_id = m.agent_id;
+          // H3.7 — fall back to usage/cost from the done metadata if
+          // no separate usage event arrived (keeps reloaded turns
+          // and non-native paths consistent).
+          const meta = (m && m.metadata) || {};
+          if (meta.usage && !agentTurn.usage) agentTurn.usage = meta.usage;
+          if (meta.cost && !agentTurn.cost) agentTurn.cost = meta.cost;
           if (m.session_id) {
             this.sessionId = m.session_id;
             try { writeStored(STORAGE_KEY_SESSION, this.sessionId); }
@@ -693,6 +711,60 @@
         const t = String(s || '');
         if (t.length <= n) return t;
         return t.slice(0, n) + '…';
+      },
+
+      // ----- H3.7: token usage + cost formatting -----
+
+      fmtTokens(n) {
+        return Number(n || 0).toLocaleString();
+      },
+
+      // Micro-dollar aware USD formatter. Tiny amounts collapse to
+      // "<$0.0001" rather than "$0.0000" so they don't read as free.
+      fmtUsd(x) {
+        if (x == null || isNaN(x)) return '—';
+        if (x === 0) return '$0';
+        if (x < 0.0001) return '<$0.0001';
+        if (x < 1) return '$' + x.toFixed(4);
+        return '$' + x.toFixed(2);
+      },
+
+      // Multi-line tooltip with the per-turn token + cost breakdown.
+      turnCostTitle(m) {
+        const u = (m && m.usage) || {};
+        const c = (m && m.cost) || null;
+        const lines = [];
+        lines.push(
+          `prompt ${this.fmtTokens(u.prompt_tokens)} · completion ${this.fmtTokens(u.completion_tokens)} · total ${this.fmtTokens(u.total_tokens)} tokens`
+        );
+        if (u.cache_read_tokens) lines.push(`cache-read ${this.fmtTokens(u.cache_read_tokens)} tokens`);
+        if (u.cache_write_tokens) lines.push(`cache-write ${this.fmtTokens(u.cache_write_tokens)} tokens`);
+        if (c && c.known) {
+          let cl = `cost: input ${this.fmtUsd(c.input_usd)} · output ${this.fmtUsd(c.output_usd)}`;
+          if (c.cache_read_usd) cl += ` · cache-read ${this.fmtUsd(c.cache_read_usd)}`;
+          if (c.cache_write_usd) cl += ` · cache-write ${this.fmtUsd(c.cache_write_usd)}`;
+          lines.push(cl);
+          lines.push(`≈ ${this.fmtUsd(c.total_usd)} total (estimate, not billing)`);
+        } else if (c) {
+          lines.push('cost: model not in price table (unpriced)');
+        }
+        return lines.join('\n');
+      },
+
+      // Conversation running total, derived from the persisted
+      // turns (survives reload). costKnown is false if any priced
+      // turn used a model absent from the table → the header shows
+      // "≥" instead of "≈" so the figure reads as a lower bound.
+      convoUsage() {
+        let tokens = 0, costUsd = 0, costKnown = true, any = false;
+        for (const m of this.messages) {
+          if (!m || m.role !== 'agent' || !m.usage) continue;
+          any = true;
+          tokens += Number(m.usage.total_tokens || 0);
+          if (m.cost && m.cost.known) costUsd += Number(m.cost.total_usd || 0);
+          else costKnown = false;
+        }
+        return { any, tokens, costUsd, costKnown };
       },
 
       toggleStreaming() {

@@ -681,7 +681,14 @@ class AgentRuntime:
             if usage_accum['cache_write_tokens'] > 0:
                 consolidated_usage['cache_write_tokens'] = usage_accum['cache_write_tokens']
             if usage_accum['total_tokens'] > 0:
-                yield LlmStreamEvent.make_usage(dict(consolidated_usage))
+                # H3.7 — attach the estimated USD cost breakdown so
+                # the UI can surface per-turn spend. The token dict
+                # shape is untouched; cost rides alongside it.
+                resolved_model = getattr(self.llm, 'model', self.settings.llm.model)
+                yield LlmStreamEvent.make_usage(
+                    dict(consolidated_usage),
+                    cost=estimate_cost(resolved_model, consolidated_usage),
+                )
             final = ChatResponse(
                 content=(content_accum or '').strip() or '(empty response)',
                 tool_calls=[],

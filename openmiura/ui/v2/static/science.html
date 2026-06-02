@@ -191,6 +191,12 @@
               </p>
             </div>
             <div class="flex items-center gap-2">
+              <!-- H3.7: conversation token + estimated-cost running total -->
+              <template x-if="convoUsage().any">
+                <span class="om-badge om-badge--neutral text-[10px] font-mono"
+                      title="Conversation total — approximate estimate, not a billing figure"
+                      x-text="'Σ ' + fmtTokens(convoUsage().tokens) + ' tok · ' + (convoUsage().costKnown ? '≈ ' : '≥ ') + fmtUsd(convoUsage().costUsd)"></span>
+              </template>
               <span class="text-xs text-surface-500 dark:text-surface-400" x-show="sessionId"
                     x-text="'session: ' + sessionId.slice(0, 12) + '…'"></span>
               <button class="om-btn om-btn--ghost om-btn--sm" @click="reset()" :disabled="composer.busy">
@@ -284,6 +290,20 @@
                                      : (m.error ? 'bg-danger-500/10 text-danger-700 dark:text-danger-500 italic'
                                                 : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 italic')"
                                x-text="m.text"></div>
+
+                          <!-- H3.7: per-turn token usage + estimated cost -->
+                          <template x-if="m.role === 'agent' && m.usage">
+                            <p class="text-[10px] text-surface-400 dark:text-surface-500 font-mono cursor-help"
+                               :title="turnCostTitle(m)">
+                              <span x-text="fmtTokens(m.usage.total_tokens) + ' tokens'"></span>
+                              <template x-if="m.cost && m.cost.known">
+                                <span x-text="' · ≈ ' + fmtUsd(m.cost.total_usd)"></span>
+                              </template>
+                              <template x-if="m.usage.cache_read_tokens">
+                                <span x-text="' · ' + fmtTokens(m.usage.cache_read_tokens) + ' cached'"></span>
+                              </template>
+                            </p>
+                          </template>
                         </div>
                       </article>
                     </template>
