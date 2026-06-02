@@ -244,6 +244,7 @@ class LlmStreamEvent:
     tool_call_delta: ToolCallDelta | None = None
     tool_result: ToolResult | None = None
     usage: dict[str, int] | None = None
+    cost: dict[str, Any] | None = None
     error: str | None = None
     final: ChatResponse | None = None
 
@@ -270,8 +271,11 @@ class LlmStreamEvent:
         return cls(kind="tool_result", tool_result=tr)
 
     @classmethod
-    def make_usage(cls, usage: dict[str, int]) -> "LlmStreamEvent":
-        return cls(kind="usage", usage=usage)
+    def make_usage(cls, usage: dict[str, int], cost: dict[str, Any] | None = None) -> "LlmStreamEvent":
+        # ``cost`` (H3.7) is an optional companion USD breakdown for
+        # this ``usage`` (from pricing.estimate_cost); it never
+        # mutates the token-only ``usage`` dict.
+        return cls(kind="usage", usage=usage, cost=cost)
 
     @classmethod
     def make_done(cls, final: ChatResponse) -> "LlmStreamEvent":

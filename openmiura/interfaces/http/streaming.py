@@ -381,6 +381,7 @@ async def stream_message_native(
     # ----- Stream LLM events through the runtime -----
     content_accum = ""
     usage: dict[str, int] | None = None
+    cost: dict[str, Any] | None = None
     saw_error = False
     cancelled = False
     cancel_reason: str | None = None
@@ -487,7 +488,15 @@ async def stream_message_native(
                 })
             elif ev.kind == "usage" and ev.usage:
                 usage = ev.usage
-                yield _sse_event("usage", ev.usage)
+                cost = ev.cost
+                # H3.7 — forward the estimated USD cost alongside the
+                # token counts so the UI can show per-turn spend. The
+                # token dict is unchanged; cost rides as extra keys.
+                usage_payload = dict(ev.usage)
+                if ev.cost is not None:
+                    usage_payload["estimated_cost_usd"] = ev.cost.get("total_usd")
+                    usage_payload["cost"] = ev.cost
+                yield _sse_event("usage", usage_payload)
             elif ev.kind == "cancelled":
                 # H3.5 — the runtime tripped its cancel check (a
                 # DELETE flipped this stream's Event). Emit a
@@ -544,13 +553,20 @@ async def stream_message_native(
     _audit_assistant_turn(final_text, was_cancelled=False, reason=None)
 
     # ----- Emit final done event with OutboundMessage shape -----
+    # H3.7 — carry the cost breakdown next to usage in the turn
+    # metadata so a reloaded transcript keeps its per-turn spend.
+    out_metadata: dict[str, Any] = {}
+    if usage:
+        out_metadata["usage"] = usage
+    if cost is not None:
+        out_metadata["cost"] = cost
     outbound = OutboundMessage(
         channel=channel,
         user_id=msg.user_id,
         session_id=session_id,
         agent_id=agent_id,
         text=final_text,
-        metadata={"usage": usage} if usage else {},
+        metadata=out_metadata,
     )
     yield _sse_event("done", {"message": outbound.model_dump()})
 
