@@ -199,6 +199,13 @@ class ChatResponse:
     content: str
     tool_calls: list[ToolCall]
     usage: dict[str, int] | None = None
+    # H3.8 — opaque provider-native blocks (currently Anthropic
+    # ``thinking`` / ``redacted_thinking``, with their signature
+    # intact) that must be echoed back verbatim in the assistant
+    # turn on a follow-up tool-use request. ``None`` for providers
+    # or turns without extended thinking; the synchronous,
+    # single-shot contract simply ignores it.
+    thinking_blocks: list[dict[str, Any]] | None = None
 
 
 @dataclass
