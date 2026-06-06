@@ -480,6 +480,7 @@ class AgentRuntime:
 
                 round_tool_calls: list[ToolCall] = []
                 round_content = ''
+                round_thinking_blocks: list[dict[str, Any]] | None = None
                 stream_failed = False
 
                 async for ev in stream:
@@ -542,7 +543,11 @@ class AgentRuntime:
                         stream_failed = True
                         break
                     elif ev.kind == "done":
-                        # End of this round.
+                        # End of this round. H3.8 — capture any signed
+                        # thinking blocks so they can be echoed back in
+                        # the assistant turn that precedes the tool_result.
+                        if ev.final is not None:
+                            round_thinking_blocks = getattr(ev.final, 'thinking_blocks', None)
                         break
 
                 if stream_failed:
@@ -574,7 +579,7 @@ class AgentRuntime:
 
                 # Append assistant turn with the tool calls to
                 # the conversation.
-                messages.append({
+                assistant_turn: dict[str, Any] = {
                     'role':    'assistant',
                     'content': round_content,
                     'tool_calls': [
@@ -587,7 +592,13 @@ class AgentRuntime:
                         }
                         for tc in round_tool_calls
                     ],
-                })
+                }
+                # H3.8 — carry the signed thinking blocks (Anthropic)
+                # so _convert_messages can echo them back ahead of the
+                # tool_use on the next round. Other providers ignore it.
+                if round_thinking_blocks:
+                    assistant_turn['_thinking_blocks'] = round_thinking_blocks
+                messages.append(assistant_turn)
 
                 # H3.1 — Execute all tool calls in the round
                 # concurrently via ``asyncio.gather`` so a round

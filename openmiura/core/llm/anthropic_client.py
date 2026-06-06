@@ -110,7 +110,9 @@ class _StreamingBlockAssembler:
         elif btype == 'thinking':
             self._slots[idx] = {'type': 'thinking', 'thinking': str(block.get('thinking') or ''), 'signature': ''}
         elif btype == 'redacted_thinking':
-            self._slots[idx] = {'type': 'redacted_thinking'}
+            # H3.8 — keep the encrypted payload so the block can be
+            # echoed back verbatim on a follow-up tool-use request.
+            self._slots[idx] = {'type': 'redacted_thinking', 'data': str(block.get('data') or '')}
         elif btype == 'tool_use':
             cid = str(block.get('id') or '') or None
             name = str(block.get('name') or '').strip()
@@ -197,6 +199,32 @@ class _StreamingBlockAssembler:
                 parts.append(slot.get('text') or '')
         return '\n'.join(p for p in parts if p).strip()
 
+    def thinking_blocks(self) -> list[dict[str, Any]]:
+        """Return the completed thinking / redacted_thinking blocks
+        in index order, in Anthropic content-block shape, for
+        multi-turn round-tripping (H3.8).
+
+        A ``thinking`` block is emitted only once it carries a
+        signature: Anthropic rejects an unsigned thinking block on
+        a follow-up request, so an unsigned one (which shouldn't
+        occur in practice) is dropped rather than sent and refused.
+        ``redacted_thinking`` blocks are self-contained (the
+        encrypted ``data``) and always pass through."""
+        blocks: list[dict[str, Any]] = []
+        for _, slot in sorted(self._slots.items(), key=lambda kv: kv[0]):
+            t = slot.get('type')
+            if t == 'thinking':
+                sig = slot.get('signature') or ''
+                if sig:
+                    blocks.append({
+                        'type':      'thinking',
+                        'thinking':  slot.get('thinking') or '',
+                        'signature': sig,
+                    })
+            elif t == 'redacted_thinking':
+                blocks.append({'type': 'redacted_thinking', 'data': slot.get('data') or ''})
+        return blocks
+
 
 class AnthropicClient:
     """HTTP client for the Anthropic Messages API.
@@ -252,14 +280,15 @@ class AnthropicClient:
         #     (the thinking tokens are drawn from the same
         #     output allowance as the answer).
         #
-        # NOTE (honest limitation): extended thinking is not yet
-        # compatible with the agent runtime's multi-round tool
-        # loop. Anthropic requires the signed thinking block to
-        # be echoed back in the assistant turn that precedes a
-        # tool_result, and the runtime does not yet round-trip
-        # it — so enabling this alongside tool calls will make
-        # the follow-up request fail. Use it for plain
-        # reasoning turns until that round-tripping lands.
+        # NOTE: extended thinking now works with the agent
+        # runtime's multi-round tool loop (H3.8). Anthropic
+        # requires the signed thinking block to be echoed back in
+        # the assistant turn that precedes a tool_result; the
+        # streaming/sync responses surface those blocks on
+        # ``ChatResponse.thinking_blocks``, the runtime carries
+        # them on the assistant turn it appends, and
+        # ``_convert_messages`` re-emits them verbatim (signature
+        # intact) ahead of the tool_use.
         if thinking_budget_tokens:
             if thinking_budget_tokens < 1024:
                 raise ValueError(
@@ -328,6 +357,14 @@ class AnthropicClient:
 
             if role == 'assistant' and msg.get('tool_calls'):
                 blocks: list[dict[str, Any]] = []
+                # H3.8 — when extended thinking produced signed
+                # thinking blocks for this turn, echo them back
+                # verbatim FIRST: Anthropic requires the signed
+                # thinking block ahead of the tool_use it justified,
+                # or it rejects the follow-up request.
+                for tb in msg.get('_thinking_blocks') or []:
+                    if isinstance(tb, dict) and tb.get('type') in ('thinking', 'redacted_thinking'):
+                        blocks.append(tb)
                 text = msg.get('content')
                 if text:
                     blocks.append({'type': 'text', 'text': str(text)})
@@ -459,8 +496,13 @@ class AnthropicClient:
         content_blocks = data.get('content') or []
         text_parts: list[str] = []
         calls: list[ToolCall] = []
+        thinking_blocks: list[dict[str, Any]] = []
         if isinstance(content_blocks, list):
             for block in content_blocks:
+                # H3.8 — keep raw thinking / redacted_thinking blocks
+                # (signature/data intact) for multi-turn round-trip.
+                if isinstance(block, dict) and block.get('type') in ('thinking', 'redacted_thinking'):
+                    thinking_blocks.append(block)
                 text, tc = _parse_content_block(block)
                 if text:
                     text_parts.append(text)
@@ -471,6 +513,7 @@ class AnthropicClient:
             content='\n'.join(p for p in text_parts if p).strip(),
             tool_calls=calls,
             usage=_usage_from_anthropic(data.get('usage')),
+            thinking_blocks=thinking_blocks or None,
         )
 
     # ------------------------------------------------------------------
@@ -626,6 +669,7 @@ class AnthropicClient:
                                 content=assembler.text_accum(),
                                 tool_calls=[],
                                 usage=usage,
+                                thinking_blocks=assembler.thinking_blocks() or None,
                             ))
                             return
                         elif ev == 'error':
@@ -642,6 +686,7 @@ class AnthropicClient:
                 content=assembler.text_accum(),
                 tool_calls=[],
                 usage=usage,
+                thinking_blocks=assembler.thinking_blocks() or None,
             ))
 
         except httpx.ConnectError as e:
