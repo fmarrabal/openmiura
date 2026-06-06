@@ -216,7 +216,30 @@ class AgentRuntime:
         def _record_usage(result_obj: Any) -> None:
             usage = getattr(result_obj, 'usage', None) or {}
             if usage:
-                record_tokens(getattr(self.llm, 'model', self.settings.llm.model), **usage)
+                model_name = getattr(self.llm, 'model', self.settings.llm.model)
+                try:
+                    # Explicit kwargs (NOT **usage): H3.6 may add
+                    # cache_read/cache_write keys that record_tokens
+                    # doesn't accept, which would raise on **usage.
+                    record_tokens(
+                        model_name,
+                        prompt_tokens=usage.get('prompt_tokens'),
+                        completion_tokens=usage.get('completion_tokens'),
+                        total_tokens=usage.get('total_tokens'),
+                    )
+                    # H3.9 — estimate + record USD cost and any
+                    # prompt-cache tokens so the synchronous
+                    # /http/message path feeds /http/budget just like
+                    # the streaming path does.
+                    breakdown = estimate_cost(model_name, usage)
+                    record_cost(
+                        model_name,
+                        cost_usd=breakdown.get('total_usd'),
+                        cache_read_tokens=usage.get('cache_read_tokens'),
+                        cache_write_tokens=usage.get('cache_write_tokens'),
+                    )
+                except Exception:
+                    pass
                 if trace_collector is not None:
                     target = trace_collector.setdefault('usage', {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0})
                     target['prompt_tokens'] = int(target.get('prompt_tokens', 0) + int(usage.get('prompt_tokens') or 0))
