@@ -10,6 +10,7 @@ from openmiura.commands import handle_commands, handle_tool_commands
 from openmiura.core.schema import InboundMessage, OutboundMessage
 from openmiura.gateway import Gateway, telegram_ids_from_msg
 from openmiura.observability import observe_request, record_error
+from openmiura.core.llm.pricing import estimate_cost
 
 _ALIASES_HELP = frozenset([
     "palabras clave",
@@ -58,6 +59,21 @@ def _persist_decision_trace(
     if audit is None or not hasattr(audit, "log_decision_trace"):
         return
     usage = dict(trace.get("usage") or {})
+    # H3.10 — populate estimated_cost from the H3.6 price table when
+    # the trace didn't carry one (it historically defaulted to 0.0,
+    # because there was no calculator). The persistent cost
+    # governance (decision_traces + the /admin cost_summary surface)
+    # now gets real figures. An explicit non-zero cost on the trace
+    # is respected; an unknown model yields 0.0 — never a fabricated
+    # number.
+    estimated_cost = float(trace.get("estimated_cost") or 0.0)
+    if estimated_cost <= 0.0 and usage:
+        try:
+            estimated_cost = float(
+                estimate_cost(str(trace.get("model") or ""), usage).get("total_usd") or 0.0
+            )
+        except Exception:
+            estimated_cost = 0.0
     audit.log_decision_trace(
         trace_id=trace_id,
         session_id=session_id,
@@ -70,7 +86,7 @@ def _persist_decision_trace(
         provider=str(trace.get("provider") or ""),
         model=str(trace.get("model") or ""),
         latency_ms=float(trace.get("latency_ms") or 0.0),
-        estimated_cost=float(trace.get("estimated_cost") or 0.0),
+        estimated_cost=estimated_cost,
         llm_calls=len(list(trace.get("llm_calls") or [])),
         input_tokens=int(usage.get("prompt_tokens") or 0),
         output_tokens=int(usage.get("completion_tokens") or 0),
@@ -97,7 +113,7 @@ def _persist_decision_trace(
                 agent_id=agent_id,
                 status=str(trace.get("status") or "completed"),
                 latency_ms=float(trace.get("latency_ms") or 0.0),
-                estimated_cost=float(trace.get("estimated_cost") or 0.0),
+                estimated_cost=estimated_cost,
             )
         except Exception:
             pass
