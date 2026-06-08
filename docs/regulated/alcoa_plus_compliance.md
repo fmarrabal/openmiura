@@ -114,7 +114,7 @@ the human reviewer who approves the gate.
 ## C — Complete
 
 > Data should include all relevant information, including any
-> repeated or repeated test data, original results before any
+> reanalysed or repeated test data, original results before any
 > calculations, and any audit trail entries.
 
 **openMiura status: `Strong`.**

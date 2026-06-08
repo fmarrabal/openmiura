@@ -13,7 +13,7 @@ GAMP 5 categorises software as follows:
 | 1 | Infrastructure software (operating systems, databases, programming languages) | Verification of installation only |
 | 3 | Non-configured products (commercial off-the-shelf used as-is) | Vendor audit + test of intended use |
 | 4 | Configured products (commercial off-the-shelf with site-specific configuration) | Configuration documented, verified, change-controlled |
-| 5 | Custom applications (bespoke software) | Full lifecycle: URS → DS → IQ → OQ → PQ |
+| 5 | Custom applications (bespoke software) | Full lifecycle: URS → FS → DS → IQ → OQ → PQ |
 
 **openMiura is Category 4 — Configured Product.**
 
@@ -46,8 +46,8 @@ this asymmetry.
 
 ## Lifecycle coverage
 
-The 5-stage validation lifecycle in GAMP 5 (URS → FS → DS → IQ
-→ OQ → PQ) maps onto openMiura artefacts as follows:
+The validation lifecycle in GAMP 5 (URS → FS → DS → IQ → OQ →
+PQ) maps onto openMiura artefacts as follows:
 
 | Stage | What the framework asks for | openMiura input | Owner |
 |---|---|---|---|
