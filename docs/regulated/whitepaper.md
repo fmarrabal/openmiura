@@ -286,8 +286,11 @@ Enduring and Available. The dedicated document
 [`alcoa_plus_compliance.md`](alcoa_plus_compliance.md) gives the
 self-assessment dimension by dimension. openMiura does well on
 **Attributable**, **Contemporaneous**, **Original** and
-**Available**. **Enduring** depends on the operating
-organisation's backup strategy and is `Partial` for that reason.
+**Available**. Two dimensions are `Partial`: **Accurate** —
+openMiura cannot verify the truth of agent output, which is a
+property of the model, the prompt and the source data — and
+**Enduring**, which depends on the operating organisation's
+long-term tamper-evident storage strategy.
 
 ---
 
