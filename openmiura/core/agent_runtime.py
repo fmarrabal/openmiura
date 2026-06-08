@@ -246,6 +246,15 @@ class AgentRuntime:
                     target['completion_tokens'] = int(target.get('completion_tokens', 0) + int(usage.get('completion_tokens') or 0))
                     total = int(usage.get('total_tokens') or (int(usage.get('prompt_tokens') or 0) + int(usage.get('completion_tokens') or 0)))
                     target['total_tokens'] = int(target.get('total_tokens', 0) + total)
+                    # H3.10 — carry cache tokens so the decision-trace
+                    # cost estimate reflects the cache discount (the
+                    # persisted input/output/total columns are unchanged).
+                    cr = int(usage.get('cache_read_tokens') or 0)
+                    cw = int(usage.get('cache_write_tokens') or 0)
+                    if cr:
+                        target['cache_read_tokens'] = int(target.get('cache_read_tokens', 0) + cr)
+                    if cw:
+                        target['cache_write_tokens'] = int(target.get('cache_write_tokens', 0) + cw)
 
         def _chat_with_trace(messages_payload, *, tools=None):
             llm_t0 = time.perf_counter()
