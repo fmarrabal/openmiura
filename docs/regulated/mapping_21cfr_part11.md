@@ -84,7 +84,7 @@ encryption, digital signatures.
 | §11.200(a)(1)(i) | Employ at least two distinct identification components such as an identification code and password, in the case of a non-biometric signature | Single-factor (api token / password) is the default; multi-factor (e.g. token + TOTP) is **`Experimental`** at the project level | `Experimental` | — |
 | §11.200(a)(1)(ii) | The first signing in a continuous session shall require all components; subsequent signings shall require, at minimum, one component | Implemented through session lifetime + per-action challenge for sensitive routes | `Partial` | `auth_repo` |
 | §11.200(a)(1)(iii) | A signing not performed during a single, continuous period of controlled system access shall require all components | Session timeout enforced in `auth_repo`; rotating sessions on idle is `Beta` | `Partial` | `auth_repo` |
-| §11.200(a)(2) | Be used only by their genuine owners | Tied to §11.100(b); openMiura cannot enforce this beyond not granting tokens by default | `n/a` | — |
+| §11.200(a)(2) | Be used only by their genuine owners | Organisational control — genuine-owner use cannot be technically enforced at the platform layer (tied to the identity proofing of §11.100(b)) | `n/a` | — |
 | §11.200(a)(3) | Be administered and executed to ensure that attempted use of an individual's electronic signature by anyone other than its genuine owner requires collaboration of two or more individuals | Multi-party signature flow is **`Experimental`** | `Experimental` | — |
 | §11.200(b) | Electronic signatures based upon biometrics shall be designed to ensure that they cannot be used by anyone other than their genuine owners | n/a — biometrics are out of scope for the technical layer | `n/a` | — |
 

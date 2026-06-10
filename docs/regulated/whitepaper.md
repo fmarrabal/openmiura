@@ -283,7 +283,7 @@ tests and release notes).
 ALCOA+ extends the original ALCOA principles (Attributable, Legible,
 Contemporaneous, Original, Accurate) with Complete, Consistent,
 Enduring and Available. The dedicated document
-[`alcoa_plus_compliance.md`](alcoa_plus_compliance.md) gives the
+[`alcoa_plus_self_assessment.md`](alcoa_plus_self_assessment.md) gives the
 self-assessment dimension by dimension. openMiura does well on
 **Attributable**, **Contemporaneous**, **Original** and
 **Available**. Two dimensions are `Partial`: **Accurate** —
