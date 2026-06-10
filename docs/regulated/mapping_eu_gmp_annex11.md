@@ -28,7 +28,7 @@ Same legend as in [`mapping_21cfr_part11.md`](mapping_21cfr_part11.md):
 
 | Control | Title (paraphrased) | openMiura primitive(s) | Status | Notes |
 |---|---|---|---|---|
-| 2 | There should be close cooperation between all relevant personnel such as Process Owner, System Owner, Qualified Persons and IT. All personnel should have appropriate qualifications, level of access and defined responsibilities | RBAC + scope isolation map onto the role triangle (process owner / system owner / QP); training is organisational | `n/a` | Org-side |
+| 2 | There should be close cooperation between all relevant personnel such as Process Owner, System Owner, Qualified Persons and IT. All personnel should have appropriate qualifications, level of access and defined responsibilities | RBAC + scope isolation map onto the role triangle (process owner / system owner / QP) for the "level of access and defined responsibilities" half; qualifications and training are organisational | `Partial` | Access control vendor-side; qualifications org-side |
 
 ## 3. Suppliers and service providers
 
@@ -143,9 +143,9 @@ Same legend as in [`mapping_21cfr_part11.md`](mapping_21cfr_part11.md):
 |---|---:|
 | Stable | 0 |
 | Beta | 9 |
-| Partial | 10 |
+| Partial | 11 |
 | Experimental | 1 |
-| n/a (organisational) | 5 |
+| n/a (organisational) | 4 |
 | **Total** | **25** |
 
 The Annex 11 mapping is denser than Part 11 because the EU

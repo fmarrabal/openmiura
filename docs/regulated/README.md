@@ -28,7 +28,7 @@ quality system can issue.
 - [`mapping_gamp5.md`](mapping_gamp5.md) — risk-based mapping to
   ISPE *GAMP 5* (2nd ed., 2022): software categorization 3 / 4 / 5
   and the V-model lifecycle.
-- [`alcoa_plus_compliance.md`](alcoa_plus_compliance.md) — ALCOA+
+- [`alcoa_plus_self_assessment.md`](alcoa_plus_self_assessment.md) — ALCOA+
   data integrity self-assessment, dimension by dimension.
 - [`policy_packs/`](policy_packs/) — concrete, executable YAML
   policy packs covering lab release, SOP review, OOS/OOT
