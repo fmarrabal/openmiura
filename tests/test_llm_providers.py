@@ -98,4 +98,70 @@ def test_agent_runtime_supports_anthropic_provider(monkeypatch):
     rt = AgentRuntime(_settings('anthropic'), audit)
     assert created['base_url'] == 'https://api.anthropic.com/v1'
     assert created['api_key_env_var'] == 'ANTHROPIC_API_KEY'
+    # Extended thinking is off by default — the factory passes 0.
+    assert created['thinking_budget_tokens'] == 0
     assert rt.generate_reply('default', 's1', 'hola') == 'claude'
+
+
+def test_agent_runtime_passes_thinking_budget_to_anthropic(monkeypatch):
+    """The factory must forward LLMSettings.thinking_budget_tokens
+    to the Anthropic client (H3.4/H3.8 was unreachable from config
+    until this wiring existed)."""
+    from openmiura.core import agent_runtime as ar
+    created = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+            self.model = kwargs.get('model')
+
+        def chat(self, messages, *, tools=None):
+            return SimpleNamespace(content='claude', tool_calls=[], usage=None)
+
+    monkeypatch.setattr(ar, 'AnthropicClient', FakeClient)
+    llm = LLMSettings(
+        provider='anthropic', model='claude-sonnet',
+        base_url='https://api.anthropic.com/v1', timeout_s=30,
+        api_key_env_var='ANTHROPIC_API_KEY',
+        max_output_tokens=4096, thinking_budget_tokens=2048,
+    )
+    settings = _settings('anthropic')
+    settings = Settings(
+        server=settings.server, storage=settings.storage, llm=llm,
+        runtime=settings.runtime, agents=settings.agents,
+        memory=settings.memory, tools=settings.tools,
+        admin=settings.admin, mcp=settings.mcp,
+    )
+    audit = AuditStore(':memory:')
+    audit.init_db()
+    AgentRuntime(settings, audit)
+    assert created['thinking_budget_tokens'] == 2048
+    assert created['max_output_tokens'] == 4096
+
+
+def test_load_settings_parses_thinking_budget_tokens(tmp_path):
+    """The yaml loader must surface llm.thinking_budget_tokens
+    (default 0 when absent)."""
+    import yaml
+    from openmiura.core.config import load_settings
+
+    cfg = {
+        'server':  {'host': '127.0.0.1', 'port': 8081},
+        'storage': {'db_path': ':memory:'},
+        'llm': {
+            'provider': 'anthropic',
+            'model': 'claude-sonnet',
+            'max_output_tokens': 4096,
+            'thinking_budget_tokens': 2048,
+        },
+    }
+    p = tmp_path / 'cfg.yaml'
+    p.write_text(yaml.safe_dump(cfg), encoding='utf-8')
+    settings = load_settings(str(p))
+    assert settings.llm.thinking_budget_tokens == 2048
+
+    cfg['llm'].pop('thinking_budget_tokens')
+    p2 = tmp_path / 'cfg2.yaml'
+    p2.write_text(yaml.safe_dump(cfg), encoding='utf-8')
+    settings2 = load_settings(str(p2))
+    assert settings2.llm.thinking_budget_tokens == 0

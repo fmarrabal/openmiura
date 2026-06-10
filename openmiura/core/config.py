@@ -224,6 +224,14 @@ class LLMSettings:
     api_key_env_var: str = ""
     anthropic_version: str = "2023-06-01"
     max_output_tokens: int = 2048
+    # H3.4/H3.8 — extended-thinking budget (Anthropic only).
+    # 0 = disabled (default). When > 0 the Anthropic client
+    # requests a thinking block with this token budget; the
+    # client validates Anthropic's constraints up front
+    # (>= 1024 and strictly below max_output_tokens) and fails
+    # loudly at startup on a bad combination. Other providers
+    # ignore the field.
+    thinking_budget_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -648,6 +656,7 @@ def load_settings(path: str) -> Settings:
         api_key_env_var=str(llm_raw.get("api_key_env_var", default_key_env.get(provider, ""))),
         anthropic_version=str(llm_raw.get("anthropic_version", "2023-06-01")),
         max_output_tokens=_as_int(llm_raw.get("max_output_tokens", 2048), 2048),
+        thinking_budget_tokens=_as_int(llm_raw.get("thinking_budget_tokens", 0), 0),
     )
 
     runtime_raw = raw_cfg.get("runtime", {}) or {}
