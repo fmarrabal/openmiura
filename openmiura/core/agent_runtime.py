@@ -389,6 +389,7 @@ class AgentRuntime:
         channel: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
         cancel_check: Callable[[], bool] | None = None,
+        trace_collector: dict[str, Any] | None = None,
     ) -> AsyncIterator[LlmStreamEvent]:
         """Async-generator sibling of ``generate_reply``.
 
@@ -740,6 +741,15 @@ class AgentRuntime:
                 tool_calls=[],
                 usage=dict(consolidated_usage) if usage_accum['total_tokens'] > 0 else None,
             )
+            # Streaming decision trace — only the runtime knows the
+            # round structure, so it owns llm_calls + tool_rounds.
+            # The HTTP layer owns model / usage / response / status /
+            # latency (all observable from the SSE stream). llm_calls
+            # = rounds + 1 (the opening round plus one re-open per
+            # executed tool round).
+            if trace_collector is not None:
+                trace_collector['llm_calls'] = [{'round': i} for i in range(rounds + 1)]
+                trace_collector.setdefault('decisions', {})['tool_rounds'] = rounds
             yield LlmStreamEvent.make_done(final)
 
         finally:
