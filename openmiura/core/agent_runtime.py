@@ -70,6 +70,9 @@ class AgentRuntime:
                 api_key_env_var=settings.llm.api_key_env_var,
                 anthropic_version=settings.llm.anthropic_version,
                 max_output_tokens=settings.llm.max_output_tokens,
+                # H3.4/H3.8 — extended thinking is config-driven;
+                # getattr keeps older Settings doubles working.
+                thinking_budget_tokens=getattr(settings.llm, 'thinking_budget_tokens', 0),
                 timeout_s=settings.llm.timeout_s,
             )
         raise ValueError(f'Unsupported LLM provider: {settings.llm.provider}')

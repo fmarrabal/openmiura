@@ -48,6 +48,11 @@ llm:
   model: claude-3-5-sonnet-latest
   api_key_env_var: OPENMIURA_LLM_API_KEY
   anthropic_version: 2023-06-01
+  # Opcional — extended thinking (razonamiento visible). 0 = desactivado.
+  # Si se activa: mínimo 1024 y estrictamente menor que max_output_tokens;
+  # una combinación inválida falla en el arranque. Solo Anthropic.
+  # thinking_budget_tokens: 2048
+  # max_output_tokens: 4096
 ```
 
 ## 4. Kimi
