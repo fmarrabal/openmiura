@@ -218,6 +218,7 @@ The `openmiura` script is the operator's entry point. Built on Click.
 ```text
 openmiura run         start the Uvicorn HTTP server
 openmiura doctor      validate config + check posture
+openmiura verify      verify an evidence pack ZIP offline (no server/DB)
 openmiura version
 
 openmiura db          check | clean | migrate | version | rollback | backup | restore
@@ -229,6 +230,37 @@ openmiura registry    init | keygen | publish | list | policy-set | policy-show 
                       policy-explain | approve | review-start | reject | describe |
                       verify | deprecate | install
 ```
+
+### Verifying an evidence pack offline
+
+`openmiura verify <pack.zip>` re-checks a portfolio evidence pack on a clean
+machine — no server, no database, only the `cryptography` library. It
+re-hashes every embedded document, recomputes the manifest hash, and verifies
+the ed25519 (or ECDSA-P256) signature over the canonical signing input.
+
+```text
+openmiura verify pack.zip                 # human-readable report
+openmiura verify pack.zip --json          # machine-readable result
+openmiura verify pack.zip --allow-dev-seed  # accept dev-seed sigs in CI
+openmiura verify pack.zip --strict        # also gate on chain-of-custody
+```
+
+Exit codes: `0` verified and authoritative · `1` a check failed (tampered) ·
+`2` internally consistent but **not authoritative** (signed with the public
+development seed, signed only with the legacy reproducible hash, or unsigned) ·
+`3` usage error (missing file, not a ZIP, missing entries).
+
+What a green result means and does not mean: it proves the pack is internally
+consistent and untampered, and that it was signed by whoever held the embedded
+key. It does **not** by itself prove the signer's *identity* — the public key
+travels inside the pack, so binding a pack to a known signer (a trust anchor)
+is a deliberate, separate step. The one built-in dishonesty signal is the
+development-seed key, which this command detects independently of the pack's
+own metadata (it re-derives the public dev key and compares fingerprints, so
+stripping the pack's `dev_signing_key` flag does not hide it).
+
+Notarization, custody-anchor and escrow receipts need a time reference,
+policy, or live cloud APIs and are therefore reported but not verified offline.
 
 See [`docs/installation.md`](docs/installation.md) and [`docs/deployment.md`](docs/deployment.md) for operator-side details.
 

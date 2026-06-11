@@ -11,6 +11,7 @@ import httpx
 import uvicorn
 
 from openmiura import __version__
+from openmiura.evidence_verify import verify_pack_cli
 from openmiura.core.worker_runtime import build_worker_manager, resolve_worker_mode
 from openmiura.infrastructure.persistence.db import DBConnection
 from openmiura.core.migrations import apply_migrations, backup_database, downgrade_migrations, restore_database, schema_status
@@ -769,6 +770,15 @@ def doctor_command(config: str | None, json_output: bool) -> None:
     raise click.exceptions.Exit(doctor_cli(config=config, json_output=json_output))
 
 
+@app.command("verify", help="Verify an openMiura evidence pack ZIP offline (no server/DB).")
+@click.argument("pack", type=click.Path(dir_okay=False, path_type=str))
+@click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
+@click.option("--allow-dev-seed", is_flag=True, default=False, help="Treat dev-seed signatures as acceptable for the exit code (still reported).")
+@click.option("--strict", is_flag=True, default=False, help="Also gate on optional checks (e.g. chain of custody) when present.")
+def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: bool) -> None:
+    raise click.exceptions.Exit(verify_pack_cli(pack=pack, json_output=json_output, allow_dev_seed=allow_dev_seed, strict=strict))
+
+
 @db_app.command("check")
 @click.option("--db", type=str, default=None, help="Path to the SQLite database.")
 @click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
@@ -1097,7 +1107,11 @@ def version_command() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        app.main(args=argv, prog_name="openmiura", standalone_mode=False)
-        return 0
+        # In standalone_mode=False, Click RETURNS a command's exit code
+        # (from ``raise click.exceptions.Exit(code)``) rather than raising
+        # it, so we must propagate the return value — otherwise every
+        # command's exit code is silently swallowed and main() always
+        # reports success. The ``except`` below remains as a safety net.
+        return int(app.main(args=argv, prog_name="openmiura", standalone_mode=False) or 0)
     except click.exceptions.Exit as exc:
         return int(exc.exit_code or 0)
