@@ -289,22 +289,32 @@ class AgentRuntime:
                 if trace_collector is not None:
                     trace_collector.setdefault('decisions', {})['tool_rounds'] = rounds
 
-                messages.append(
-                    {
-                        'role': 'assistant',
-                        'content': result.content or '',
-                        'tool_calls': [
-                            {
-                                'id': tc.id,
-                                'function': {
-                                    'name': tc.name,
-                                    'arguments': json.dumps(tc.arguments, ensure_ascii=False),
-                                }
+                assistant_turn: dict[str, Any] = {
+                    'role': 'assistant',
+                    'content': result.content or '',
+                    'tool_calls': [
+                        {
+                            'id': tc.id,
+                            'function': {
+                                'name': tc.name,
+                                'arguments': json.dumps(tc.arguments, ensure_ascii=False),
                             }
-                            for tc in result.tool_calls
-                        ],
-                    }
-                )
+                        }
+                        for tc in result.tool_calls
+                    ],
+                }
+                # H3.8 parity — echo the signed thinking blocks back
+                # ahead of the tool_use on the next round. Anthropic
+                # rejects an extended-thinking turn whose tool_use is
+                # not preceded by its signed thinking block; the
+                # streaming loop already round-tripped them, but this
+                # synchronous loop did not — so thinking + tools 400'd
+                # here once extended thinking became reachable from
+                # config. _convert_messages re-emits them verbatim.
+                _tb = getattr(result, 'thinking_blocks', None)
+                if _tb:
+                    assistant_turn['_thinking_blocks'] = _tb
+                messages.append(assistant_turn)
 
                 for tc in result.tool_calls:
                     try:

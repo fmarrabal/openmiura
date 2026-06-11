@@ -289,3 +289,56 @@ def test_signed_thinking_block_roundtrips_into_second_request():
     assert any(e.kind == "tool_result" for e in events)
     assert events[-1].kind == "done"
     assert "answer is 42" in (events[-1].final.content or "")
+
+
+def test_signed_thinking_block_roundtrips_on_the_sync_path():
+    """Same guarantee on the SYNCHRONOUS /http/message path
+    (generate_reply, not the stream). Round 1's non-streaming
+    response carries a signed thinking block + a tool_use; after the
+    tool runs, round 2's request body must echo that thinking block
+    (signature intact) ahead of the tool_use in the assistant turn.
+    Without it Anthropic rejects the follow-up with a 400 — the bug
+    this test guards once extended thinking is enabled from config."""
+    requests_seen: list[dict[str, Any]] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        requests_seen.append(json.loads(req.content))
+        if len(requests_seen) == 1:
+            return httpx.Response(200, json={
+                "content": [
+                    {"type": "thinking", "thinking": "Let me think about it.", "signature": "SIG_ABC"},
+                    {"type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {"q": "x"}},
+                ],
+                "usage": {"input_tokens": 20, "output_tokens": 15},
+            })
+        return httpx.Response(200, json={
+            "content": [{"type": "text", "text": "The answer is 42."}],
+            "usage": {"input_tokens": 30, "output_tokens": 10},
+        })
+
+    client = AnthropicClient(
+        base_url="http://test", model="claude-3-5-sonnet",
+        api_key_env_var="ANTHROPIC_KEY",
+        max_output_tokens=4096, thinking_budget_tokens=1024, timeout_s=5,
+        transport=httpx.MockTransport(handler),
+    )
+    rt = _make_runtime(client)
+    out = rt.generate_reply(
+        agent_id="default", session_id="s1", user_text="hi",
+        tools_runtime=_FakeToolsRuntime({"lookup": "42"}), user_key="u1",
+    )
+
+    assert "answer is 42" in out
+    assert len(requests_seen) == 2
+    assert requests_seen[0].get("thinking") == {"type": "enabled", "budget_tokens": 1024}
+
+    msgs = requests_seen[1]["messages"]
+    assistant = [m for m in msgs if m.get("role") == "assistant" and isinstance(m.get("content"), list)]
+    assert assistant, "round 2 must carry an assistant turn with block content"
+    content = assistant[-1]["content"]
+    types_ = [b.get("type") for b in content if isinstance(b, dict)]
+    assert "thinking" in types_ and "tool_use" in types_
+    assert types_.index("thinking") < types_.index("tool_use")
+    tb = next(b for b in content if b.get("type") == "thinking")
+    assert tb["signature"] == "SIG_ABC"
+    assert tb["thinking"] == "Let me think about it."
