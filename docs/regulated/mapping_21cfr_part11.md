@@ -73,7 +73,7 @@ encryption, digital signatures.
 
 | Section | Title (paraphrased) | openMiura primitive(s) | Status | Evidence path |
 |---|---|---|---|---|
-| §11.100(a) | Each electronic signature shall be unique to one individual and shall not be reused by, or reassigned to, anyone else | `auth_users` enforces unique principal IDs; signature records reference principal-id and not just role | `Partial` | — |
+| §11.100(a) | Each electronic signature shall be unique to one individual and shall not be reused by, or reassigned to, anyone else | `auth_users` enforces unique principal IDs; signature records reference principal-id and not just role | `Partial` | `openmiura/persistence/auth_repo.py` |
 | §11.100(b) | Before an organization establishes, assigns, certifies, or otherwise sanctions an individual's electronic signature, or any element of such electronic signature, the organization shall verify the identity of the individual | n/a — organisational identity verification (HR, IAM) is a prerequisite for openMiura; the project does not perform identity proofing | `n/a` | — |
 | §11.100(c) | Persons using electronic signatures shall, prior to or at the time of such use, certify to the agency that the electronic signatures in their system, used on or after August 20, 1997, are intended to be the legally binding equivalent of traditional handwritten signatures | n/a — the certification letter to the FDA is an organisational obligation | `n/a` | — |
 
@@ -82,8 +82,8 @@ encryption, digital signatures.
 | Section | Title (paraphrased) | openMiura primitive(s) | Status | Evidence path |
 |---|---|---|---|---|
 | §11.200(a)(1)(i) | Employ at least two distinct identification components such as an identification code and password, in the case of a non-biometric signature | Single-factor (api token / password) is the default; multi-factor (e.g. token + TOTP) is **`Experimental`** at the project level | `Experimental` | — |
-| §11.200(a)(1)(ii) | The first signing in a continuous session shall require all components; subsequent signings shall require, at minimum, one component | Implemented through session lifetime + per-action challenge for sensitive routes | `Partial` | `auth_repo` |
-| §11.200(a)(1)(iii) | A signing not performed during a single, continuous period of controlled system access shall require all components | Session timeout enforced in `auth_repo`; rotating sessions on idle is `Beta` | `Partial` | `auth_repo` |
+| §11.200(a)(1)(ii) | The first signing in a continuous session shall require all components; subsequent signings shall require, at minimum, one component | Implemented through session lifetime + per-action challenge for sensitive routes | `Partial` | `openmiura/persistence/auth_repo.py` (auth_sessions) |
+| §11.200(a)(1)(iii) | A signing not performed during a single, continuous period of controlled system access shall require all components | Session timeout enforced in `auth_repo`; rotating sessions on idle is `Beta` | `Partial` | `openmiura/persistence/auth_repo.py` (session timeout) |
 | §11.200(a)(2) | Be used only by their genuine owners | Organisational control — genuine-owner use cannot be technically enforced at the platform layer (tied to the identity proofing of §11.100(b)) | `n/a` | — |
 | §11.200(a)(3) | Be administered and executed to ensure that attempted use of an individual's electronic signature by anyone other than its genuine owner requires collaboration of two or more individuals | Multi-party signature flow is **`Experimental`** | `Experimental` | — |
 | §11.200(b) | Electronic signatures based upon biometrics shall be designed to ensure that they cannot be used by anyone other than their genuine owners | n/a — biometrics are out of scope for the technical layer | `n/a` | — |
@@ -92,10 +92,10 @@ encryption, digital signatures.
 
 | Section | Title (paraphrased) | openMiura primitive(s) | Status | Evidence path |
 |---|---|---|---|---|
-| §11.300(a) | Maintaining the uniqueness of each combined identification code and password | Unique constraint on principal id; password hashing in `auth_repo._hash_password` | `Partial` | `auth_repo` |
-| §11.300(b) | Ensuring that identification code and password issuances are periodically checked, recalled, or revised | Expiry / rotation hooks exist on api tokens and auth sessions; the *operational* periodic check is organisational | `Partial` | `auth_repo` |
-| §11.300(c) | Following loss management procedures to electronically deauthorize lost, stolen, missing, or otherwise potentially compromised tokens | `revoke_api_token`, `revoke_auth_session`, `revoke_auth_sessions_for_user` exist; the *procedure* (who calls them, when) is organisational | `Partial` | `auth_repo` |
-| §11.300(d) | Use of transaction safeguards to prevent unauthorized use of passwords and/or identification codes, and to detect and report in an immediate and urgent manner any attempts at their unauthorized use | Login attempt logging, brute-force protection on /broker/auth/* via rate limiting; alerting integration is **`Experimental`** | `Partial` | `_helpers.py:_rate_limit` |
+| §11.300(a) | Maintaining the uniqueness of each combined identification code and password | Unique constraint on principal id; password hashing in `auth_repo._hash_password` (PBKDF2, 200k iterations) | `Partial` | `openmiura/persistence/auth_repo.py:225` (`_hash_password`) |
+| §11.300(b) | Ensuring that identification code and password issuances are periodically checked, recalled, or revised | Expiry / rotation hooks exist on api tokens and auth sessions; the *operational* periodic check is organisational | `Partial` | `openmiura/persistence/auth_repo.py` (token/session expiry) |
+| §11.300(c) | Following loss management procedures to electronically deauthorize lost, stolen, missing, or otherwise potentially compromised tokens | `revoke_api_token`, `revoke_auth_session`, `revoke_auth_sessions_for_user` exist; the *procedure* (who calls them, when) is organisational | `Partial` | `openmiura/persistence/auth_repo.py:168,458,471` (`revoke_*`) |
+| §11.300(d) | Use of transaction safeguards to prevent unauthorized use of passwords and/or identification codes, and to detect and report in an immediate and urgent manner any attempts at their unauthorized use | Login attempt logging, brute-force protection on /broker/auth/* via rate limiting; alerting integration is **`Experimental`** | `Partial` | `interfaces/http/routes/admin/_helpers.py:48` (`_rate_limit`); `tests/test_phase6_security_hardening.py` |
 | §11.300(e) | Initial and periodic testing of devices, such as tokens or cards, that bear or generate identification code or password information to ensure that they function properly and have not been altered in an unauthorized manner | n/a — hardware tokens are out of scope | `n/a` | — |
 
 ---
