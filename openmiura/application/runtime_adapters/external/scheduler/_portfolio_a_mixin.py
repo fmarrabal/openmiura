@@ -111,6 +111,7 @@ class _OpenClawRecoverySchedulerServicePortfolioAMixin:
         # false positive on `private_key: <KeyType> | None = None`.
         private_key = None  # type: ed25519.Ed25519PrivateKey | None
         origin = 'derived_seed'
+        dev_default_seed = False
         provider_metadata: dict[str, Any] = {'provider': provider}
 
         def _load_from_sources(env_b64: str, env_path: str, *, error_prefix: str) -> ed25519.Ed25519PrivateKey | None:
@@ -150,14 +151,20 @@ class _OpenClawRecoverySchedulerServicePortfolioAMixin:
                 private_key = self._load_ed25519_private_key_from_pem(Path(env_path).read_bytes(), error_prefix='OPENMIURA_EVIDENCE_SIGNING_PRIVATE_KEY_PEM_PATH')
                 origin = 'configured_pem_path'
             else:
-                seed_material = str(os.getenv('OPENMIURA_EVIDENCE_SIGNING_SEED') or 'openmiura-portfolio-signing-v2-dev-seed').encode('utf-8')
+                configured_seed = str(os.getenv('OPENMIURA_EVIDENCE_SIGNING_SEED') or '').strip()
+                # No real key, PEM, KMS/HSM provider, or custom seed
+                # configured → we fall back to the built-in PUBLIC dev
+                # seed. Flag it so the signature can be marked
+                # non-authoritative below.
+                dev_default_seed = not configured_seed
+                seed_material = (configured_seed or 'openmiura-portfolio-signing-v2-dev-seed').encode('utf-8')
                 derived = hashlib.sha256(seed_material + b':' + str(key_id or 'openmiura-local').encode('utf-8')).digest()
                 private_key = ed25519.Ed25519PrivateKey.from_private_bytes(derived)
                 origin = 'derived_seed'
                 provider = 'local-ed25519'
                 provider_metadata['provider'] = provider
         public_key = private_key.public_key()
-        return private_key, {
+        info: dict[str, Any] = {
             'algorithm': 'ed25519',
             'origin': origin,
             'provider': provider,
@@ -165,6 +172,27 @@ class _OpenClawRecoverySchedulerServicePortfolioAMixin:
             'public_key_pem': self._ed25519_public_key_pem(public_key),
             'public_key_fingerprint': self._ed25519_public_key_fingerprint(public_key),
         }
+        # Security/honesty: the built-in fallback seed is a PUBLIC
+        # literal — anyone with the source can reproduce this private
+        # key and forge a "signature". When it is in use (no real key,
+        # PEM, KMS/HSM provider, or custom OPENMIURA_EVIDENCE_SIGNING_SEED)
+        # and the operator has NOT explicitly opted in via
+        # OPENMIURA_ALLOW_DEV_SIGNING_KEY, mark the signature as
+        # non-authoritative so an auditor reading the evidence pack is
+        # never misled into trusting a dev-seed signature. This is
+        # additive metadata: the signature itself is unchanged.
+        _dev_opt_in = str(os.getenv('OPENMIURA_ALLOW_DEV_SIGNING_KEY') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+        if dev_default_seed and not _dev_opt_in:
+            info['dev_signing_key'] = True
+            info['signing_warning'] = (
+                'Signed with the built-in development seed, a public, '
+                'source-reproducible key. This signature is NOT '
+                'authoritative and must not be relied upon. Configure a '
+                'real signing key (OPENMIURA_EVIDENCE_SIGNING_PRIVATE_KEY_'
+                'PEM_B64 / _PEM_PATH, a KMS/HSM provider, or '
+                'OPENMIURA_EVIDENCE_SIGNING_SEED) for production evidence.'
+            )
+        return private_key, info
 
     def _run_portfolio_external_signing_command(
         self,
