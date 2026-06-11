@@ -412,6 +412,85 @@ async def stream_message_native(
         except Exception:
             pass
 
+    # ----- Decision trace (parity with the synchronous path) -----
+    # The native streaming endpoint historically produced no decision
+    # trace, so streaming turns reached /http/budget (in-process) but
+    # never the persistent cost-governance surface (decision_traces +
+    # the /admin cost routes). Build a trace_payload here, let the
+    # runtime fill llm_calls + tool_rounds via trace_collector, and
+    # persist it on every exit path (completed / cancelled / error)
+    # through the shared _persist_decision_trace — which also computes
+    # estimated_cost from usage + model (H3.10).
+    trace_t0 = time.perf_counter()
+    trace_id = uuid.uuid4().hex
+    _llm_cfg = getattr(getattr(gw, "settings", None), "llm", None)
+    trace_payload: dict[str, Any] = {
+        "request_text":     msg.text,
+        "response_text":    "",
+        "status":           "received",
+        "provider":         str(getattr(_llm_cfg, "provider", "") or ""),
+        "model":            str(getattr(_llm_cfg, "model", "") or ""),
+        "latency_ms":       0.0,
+        "estimated_cost":   0.0,
+        "usage":            {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "memory":           {"hit_count": 0, "items": []},
+        "tools_considered": [],
+        "tools_used":       [],
+        "policies_applied": [],
+        "llm_calls":        [],
+        "decisions":        {"streaming": True},
+        "context": {
+            "channel":        channel,
+            "tenant_id":      tenant_id,
+            "workspace_id":   workspace_id,
+            "environment":    environment,
+            "streaming":      True,
+            "message_length": len(msg.text or ""),
+        },
+    }
+    _trace_done = {"persisted": False}
+
+    def _persist_trace(status: str, response_text: str, *, reason: str | None = None) -> None:
+        # Persist exactly once per turn. Reuses the pipeline helper so
+        # the H3.10 cost computation + realtime publish are identical
+        # to the synchronous path. Lazy import avoids any import cycle.
+        if _trace_done["persisted"]:
+            return
+        _trace_done["persisted"] = True
+        try:
+            from openmiura.pipeline import _persist_decision_trace
+        except Exception:
+            return
+        trace_payload["status"] = status
+        trace_payload["response_text"] = response_text
+        trace_payload["latency_ms"] = round((time.perf_counter() - trace_t0) * 1000.0, 3)
+        if usage:
+            trace_payload["usage"] = usage
+        if reason:
+            trace_payload["decisions"] = {
+                **dict(trace_payload.get("decisions") or {}), "cancel_reason": reason,
+            }
+        if not trace_payload.get("llm_calls"):
+            # Runtime didn't fill it (cancel/error before done, or an
+            # old runtime without trace_collector) — record at least
+            # the one call we know happened.
+            trace_payload["llm_calls"] = [{}]
+        try:
+            _persist_decision_trace(
+                gw,
+                trace_id=trace_id,
+                session_id=session_id,
+                user_key=user_key,
+                channel=channel,
+                agent_id=agent_id,
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+                trace=trace_payload,
+            )
+        except Exception:
+            pass
+
     # H3.3c — only forward attachments if the runtime
     # accepts the kwarg. Older runtimes / test doubles fall
     # back to the legacy signature.
@@ -432,6 +511,9 @@ async def stream_message_native(
     # H3.5 — give the runtime a cooperative cancel predicate
     # backed by this stream's Event.
     stream_kwargs["cancel_check"] = cancel_event.is_set
+    # Streaming decision trace — the runtime fills llm_calls +
+    # tool_rounds into this dict during the stream.
+    stream_kwargs["trace_collector"] = trace_payload
 
     # Register only now, immediately before the guarded section, so
     # the matching unregister in `finally` always runs and we never
@@ -442,9 +524,10 @@ async def stream_message_native(
         try:
             gen = gw.runtime.generate_reply_stream(**stream_kwargs)
         except TypeError:
-            # Older runtime / test double that doesn't accept
-            # cancel_check — retry on the legacy signature.
+            # Older runtime / test double that doesn't accept the
+            # newer kwargs — retry on the legacy signature.
             stream_kwargs.pop("cancel_check", None)
+            stream_kwargs.pop("trace_collector", None)
             gen = gw.runtime.generate_reply_stream(**stream_kwargs)
         async for ev in gen:
             if ev.kind == "delta":
@@ -528,9 +611,11 @@ async def stream_message_native(
         partial = (content_accum or "").strip()
         if partial:
             _audit_assistant_turn(partial, was_cancelled=True, reason="client_disconnected")
+        _persist_trace("cancelled", partial, reason="client_disconnected")
         raise
     except Exception as exc:
         yield _sse_event("error", {"error": f"stream failed: {exc!r}"})
+        _persist_trace("error", (content_accum or "").strip(), reason=repr(exc))
         return
     finally:
         # Always drop the registry entry — this stream can no
@@ -538,6 +623,7 @@ async def stream_message_native(
         unregister_stream(stream_id)
 
     if saw_error:
+        _persist_trace("error", (content_accum or "").strip())
         return
 
     if cancelled:
@@ -545,12 +631,14 @@ async def stream_message_native(
         # stop. The cancelled event was already emitted; a
         # cancelled stream gets no trailing done.
         _audit_assistant_turn((content_accum or "").strip(), was_cancelled=True, reason=cancel_reason)
+        _persist_trace("cancelled", (content_accum or "").strip(), reason=cancel_reason)
         return
 
     final_text = (content_accum or "").strip() or "(empty response)"
 
     # ----- Audit assistant turn -----
     _audit_assistant_turn(final_text, was_cancelled=False, reason=None)
+    _persist_trace("completed", final_text)
 
     # ----- Emit final done event with OutboundMessage shape -----
     # H3.7 — carry the cost breakdown next to usage in the turn
