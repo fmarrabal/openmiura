@@ -482,6 +482,34 @@ class AuthService:
         return role
 
     @classmethod
+    def resolve_effective_target_role(
+        cls,
+        gw,
+        *,
+        user_key: str | None = None,
+        username: str | None = None,
+        base_role: str = "user",
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> str:
+        """Resolve the role a target principal would ACTUALLY hold at use
+        time, honouring config ``user_key_roles`` / ``username_roles`` for the
+        target's scope — not merely an ``auth_users`` row. Authority checks
+        (creating a user, minting a token) MUST validate against this: the
+        effective role can be elevated by config for an identity that has no
+        DB row, and a row-only check would silently miss it.
+        """
+        target_ctx = {
+            "user_key": str(user_key or "").strip(),
+            "username": str(username or "").strip(),
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+            "environment": environment,
+        }
+        return cls._resolve_bound_role(gw, target_ctx, base_role)
+
+    @classmethod
     def _resolve_permissions(cls, gw, auth_ctx: dict[str, Any], role: str) -> list[str]:
         lineage = cls._role_lineage(gw, auth_ctx, role)
         perms: set[str] = set()
