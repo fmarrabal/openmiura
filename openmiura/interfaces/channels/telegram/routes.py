@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -40,10 +41,19 @@ async def telegram_webhook(request: Request):
             if gw.settings.telegram
             else ""
         )
-        if secret_cfg:
-            header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-            if header != secret_cfg:
-                raise HTTPException(status_code=401, detail="Invalid Telegram secret token")
+        # Fail closed: the X-Telegram-Bot-Api-Secret-Token is the only thing
+        # that authenticates a webhook POST as genuinely coming from Telegram.
+        # With no secret configured, anyone who can reach this route can forge
+        # updates that run the agent and its tools under a spoofed identity, so
+        # we refuse to process the request rather than accept it anonymously.
+        if not secret_cfg:
+            logger.warning("Telegram webhook rejected: no webhook_secret configured (fail-closed)")
+            record_error("telegram_webhook_no_secret")
+            raise HTTPException(status_code=401, detail="Telegram webhook secret not configured")
+        header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        # Constant-time comparison to avoid leaking the secret via timing.
+        if not secrets.compare_digest(header, secret_cfg):
+            raise HTTPException(status_code=401, detail="Invalid Telegram secret token")
 
         try:
             update = await request.json()

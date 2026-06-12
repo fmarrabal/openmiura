@@ -360,6 +360,33 @@ def build_auth_router() -> APIRouter:
         require_csrf(request, auth_ctx)
         try:
             AuthService.validate_target_scope(auth_ctx, tenant_id=payload.tenant_id, workspace_id=payload.workspace_id)
+            _u_tenant = payload.tenant_id or auth_ctx.get("tenant_id")
+            _u_workspace = payload.workspace_id or auth_ctx.get("workspace_id")
+            _u_user_key = payload.user_key or f"user:{str(payload.username).strip()}"
+            # Authority over the EFFECTIVE role the new user would hold at use
+            # time — config username_roles/user_key_roles can elevate the
+            # requested role string, so validate against the resolved role, not
+            # payload.role. Without this an actor holding only auth.manage could
+            # create a user that config silently maps to admin.
+            _effective_role = AuthService.resolve_effective_target_role(
+                gw, user_key=_u_user_key, username=payload.username, base_role=payload.role,
+                tenant_id=_u_tenant, workspace_id=_u_workspace,
+            )
+            AuthService.validate_role_assignment(gw, auth_ctx, role=_effective_role, tenant_id=_u_tenant, workspace_id=_u_workspace)
+            # ensure_auth_user is an upsert keyed by username: it overwrites the
+            # role and password of any existing row. Guard the overwrite path so
+            # an actor cannot clobber (downgrade / reset the password of) a user
+            # whose effective role or scope is beyond their authority — e.g. an
+            # operator silently taking over an existing admin account.
+            existing = gw.audit.get_auth_user(username=payload.username)
+            if existing is not None:
+                AuthService.validate_target_scope(auth_ctx, tenant_id=existing.get("tenant_id"), workspace_id=existing.get("workspace_id"))
+                _existing_role = AuthService.resolve_effective_target_role(
+                    gw, user_key=existing.get("user_key"), username=existing.get("username"),
+                    base_role=existing.get("role") or "user",
+                    tenant_id=existing.get("tenant_id"), workspace_id=existing.get("workspace_id"),
+                )
+                AuthService.validate_role_assignment(gw, auth_ctx, role=_existing_role, tenant_id=existing.get("tenant_id"), workspace_id=existing.get("workspace_id"))
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         user = gw.audit.ensure_auth_user(
@@ -379,6 +406,24 @@ def build_auth_router() -> APIRouter:
         require_csrf(request, auth_ctx)
         try:
             AuthService.validate_target_scope(auth_ctx, tenant_id=payload.tenant_id, workspace_id=payload.workspace_id, environment=payload.environment)
+            # An API token inherits the identity of its user_key, so minting one
+            # for another principal is impersonation. Resolve the role that
+            # identity would ACTUALLY hold at use time — including config
+            # user_key_roles/username_roles, not just an auth_users row — and
+            # require authority over it. A row-only check would miss a
+            # config-elevated user_key with no DB row (the token would still
+            # resolve to admin when presented).
+            _target_user = gw.audit.get_auth_user(user_key=payload.user_key) or {}
+            _t_tenant = _target_user.get("tenant_id") or payload.tenant_id or auth_ctx.get("tenant_id")
+            _t_workspace = _target_user.get("workspace_id") or payload.workspace_id or auth_ctx.get("workspace_id")
+            _t_environment = payload.environment or auth_ctx.get("environment")
+            _t_role = AuthService.resolve_effective_target_role(
+                gw, user_key=payload.user_key, username=_target_user.get("username"),
+                base_role=_target_user.get("role") or "user",
+                tenant_id=_t_tenant, workspace_id=_t_workspace, environment=_t_environment,
+            )
+            AuthService.validate_target_scope(auth_ctx, tenant_id=_t_tenant, workspace_id=_t_workspace, environment=_t_environment)
+            AuthService.validate_role_assignment(gw, auth_ctx, role=_t_role, tenant_id=_t_tenant, workspace_id=_t_workspace, environment=_t_environment)
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         ttl_s = payload.ttl_s if payload.ttl_s is not None else int(getattr(gw.settings.auth, "api_token_default_ttl_s", 0) or 0) or None
