@@ -232,6 +232,14 @@ class LLMSettings:
     # loudly at startup on a bad combination. Other providers
     # ignore the field.
     thinking_budget_tokens: int = 0
+    # Prompt caching (Anthropic only). When True (default) the client
+    # places a single ephemeral cache breakpoint on the stable
+    # system+tools prefix, so a multi-round tool loop and repeated
+    # turns in a session re-read that prefix at ~0.1x input price
+    # instead of re-paying full price every round. No effect on other
+    # providers. Set False to send no cache_control (e.g. to avoid the
+    # one-time cache-write premium on purely single-shot workloads).
+    prompt_caching: bool = True
 
 
 @dataclass(frozen=True)
@@ -657,6 +665,7 @@ def load_settings(path: str) -> Settings:
         anthropic_version=str(llm_raw.get("anthropic_version", "2023-06-01")),
         max_output_tokens=_as_int(llm_raw.get("max_output_tokens", 2048), 2048),
         thinking_budget_tokens=_as_int(llm_raw.get("thinking_budget_tokens", 0), 0),
+        prompt_caching=_as_bool(llm_raw.get("prompt_caching", True), True),
     )
 
     runtime_raw = raw_cfg.get("runtime", {}) or {}

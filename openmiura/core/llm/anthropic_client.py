@@ -264,6 +264,7 @@ class AnthropicClient:
         anthropic_version: str = '2023-06-01',
         max_output_tokens: int = 2048,
         thinking_budget_tokens: int = 0,
+        prompt_caching: bool = True,
         timeout_s: int = 60,
         transport: httpx.BaseTransport | httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -307,8 +308,40 @@ class AnthropicClient:
         self.anthropic_version = anthropic_version
         self.max_output_tokens = max_output_tokens
         self.thinking_budget_tokens = thinking_budget_tokens
+        self.prompt_caching = prompt_caching
         self.timeout_s = timeout_s
         self._transport = transport
+
+    def _apply_prompt_cache(self, payload: dict[str, Any]) -> None:
+        """Place a single ephemeral prompt-cache breakpoint on the
+        stable system+tools prefix.
+
+        Anthropic renders ``tools`` -> ``system`` -> ``messages``, so a
+        ``cache_control`` marker on the (last) system block also caches
+        the tool definitions that precede it. The system+tools prefix is
+        re-sent byte-identical on every round of the tool loop and on
+        every turn of a session, so caching it lets those re-sends read
+        at ~0.1x input price instead of full price. With no system we
+        fall back to marking the last tool definition; with neither
+        there is nothing stable to cache.
+
+        Placement only — never changes the prompt content. A prefix below
+        the model's minimum cacheable size simply isn't cached (no error,
+        no extra cost). Caching is GA, so no beta header is required.
+        """
+        if not self.prompt_caching:
+            return
+        system = payload.get('system')
+        if isinstance(system, str) and system.strip():
+            payload['system'] = [{
+                'type': 'text',
+                'text': system,
+                'cache_control': {'type': 'ephemeral'},
+            }]
+            return
+        tools = payload.get('tools')
+        if isinstance(tools, list) and tools and isinstance(tools[-1], dict):
+            tools[-1] = {**tools[-1], 'cache_control': {'type': 'ephemeral'}}
 
     def _thinking_config(self) -> dict[str, Any] | None:
         """The ``thinking`` request field when extended thinking
@@ -479,6 +512,7 @@ class AnthropicClient:
         thinking = self._thinking_config()
         if thinking:
             payload['thinking'] = thinking
+        self._apply_prompt_cache(payload)
 
         try:
             client_kwargs: dict[str, Any] = {'timeout': self.timeout_s}
@@ -568,6 +602,7 @@ class AnthropicClient:
         thinking = self._thinking_config()
         if thinking:
             payload['thinking'] = thinking
+        self._apply_prompt_cache(payload)
 
         try:
             headers = self._headers()
