@@ -72,8 +72,10 @@ through the public API. Evidence packs are generated at the
 moment of approval, not at retrieval time.
 
 Caveat: clock accuracy depends on the deployment environment.
-The recommended deployment profile uses NTP-synchronised hosts;
-clock skew is reported by `openmiura doctor`.
+openMiura records the host clock value it is given and does not
+itself verify clock accuracy — keeping hosts NTP-synchronised is an
+operational responsibility of the deployment (`openmiura doctor`
+validates configuration and storage posture, not the system clock).
 
 ## O — Original
 
