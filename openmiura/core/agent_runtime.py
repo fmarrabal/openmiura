@@ -73,6 +73,7 @@ class AgentRuntime:
                 # H3.4/H3.8 — extended thinking is config-driven;
                 # getattr keeps older Settings doubles working.
                 thinking_budget_tokens=getattr(settings.llm, 'thinking_budget_tokens', 0),
+                prompt_caching=getattr(settings.llm, 'prompt_caching', True),
                 timeout_s=settings.llm.timeout_s,
             )
         raise ValueError(f'Unsupported LLM provider: {settings.llm.provider}')
