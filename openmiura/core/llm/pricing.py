@@ -57,7 +57,16 @@ class ModelPrice:
 # prefix/substring so versioned ids ("claude-3-5-sonnet-20241022",
 # "gpt-4o-2024-08-06") resolve to their family entry.
 DEFAULT_PRICES: dict[str, ModelPrice] = {
-    # ---- Anthropic ----
+    # ---- Anthropic (Claude 4.x / Fable) ----
+    # cache_read = 0.1x input, cache_write = 1.25x input (5-minute TTL),
+    # the standard Anthropic prompt-cache multipliers.
+    "claude-fable-5":    ModelPrice(10.00, 50.00, cache_read=1.00, cache_write=12.50),
+    "claude-opus-4-8":   ModelPrice(5.00, 25.00, cache_read=0.50, cache_write=6.25),
+    "claude-opus-4-7":   ModelPrice(5.00, 25.00, cache_read=0.50, cache_write=6.25),
+    "claude-opus-4-6":   ModelPrice(5.00, 25.00, cache_read=0.50, cache_write=6.25),
+    "claude-sonnet-4-6": ModelPrice(3.00, 15.00, cache_read=0.30, cache_write=3.75),
+    "claude-haiku-4-5":  ModelPrice(1.00, 5.00, cache_read=0.10, cache_write=1.25),
+    # ---- Anthropic (Claude 3.x) ----
     "claude-3-5-sonnet": ModelPrice(3.00, 15.00, cache_read=0.30, cache_write=3.75),
     "claude-3-5-haiku":  ModelPrice(0.80, 4.00, cache_read=0.08, cache_write=1.00),
     "claude-3-opus":     ModelPrice(15.00, 75.00, cache_read=1.50, cache_write=18.75),
