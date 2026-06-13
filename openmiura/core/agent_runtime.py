@@ -318,6 +318,19 @@ class AgentRuntime:
                 messages.append(assistant_turn)
 
                 for tc in result.tool_calls:
+                    # Data integrity: if the model emitted unparseable tool
+                    # arguments, do NOT run the tool with silently-dropped
+                    # ({}) args — return an error result so the run is logged
+                    # as failed and the model can correct itself.
+                    _args_err = getattr(tc, 'arguments_error', None)
+                    if _args_err:
+                        record_error('tool_arguments_invalid')
+                        messages.append({
+                            'role': 'tool',
+                            'name': tc.name,
+                            'content': f'Tool {tc.name} was not executed: {_args_err}',
+                        })
+                        continue
                     try:
                         tool_output = tools_runtime.run_tool(
                             agent_id=agent_id,
@@ -366,7 +379,15 @@ class AgentRuntime:
                 trace_collector['response_text'] = final if final else '(empty response)'
                 trace_collector['latency_ms'] = round((time.perf_counter() - start_ts) * 1000.0, 3)
                 trace_collector['status'] = 'completed'
-                trace_collector.setdefault('decisions', {})['tool_round_limit_reached'] = bool(getattr(result, 'tool_calls', None) and rounds >= _MAX_TOOL_ROUNDS)
+                _dec = trace_collector.setdefault('decisions', {})
+                _dec['tool_round_limit_reached'] = bool(getattr(result, 'tool_calls', None) and rounds >= _MAX_TOOL_ROUNDS)
+                _sr = getattr(result, 'stop_reason', None)
+                if _sr:
+                    _dec['stop_reason'] = _sr
+                    # Record truncation / refusal truthfully so the trace
+                    # never logs an incomplete answer as a clean completion.
+                    _dec['response_truncated'] = (_sr == 'max_tokens')
+                    _dec['response_refused'] = (_sr == 'refusal')
             return final if final else '(empty response)'
         finally:
             if had_model_attr:
@@ -497,6 +518,7 @@ class AgentRuntime:
             'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0,
             'cache_read_tokens': 0, 'cache_write_tokens': 0,
         }
+        last_stop_reason: str | None = None
         loop = asyncio.get_running_loop()
 
         def _should_cancel() -> bool:
@@ -595,6 +617,9 @@ class AgentRuntime:
                         # the assistant turn that precedes the tool_result.
                         if ev.final is not None:
                             round_thinking_blocks = getattr(ev.final, 'thinking_blocks', None)
+                            _sr = getattr(ev.final, 'stop_reason', None)
+                            if _sr:
+                                last_stop_reason = _sr
                         break
 
                 if stream_failed:
@@ -666,6 +691,13 @@ class AgentRuntime:
                     error_msg field so ``gather`` doesn't abort
                     sibling tasks."""
                     assert tc is not None
+                    # Data integrity: unparseable tool arguments must not be
+                    # executed with silently-dropped ({}) args — surface an
+                    # error result so the run is logged as failed.
+                    _args_err = getattr(tc, 'arguments_error', None)
+                    if _args_err:
+                        record_error('tool_arguments_invalid')
+                        return tc, f'Tool {tc.name} was not executed: {_args_err}', 'tool_arguments_invalid'
                     if tools_runtime is None or not user_key:
                         msg = 'No tools_runtime / user_key configured'
                         return tc, msg, msg
@@ -751,6 +783,7 @@ class AgentRuntime:
                 content=(content_accum or '').strip() or '(empty response)',
                 tool_calls=[],
                 usage=dict(consolidated_usage) if usage_accum['total_tokens'] > 0 else None,
+                stop_reason=last_stop_reason,
             )
             # Streaming decision trace — only the runtime knows the
             # round structure, so it owns llm_calls + tool_rounds.
@@ -760,7 +793,12 @@ class AgentRuntime:
             # executed tool round).
             if trace_collector is not None:
                 trace_collector['llm_calls'] = [{'round': i} for i in range(rounds + 1)]
-                trace_collector.setdefault('decisions', {})['tool_rounds'] = rounds
+                _dec = trace_collector.setdefault('decisions', {})
+                _dec['tool_rounds'] = rounds
+                if last_stop_reason:
+                    _dec['stop_reason'] = last_stop_reason
+                    _dec['response_truncated'] = (last_stop_reason == 'max_tokens')
+                    _dec['response_refused'] = (last_stop_reason == 'refusal')
             yield LlmStreamEvent.make_done(final)
 
         finally:
