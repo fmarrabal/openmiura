@@ -119,6 +119,13 @@ class ToolCall:
     name: str
     arguments: dict[str, Any]
     id: str | None = None
+    # Set when the model emitted tool-call arguments that could not be
+    # parsed into a JSON object (malformed JSON, or a non-object value).
+    # ``arguments`` is then ``{}`` as before, but this carries the reason
+    # so the runtime can return an error tool_result instead of silently
+    # executing the tool with empty args — a data-integrity safeguard so a
+    # tool run with dropped arguments is never logged as a normal success.
+    arguments_error: str | None = None
 
 
 @dataclass
@@ -206,6 +213,12 @@ class ChatResponse:
     # or turns without extended thinking; the synchronous,
     # single-shot contract simply ignores it.
     thinking_blocks: list[dict[str, Any]] | None = None
+    # Why the model stopped, verbatim from the provider (Anthropic:
+    # end_turn / tool_use / max_tokens / stop_sequence / refusal; ``None``
+    # for providers/turns that don't report it). Surfaced so a truncated
+    # (``max_tokens``) or refused (``refusal``) turn is recorded as such
+    # instead of being logged as a complete answer.
+    stop_reason: str | None = None
 
 
 @dataclass

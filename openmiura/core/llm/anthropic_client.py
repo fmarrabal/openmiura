@@ -63,7 +63,8 @@ def _parse_content_block(block: Any) -> tuple[str | None, ToolCall | None]:
             return (None, None)
         inp = block.get('input')
         args = inp if isinstance(inp, dict) else {}
-        return (None, ToolCall(name=name, arguments=args, id=str(block.get('id') or '') or None))
+        args_error = None if (inp is None or isinstance(inp, dict)) else f'tool arguments were not a JSON object: {str(inp)[:200]}'
+        return (None, ToolCall(name=name, arguments=args, id=str(block.get('id') or '') or None, arguments_error=args_error))
     return (None, None)
 
 
@@ -184,11 +185,19 @@ class _StreamingBlockAssembler:
         if not name:
             return None
         raw = slot.get('partial_json') or ''
-        try:
-            args = json.loads(raw) if raw.strip() else {}
-        except Exception:
-            args = {}
-        return ToolCall(name=name, arguments=args, id=slot.get('id'))
+        args: dict[str, Any] = {}
+        args_error: str | None = None
+        if raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                args_error = f'tool arguments were not valid JSON: {raw[:200]}'
+            else:
+                if isinstance(parsed, dict):
+                    args = parsed
+                else:
+                    args_error = f'tool arguments were not a JSON object: {raw[:200]}'
+        return ToolCall(name=name, arguments=args, id=slot.get('id'), arguments_error=args_error)
 
     def text_accum(self) -> str:
         """Concatenate all text blocks (in index order) into
@@ -548,6 +557,7 @@ class AnthropicClient:
             tool_calls=calls,
             usage=_usage_from_anthropic(data.get('usage')),
             thinking_blocks=thinking_blocks or None,
+            stop_reason=(str(data.get('stop_reason')) if data.get('stop_reason') else None),
         )
 
     # ------------------------------------------------------------------
@@ -618,6 +628,7 @@ class AnthropicClient:
             'input_tokens': 0, 'output_tokens': 0,
             'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0,
         }
+        stop_reason: str | None = None
 
         client_kwargs: dict[str, Any] = {'timeout': self.timeout_s}
         if isinstance(self._transport, httpx.AsyncBaseTransport):
@@ -689,13 +700,17 @@ class AnthropicClient:
                             if tc is not None:
                                 yield LlmStreamEvent.make_tool_call(tc)
                         elif ev == 'message_delta':
-                            # Carries running usage updates.
+                            # Carries running usage updates + the final
+                            # stop_reason (in delta.stop_reason).
                             u_obj = obj.get('usage') or {}
                             if isinstance(u_obj, dict):
                                 for _k in ('input_tokens', 'output_tokens',
                                            'cache_read_input_tokens', 'cache_creation_input_tokens'):
                                     if _k in u_obj:
                                         usage_partial[_k] = int(u_obj.get(_k) or 0)
+                            d_obj = obj.get('delta') or {}
+                            if isinstance(d_obj, dict) and d_obj.get('stop_reason'):
+                                stop_reason = str(d_obj.get('stop_reason'))
                         elif ev == 'message_stop':
                             usage = _usage_from_anthropic(usage_partial)
                             if usage:
@@ -705,6 +720,7 @@ class AnthropicClient:
                                 tool_calls=[],
                                 usage=usage,
                                 thinking_blocks=assembler.thinking_blocks() or None,
+                                stop_reason=stop_reason,
                             ))
                             return
                         elif ev == 'error':
@@ -722,6 +738,7 @@ class AnthropicClient:
                 tool_calls=[],
                 usage=usage,
                 thinking_blocks=assembler.thinking_blocks() or None,
+                stop_reason=stop_reason,
             ))
 
         except httpx.ConnectError as e:
