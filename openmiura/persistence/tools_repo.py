@@ -17,7 +17,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    compute_chain_link,
     infer_scope_from_session,
+    parse_json_column,
     row_scope,
     scope_payload,
     scope_where,
@@ -49,12 +51,34 @@ class ToolsRepo:
             workspace_id = inferred.get("workspace_id")
             environment = inferred.get("environment")
         cur = self._conn.cursor()
+        ts = time.time()
+        # Tamper-evident hash-chain link (same transaction as the row INSERT).
+        prev_hash, row_hash, chain_seq = compute_chain_link(
+            self._conn,
+            chain_table="tool_calls",
+            row_fields={
+                "ts": ts,
+                "session_id": session_id,
+                "user_key": user_key,
+                "agent_id": agent_id,
+                "tool_name": tool_name,
+                "args": parse_json_column(args_json),
+                "ok": bool(ok),
+                "result_excerpt": result_excerpt,
+                "error": error,
+                "duration_ms": float(duration_ms),
+            },
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            now_ts=ts,
+        )
         cur.execute(
             """
-            INSERT INTO tool_calls(ts, session_id, user_key, agent_id, tool_name, args_json, ok, result_excerpt, error, duration_ms, tenant_id, workspace_id, environment)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO tool_calls(ts, session_id, user_key, agent_id, tool_name, args_json, ok, result_excerpt, error, duration_ms, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (time.time(), session_id, user_key, agent_id, tool_name, args_json, 1 if ok else 0, result_excerpt, error, float(duration_ms), tenant_id, workspace_id, environment),
+            (ts, session_id, user_key, agent_id, tool_name, args_json, 1 if ok else 0, result_excerpt, error, float(duration_ms), tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
         )
         self._conn.commit()
 

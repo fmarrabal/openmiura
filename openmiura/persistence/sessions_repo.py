@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    compute_chain_link,
     infer_scope_from_session,
     row_scope,
     scope_payload,
@@ -353,9 +354,27 @@ class SessionsRepo:
             workspace_id = inferred.get("workspace_id")
             environment = inferred.get("environment")
         cur = self._conn.cursor()
+        ts = time.time()
+        # Tamper-evident hash-chain link (same transaction as the row INSERT).
+        prev_hash, row_hash, chain_seq = compute_chain_link(
+            self._conn,
+            chain_table="events",
+            row_fields={
+                "ts": ts,
+                "direction": direction,
+                "channel": channel,
+                "user_id": user_id,
+                "session_id": session_id,
+                "payload": payload,
+            },
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            now_ts=ts,
+        )
         cur.execute(
-            "INSERT INTO events(ts, direction, channel, user_id, session_id, payload_json, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?)",
-            (time.time(), direction, channel, user_id, session_id, json.dumps(payload, ensure_ascii=False), tenant_id, workspace_id, environment),
+            "INSERT INTO events(ts, direction, channel, user_id, session_id, payload_json, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (ts, direction, channel, user_id, session_id, json.dumps(payload, ensure_ascii=False), tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
         )
         event_id = getattr(cur, 'lastrowid', None)
         self._conn.commit()

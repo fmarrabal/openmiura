@@ -57,6 +57,68 @@ def canonical_chain_scope(
     })
 
 
+def compute_chain_link(
+    conn: Any,
+    *,
+    chain_table: str,
+    row_fields: dict[str, Any],
+    tenant_id: str | None = None,
+    workspace_id: str | None = None,
+    environment: str | None = None,
+    now_ts: float,
+) -> tuple[str, str, int]:
+    """Compute ``(prev_hash, row_hash, chain_seq)`` for a NEW append-only row
+    and advance the per-(table, scope) head pointer.
+
+    MUST be called inside the same transaction as the row INSERT (before the
+    repo's ``commit()``) so the row and the head it produces commit
+    atomically — a crash can never leave a row without a link or a head
+    pointing past a missing row.
+
+    The chain is partitioned per (table, scope); the first row of each chain
+    is the genesis row with ``prev_hash == ""`` and ``chain_seq == 1`` (this
+    matches the chain-of-custody initialiser in ``evidence_verify``). Rows
+    written before this feature existed keep NULL link columns and are simply
+    not part of the chain — pre-feature history is explicitly never claimed
+    as verified.
+
+    ``row_fields`` must hold the row's stable, hashable content with any
+    ``*_json`` text already parsed via :func:`parse_json_column` (never raw
+    column text — see the two-serializer trap). The verifier rebuilds the
+    identical canonical dict, so the writer and verifier hash the same bytes.
+    """
+    scope = canonical_chain_scope(tenant_id, workspace_id, environment)
+    cur = conn.cursor()
+    head = cur.execute(
+        "SELECT head_hash, head_seq FROM audit_chain_heads WHERE chain_table=? AND chain_scope=?",
+        (chain_table, scope),
+    ).fetchone()
+    if head is None:
+        prev_hash = ""
+        chain_seq = 1
+    else:
+        prev_hash = str(head[0] or "")
+        chain_seq = int(head[1]) + 1
+    row_hash = canonical_row_digest({
+        "chain_table": chain_table,
+        "chain_scope": scope,
+        "chain_seq": chain_seq,
+        "prev_hash": prev_hash,
+        "row": row_fields,
+    })
+    if head is None:
+        cur.execute(
+            "INSERT INTO audit_chain_heads(chain_table, chain_scope, head_hash, head_seq, updated_at) VALUES(?,?,?,?,?)",
+            (chain_table, scope, row_hash, chain_seq, float(now_ts)),
+        )
+    else:
+        cur.execute(
+            "UPDATE audit_chain_heads SET head_hash=?, head_seq=?, updated_at=? WHERE chain_table=? AND chain_scope=?",
+            (row_hash, chain_seq, float(now_ts), chain_table, scope),
+        )
+    return prev_hash, row_hash, chain_seq
+
+
 def scope_payload(
     *,
     tenant_id: str | None = None,
