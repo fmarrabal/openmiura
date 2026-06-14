@@ -7,7 +7,54 @@ can call them without requiring the same object identity.
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+# One serializer of record for the audit hash-chain. Reuse the offline
+# verifier's compact canonical digest so a row_hash computed here in the
+# persistence layer is byte-for-byte reproducible by `openmiura verify` and
+# `openmiura db verify-chain`. Do NOT re-implement the JSON canonicalization.
+from openmiura.evidence_verify import stable_digest as canonical_row_digest
+
+
+def parse_json_column(text: Any) -> Any:
+    """Re-parse a stored ``*_json`` TEXT column back to its Python object
+    for hashing.
+
+    THE TWO-SERIALIZER TRAP: the ``payload_json`` / ``args_json`` / ``*_json``
+    columns are written with ``json.dumps(..., ensure_ascii=False)`` — WITHOUT
+    ``sort_keys`` — so their raw bytes are not the canonical form. A hash-chain
+    must therefore re-parse the column and hash the resulting OBJECT through
+    :func:`canonical_row_digest` (which sorts keys + uses compact separators),
+    never the raw text. On malformed JSON we fall back to ``{"_raw": text}``,
+    matching the existing readers (sessions_repo / tools_repo) so the writer
+    and the verifier always agree.
+    """
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        return text
+    try:
+        return json.loads(text)
+    except Exception:
+        return {"_raw": text}
+
+
+def canonical_chain_scope(
+    tenant_id: str | None = None,
+    workspace_id: str | None = None,
+    environment: str | None = None,
+) -> str:
+    """Canonical chain-partition key for a (tenant, workspace, environment)
+    scope. NULL components collapse to ``""`` so an all-unscoped row lands in a
+    single well-defined ``"unscoped"`` chain. A digest (not a delimiter join)
+    is used so a value containing the delimiter cannot collide two scopes.
+    """
+    return canonical_row_digest({
+        "tenant_id": tenant_id or "",
+        "workspace_id": workspace_id or "",
+        "environment": environment or "",
+    })
 
 
 def scope_payload(
