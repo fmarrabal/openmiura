@@ -31,6 +31,18 @@ def _seed(conn, n=4):
                                   tenant_id="acme", workspace_id="w", environment="prod")
 
 
+def _drop_append_only_triggers(conn):
+    """The append-only triggers (migration 24) block UPDATE/DELETE on the
+    chained tables — exactly so an attacker can't tamper in-place. To
+    SIMULATE tamper in these tests we must first drop them (the only way to
+    mutate the rows), then prove the verifier still detects the divergence."""
+    cur = conn.cursor()
+    for table in ("events", "tool_calls"):
+        cur.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_update")
+        cur.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_delete")
+    conn.commit()
+
+
 def test_intact_chains_verify(tmp_path):
     conn = _conn(tmp_path)
     _seed(conn)
@@ -46,6 +58,7 @@ def test_tampered_payload_is_detected(tmp_path):
     conn = _conn(tmp_path)
     _seed(conn)
     # Mutate a row's content directly (bypassing the write path).
+    _drop_append_only_triggers(conn)
     conn.cursor().execute("UPDATE events SET payload_json='{\"i\": 999}' WHERE chain_seq=2")
     conn.commit()
     res = verify_audit_chain(conn, chain_table="events")
@@ -57,6 +70,7 @@ def test_tampered_payload_is_detected(tmp_path):
 def test_broken_prev_hash_link_is_detected(tmp_path):
     conn = _conn(tmp_path)
     _seed(conn)
+    _drop_append_only_triggers(conn)
     conn.cursor().execute("UPDATE events SET prev_hash='deadbeef' WHERE chain_seq=3")
     conn.commit()
     res = verify_audit_chain(conn, chain_table="events")
@@ -68,6 +82,7 @@ def test_deleted_row_creates_sequence_gap(tmp_path):
     conn = _conn(tmp_path)
     _seed(conn)
     # Removing a middle row leaves a gap (1,2,4) the verifier rejects.
+    _drop_append_only_triggers(conn)
     conn.cursor().execute("DELETE FROM events WHERE chain_seq=3")
     conn.commit()
     res = verify_audit_chain(conn, chain_table="events")
@@ -125,6 +140,7 @@ def test_cli_exit_codes(tmp_path):
     assert db_verify_chain_cli(config=str(cfg), table="decision_traces") == 3
 
     # Tamper → exit 1.
+    _drop_append_only_triggers(store._conn)
     store._conn.cursor().execute("UPDATE events SET row_hash='forged' WHERE chain_seq=1")
     store._conn.commit()
     assert db_verify_chain_cli(config=str(cfg)) == 1

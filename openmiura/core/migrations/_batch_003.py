@@ -45,6 +45,63 @@ _CHAIN_INDEXES = tuple(
 )
 
 
+# Migration 24 — append-only triggers. events and tool_calls are pure
+# append-only (verified: no production path UPDATEs/DELETEs them), so we make
+# that a DB-enforced guarantee rather than a convention. decision_traces is
+# NOT covered here — it legitimately upserts and is only guarded once option-A
+# immutable versions land. Genesis re-anchor means no historic-row UPDATE, so
+# the triggers can be created without conflicting with any backfill.
+_TRIGGER_TABLES = ("events", "tool_calls")
+
+
+def _sqlite_triggers_up() -> tuple[str, ...]:
+    out: list[str] = []
+    for table in _TRIGGER_TABLES:
+        msg = f"{table} is append-only (audit hash-chain)"
+        out.append(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_no_update BEFORE UPDATE ON {table} "
+            f"BEGIN SELECT RAISE(ABORT, '{msg}'); END"
+        )
+        out.append(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_no_delete BEFORE DELETE ON {table} "
+            f"BEGIN SELECT RAISE(ABORT, '{msg}'); END"
+        )
+    return tuple(out)
+
+
+def _postgres_triggers_up() -> tuple[str, ...]:
+    out: list[str] = [
+        "CREATE OR REPLACE FUNCTION openmiura_reject_audit_write() RETURNS trigger "
+        "LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'append-only (audit hash-chain): % on %', TG_OP, TG_TABLE_NAME; END; $$",
+    ]
+    for table in _TRIGGER_TABLES:
+        for op in ("update", "delete"):
+            out.append(f"DROP TRIGGER IF EXISTS trg_{table}_no_{op} ON {table}")
+            out.append(
+                f"CREATE TRIGGER trg_{table}_no_{op} BEFORE {op.upper()} ON {table} "
+                f"FOR EACH ROW EXECUTE FUNCTION openmiura_reject_audit_write()"
+            )
+    return tuple(out)
+
+
+def _sqlite_triggers_down() -> tuple[str, ...]:
+    return tuple(
+        f"DROP TRIGGER IF EXISTS trg_{table}_no_{op}"
+        for table in _TRIGGER_TABLES
+        for op in ("update", "delete")
+    )
+
+
+def _postgres_triggers_down() -> tuple[str, ...]:
+    out = [
+        f"DROP TRIGGER IF EXISTS trg_{table}_no_{op} ON {table}"
+        for table in _TRIGGER_TABLES
+        for op in ("update", "delete")
+    ]
+    out.append("DROP FUNCTION IF EXISTS openmiura_reject_audit_write()")
+    return tuple(out)
+
+
 BATCH_003_MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         23,
@@ -105,5 +162,13 @@ BATCH_003_MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE decision_traces DROP COLUMN IF EXISTS prev_hash",
             "ALTER TABLE decision_traces DROP COLUMN IF EXISTS chain_seq",
         ),
+    ),
+    Migration(
+        24,
+        "audit_chain_append_only_triggers",
+        _sqlite_triggers_up(),
+        _postgres_triggers_up(),
+        _sqlite_triggers_down(),
+        _postgres_triggers_down(),
     ),
 )

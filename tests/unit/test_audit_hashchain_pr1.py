@@ -44,11 +44,12 @@ def _migrated_conn(tmp_path):
     return conn
 
 
-def test_migration_23_is_registered_and_latest():
+def test_migration_23_is_registered():
     by_version = {m.version: m for m in MIGRATIONS}
     assert 23 in by_version
     assert by_version[23].name == "audit_hash_chain"
-    assert max(by_version) == 23
+    # versions stay contiguous (no gaps) up to the latest
+    assert sorted(by_version) == list(range(1, max(by_version) + 1))
 
 
 def test_chain_columns_added_to_all_three_tables(tmp_path):
