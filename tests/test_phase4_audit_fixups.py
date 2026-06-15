@@ -100,6 +100,9 @@ def test_compliance_summary_filters_old_sessions_and_tool_calls(tmp_path: Path):
 
     cur = audit._conn.cursor()
     cur.execute("UPDATE sessions SET updated_at=?, created_at=? WHERE session_id=?", (old_ts, old_ts, old_session))
+    # tool_calls is append-only (audit hash-chain trigger); drop the guard to
+    # back-date this fixture row (the production code under test only reads).
+    cur.execute("DROP TRIGGER IF EXISTS trg_tool_calls_no_update")
     cur.execute("UPDATE tool_calls SET ts=? WHERE session_id=? AND user_key=?", (old_ts, old_session, "user:old"))
     audit._conn.commit()
 
