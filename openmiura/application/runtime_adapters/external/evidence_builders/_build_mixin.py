@@ -52,6 +52,20 @@ class _OpenClawEvidenceBuildersMixinBuildMixin:
         generated_at = time.time()
         package_id = str(uuid.uuid4())
         retention = self._portfolio_retention_snapshot(created_at=generated_at, retention_policy=retention_policy, now_ts=generated_at)
+        # Attest the tamper-evident audit-chain head(s) for this scope inside
+        # the signed chain of custody, so `openmiura verify` records what the
+        # head was + who signed it. `openmiura db verify-chain` then proves the
+        # live DB still hashes to it. No-op for scopes with no logged rows.
+        try:
+            from openmiura.persistence.hashchain import audit_chain_head_events
+            _audit_head_events = audit_chain_head_events(
+                gw.audit._conn,
+                tenant_id=release.get('tenant_id'),
+                workspace_id=release.get('workspace_id'),
+                environment=release.get('environment'),
+            )
+        except Exception:
+            _audit_head_events = []
         _, provisional_entries, chain_snapshot = self._prepare_portfolio_chain_of_custody_snapshot(
             release=release,
             actor=actor,
@@ -66,6 +80,7 @@ class _OpenClawEvidenceBuildersMixinBuildMixin:
                         'report_type': 'openmiura_portfolio_evidence_package_v1',
                     },
                 },
+                *_audit_head_events,
             ],
             timestamp=generated_at,
         )
