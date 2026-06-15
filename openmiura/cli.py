@@ -440,6 +440,55 @@ def db_version_cli(*, config: str | None = None, json_output: bool = False) -> i
     return 0
 
 
+def db_verify_chain_cli(*, config: str | None = None, table: str | None = None, json_output: bool = False) -> int:
+    """Verify the tamper-evident audit hash-chain against the live DB.
+
+    Exit codes mirror ``openmiura verify`` so CI can tell the cases apart:
+    0 = every chain intact, 1 = tamper detected (hash mismatch / broken link
+    / sequence gap / head mismatch), 3 = usage error (unknown table, or the
+    hash-chain migration has not been applied).
+    """
+    from openmiura.evidence_verify import EXIT_FAILED, EXIT_OK, EXIT_USAGE
+    from openmiura.persistence.hashchain import CHAINED_TABLES, verify_audit_chain
+
+    if table is not None and table not in CHAINED_TABLES:
+        print(f"ERROR: '{table}' is not a chained audit table (chained: {', '.join(CHAINED_TABLES)})")
+        return EXIT_USAGE
+
+    settings = load_settings(_resolve_config_path(config))
+    store = AuditStore(db_path=settings.storage.db_path, backend=settings.storage.backend, database_url=settings.storage.database_url)
+    tables = [table] if table else list(CHAINED_TABLES)
+
+    try:
+        results = [verify_audit_chain(store._conn, chain_table=t) for t in tables]
+    except Exception as exc:
+        text = str(exc).lower()
+        if "no such column" in text or "no such table" in text or "does not exist" in text:
+            print("ERROR: audit hash-chain not present — apply migrations first (openmiura db migrate)")
+            return EXIT_USAGE
+        raise
+
+    any_tamper = any(r["any_tamper"] for r in results)
+    payload = {
+        "ok": not any_tamper,
+        "backend": store._conn.backend,
+        "tables": results,
+        "any_tamper": any_tamper,
+    }
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        for res in results:
+            for chain in res["chains"]:
+                status = "PASS" if (chain["chain_valid"] and chain["head_matches"]) else "FAIL"
+                extra = "" if status == "PASS" else f" (first_bad_seq={chain['first_bad_seq']})"
+                print(f"[{status}] {res['table']} scope={chain['scope'][:12]}… "
+                      f"chained={chain['count']} preexisting={chain['preexisting_count']}{extra}")
+        print()
+        print("VERDICT: TAMPER DETECTED" if any_tamper else "VERDICT: all audit chains intact")
+    return EXIT_FAILED if any_tamper else EXIT_OK
+
+
 def db_backup_cli(*, config: str | None = None, json_output: bool = False) -> int:
     settings = load_settings(_resolve_config_path(config))
     payload = backup_database(backend=settings.storage.backend, db_path=settings.storage.db_path, database_url=settings.storage.database_url, backup_dir=settings.storage.backup_dir)
@@ -806,6 +855,14 @@ def db_migrate_command(config: str | None, json_output: bool) -> None:
 @click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
 def db_version_command(config: str | None, json_output: bool) -> None:
     raise click.exceptions.Exit(db_version_cli(config=config, json_output=json_output))
+
+
+@db_app.command("verify-chain", help="Verify the tamper-evident audit hash-chain against the live DB.")
+@click.option("--config", type=str, default=None, help="Path to YAML config or config directory.")
+@click.option("--table", type=str, default=None, help="Only verify one table (events | tool_calls).")
+@click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
+def db_verify_chain_command(config: str | None, table: str | None, json_output: bool) -> None:
+    raise click.exceptions.Exit(db_verify_chain_cli(config=config, table=table, json_output=json_output))
 
 
 @db_app.command("rollback")
