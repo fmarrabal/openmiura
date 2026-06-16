@@ -74,6 +74,46 @@ _SPECS: dict[str, dict[str, Any]] = {
 CHAINED_TABLES: tuple[str, ...] = tuple(_SPECS.keys())
 
 
+def audit_chain_head_events(
+    conn: Any,
+    *,
+    tenant_id: str | None = None,
+    workspace_id: str | None = None,
+    environment: str | None = None,
+) -> list[dict[str, Any]]:
+    """One chain-of-custody event per chained table that has a head for this
+    scope, ready to embed in a portfolio evidence pack.
+
+    Embedding the chain HEAD (not every row) as a signed custody event makes
+    ``openmiura verify`` transitively attest *what the head hash was and who
+    signed it* at export time, with no change to the offline verifier. An
+    auditor then runs ``openmiura db verify-chain`` to prove the live DB
+    still hashes to that head. Returns ``[]`` when no chain exists for the
+    scope (e.g. nothing was logged), so packs for un-exercised scopes are
+    unchanged.
+    """
+    scope = canonical_chain_scope(tenant_id, workspace_id, environment)
+    cur = conn.cursor()
+    out: list[dict[str, Any]] = []
+    for table in CHAINED_TABLES:
+        row = cur.execute(
+            "SELECT head_hash, head_seq FROM audit_chain_heads WHERE chain_table=? AND chain_scope=?",
+            (table, scope),
+        ).fetchone()
+        if row is None:
+            continue
+        out.append({
+            "event_type": "audit_chain_head",
+            "metadata": {
+                "chain_table": table,
+                "chain_scope": scope,
+                "head_hash": str(row["head_hash"]),
+                "head_seq": int(row["head_seq"]),
+            },
+        })
+    return out
+
+
 def verify_audit_chain(conn: Any, *, chain_table: str) -> dict[str, Any]:
     """Verify every per-scope chain for one table. Returns a structured
     result; never raises for a tamper (it is reported, not thrown)."""
