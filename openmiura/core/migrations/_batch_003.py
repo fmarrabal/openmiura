@@ -171,4 +171,149 @@ BATCH_003_MIGRATIONS: tuple[Migration, ...] = (
         _sqlite_triggers_down(),
         _postgres_triggers_down(),
     ),
+    # Migration 25 — decision_traces immutable versions (option A). The table
+    # legitimately receives the same trace_id more than once across a turn's
+    # progression; instead of an in-place upsert it becomes append-only with a
+    # composite PK (trace_id, version). Readers return the latest version per
+    # trace_id, so external behaviour is unchanged. This is the prerequisite
+    # for chaining decision_traces (a later PR) without a no-UPDATE trigger
+    # breaking the live write path.
+    Migration(
+        25,
+        "decision_traces_immutable_versions",
+        # ---- SQLite up: rebuild with composite PK + version ----
+        (
+            "ALTER TABLE decision_traces RENAME TO decision_traces__old",
+            """
+            CREATE TABLE decision_traces (
+                trace_id TEXT NOT NULL,
+                ts REAL NOT NULL,
+                session_id TEXT NOT NULL,
+                user_key TEXT NOT NULL DEFAULT '',
+                channel TEXT NOT NULL DEFAULT '',
+                agent_id TEXT NOT NULL DEFAULT '',
+                request_text TEXT NOT NULL DEFAULT '',
+                response_text TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'completed',
+                provider TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                latency_ms REAL NOT NULL DEFAULT 0,
+                estimated_cost REAL NOT NULL DEFAULT 0,
+                llm_calls INTEGER NOT NULL DEFAULT 0,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                context_json TEXT NOT NULL DEFAULT '{}',
+                memory_json TEXT NOT NULL DEFAULT '{}',
+                tools_considered_json TEXT NOT NULL DEFAULT '[]',
+                tools_used_json TEXT NOT NULL DEFAULT '[]',
+                policies_json TEXT NOT NULL DEFAULT '[]',
+                decisions_json TEXT NOT NULL DEFAULT '{}',
+                tenant_id TEXT,
+                workspace_id TEXT,
+                environment TEXT,
+                row_hash TEXT,
+                prev_hash TEXT,
+                chain_seq INTEGER,
+                version INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (trace_id, version)
+            )
+            """,
+            """
+            INSERT INTO decision_traces(
+                trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text,
+                status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens,
+                output_tokens, total_tokens, context_json, memory_json, tools_considered_json,
+                tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment,
+                row_hash, prev_hash, chain_seq, version)
+            SELECT
+                trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text,
+                status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens,
+                output_tokens, total_tokens, context_json, memory_json, tools_considered_json,
+                tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment,
+                row_hash, prev_hash, chain_seq, 1
+            FROM decision_traces__old
+            """,
+            "DROP TABLE decision_traces__old",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_scope ON decision_traces(tenant_id, workspace_id, environment, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_session ON decision_traces(session_id, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_agent ON decision_traces(agent_id, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_chain ON decision_traces(tenant_id, workspace_id, environment, chain_seq)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_trace ON decision_traces(trace_id, version DESC)",
+        ),
+        # ---- Postgres up: add version + swap the primary key in place ----
+        (
+            "ALTER TABLE decision_traces ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE decision_traces DROP CONSTRAINT IF EXISTS decision_traces_pkey",
+            "ALTER TABLE decision_traces ADD PRIMARY KEY (trace_id, version)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_trace ON decision_traces(trace_id, version DESC)",
+        ),
+        # ---- SQLite down: rebuild back to single-column PK (keep latest version per trace) ----
+        (
+            "DROP INDEX IF EXISTS idx_decision_traces_trace",
+            "ALTER TABLE decision_traces RENAME TO decision_traces__old",
+            """
+            CREATE TABLE decision_traces (
+                trace_id TEXT PRIMARY KEY,
+                ts REAL NOT NULL,
+                session_id TEXT NOT NULL,
+                user_key TEXT NOT NULL DEFAULT '',
+                channel TEXT NOT NULL DEFAULT '',
+                agent_id TEXT NOT NULL DEFAULT '',
+                request_text TEXT NOT NULL DEFAULT '',
+                response_text TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'completed',
+                provider TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                latency_ms REAL NOT NULL DEFAULT 0,
+                estimated_cost REAL NOT NULL DEFAULT 0,
+                llm_calls INTEGER NOT NULL DEFAULT 0,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                context_json TEXT NOT NULL DEFAULT '{}',
+                memory_json TEXT NOT NULL DEFAULT '{}',
+                tools_considered_json TEXT NOT NULL DEFAULT '[]',
+                tools_used_json TEXT NOT NULL DEFAULT '[]',
+                policies_json TEXT NOT NULL DEFAULT '[]',
+                decisions_json TEXT NOT NULL DEFAULT '{}',
+                tenant_id TEXT,
+                workspace_id TEXT,
+                environment TEXT,
+                row_hash TEXT,
+                prev_hash TEXT,
+                chain_seq INTEGER
+            )
+            """,
+            """
+            INSERT INTO decision_traces(
+                trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text,
+                status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens,
+                output_tokens, total_tokens, context_json, memory_json, tools_considered_json,
+                tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment,
+                row_hash, prev_hash, chain_seq)
+            SELECT
+                trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text,
+                status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens,
+                output_tokens, total_tokens, context_json, memory_json, tools_considered_json,
+                tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment,
+                row_hash, prev_hash, chain_seq
+            FROM decision_traces__old
+            WHERE version = (SELECT MAX(version) FROM decision_traces__old d2 WHERE d2.trace_id = decision_traces__old.trace_id)
+            """,
+            "DROP TABLE decision_traces__old",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_scope ON decision_traces(tenant_id, workspace_id, environment, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_session ON decision_traces(session_id, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_agent ON decision_traces(agent_id, ts DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_decision_traces_chain ON decision_traces(tenant_id, workspace_id, environment, chain_seq)",
+        ),
+        # ---- Postgres down ----
+        (
+            "DROP INDEX IF EXISTS idx_decision_traces_trace",
+            "DELETE FROM decision_traces WHERE version <> (SELECT MAX(version) FROM decision_traces d2 WHERE d2.trace_id = decision_traces.trace_id)",
+            "ALTER TABLE decision_traces DROP CONSTRAINT IF EXISTS decision_traces_pkey",
+            "ALTER TABLE decision_traces ADD PRIMARY KEY (trace_id)",
+            "ALTER TABLE decision_traces DROP COLUMN IF EXISTS version",
+        ),
+    ),
 )
