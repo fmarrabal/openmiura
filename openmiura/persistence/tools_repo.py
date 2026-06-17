@@ -174,7 +174,17 @@ class ToolsRepo:
             workspace_id = inferred.get("workspace_id")
             environment = inferred.get("environment")
         cur = self._conn.cursor()
-        backend = getattr(self._conn, "backend", "sqlite")
+        # decision_traces is append-only immutable versions (option A): a turn
+        # may log the same trace_id more than once as its status progresses, so
+        # instead of an in-place upsert we append a new version. Readers
+        # (get/list) return the latest version per trace_id, so external
+        # behaviour is unchanged. The composite PK (trace_id, version) makes the
+        # table truly append-only (a prerequisite for chaining it).
+        ver_row = cur.execute(
+            "SELECT MAX(version) FROM decision_traces WHERE trace_id=?",
+            (trace_id,),
+        ).fetchone()
+        version = (int(ver_row[0]) + 1) if (ver_row and ver_row[0] is not None) else 1
         values = (
             trace_id,
             time.time(),
@@ -202,75 +212,15 @@ class ToolsRepo:
             tenant_id,
             workspace_id,
             environment,
+            version,
         )
-        if backend == "postgresql":
-            cur.execute(
-                """
-                INSERT INTO decision_traces(trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(trace_id) DO UPDATE SET
-                    ts=EXCLUDED.ts,
-                    session_id=EXCLUDED.session_id,
-                    user_key=EXCLUDED.user_key,
-                    channel=EXCLUDED.channel,
-                    agent_id=EXCLUDED.agent_id,
-                    request_text=EXCLUDED.request_text,
-                    response_text=EXCLUDED.response_text,
-                    status=EXCLUDED.status,
-                    provider=EXCLUDED.provider,
-                    model=EXCLUDED.model,
-                    latency_ms=EXCLUDED.latency_ms,
-                    estimated_cost=EXCLUDED.estimated_cost,
-                    llm_calls=EXCLUDED.llm_calls,
-                    input_tokens=EXCLUDED.input_tokens,
-                    output_tokens=EXCLUDED.output_tokens,
-                    total_tokens=EXCLUDED.total_tokens,
-                    context_json=EXCLUDED.context_json,
-                    memory_json=EXCLUDED.memory_json,
-                    tools_considered_json=EXCLUDED.tools_considered_json,
-                    tools_used_json=EXCLUDED.tools_used_json,
-                    policies_json=EXCLUDED.policies_json,
-                    decisions_json=EXCLUDED.decisions_json,
-                    tenant_id=EXCLUDED.tenant_id,
-                    workspace_id=EXCLUDED.workspace_id,
-                    environment=EXCLUDED.environment
-                """,
-                values,
-            )
-        else:
-            cur.execute(
-                """
-                INSERT INTO decision_traces(trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(trace_id) DO UPDATE SET
-                    ts=excluded.ts,
-                    session_id=excluded.session_id,
-                    user_key=excluded.user_key,
-                    channel=excluded.channel,
-                    agent_id=excluded.agent_id,
-                    request_text=excluded.request_text,
-                    response_text=excluded.response_text,
-                    status=excluded.status,
-                    provider=excluded.provider,
-                    model=excluded.model,
-                    latency_ms=excluded.latency_ms,
-                    estimated_cost=excluded.estimated_cost,
-                    llm_calls=excluded.llm_calls,
-                    input_tokens=excluded.input_tokens,
-                    output_tokens=excluded.output_tokens,
-                    total_tokens=excluded.total_tokens,
-                    context_json=excluded.context_json,
-                    memory_json=excluded.memory_json,
-                    tools_considered_json=excluded.tools_considered_json,
-                    tools_used_json=excluded.tools_used_json,
-                    policies_json=excluded.policies_json,
-                    decisions_json=excluded.decisions_json,
-                    tenant_id=excluded.tenant_id,
-                    workspace_id=excluded.workspace_id,
-                    environment=excluded.environment
-                """,
-                values,
-            )
+        cur.execute(
+            """
+            INSERT INTO decision_traces(trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment, version)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            values,
+        )
         self._conn.commit()
 
     def _decision_trace_row_to_dict(self, row: Any) -> dict[str, Any]:
@@ -341,6 +291,9 @@ class ToolsRepo:
             clauses.append("status=?")
             params.append(status)
         self._scope_where(clauses, params, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+        # Return only the latest version of each trace_id (decision_traces is
+        # append-only immutable versions); older versions are internal history.
+        clauses.append("version = (SELECT MAX(d2.version) FROM decision_traces d2 WHERE d2.trace_id = decision_traces.trace_id)")
         sql = "SELECT trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment FROM decision_traces"
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
@@ -351,8 +304,9 @@ class ToolsRepo:
 
     def get_decision_trace(self, trace_id: str) -> dict[str, Any] | None:
         cur = self._conn.cursor()
+        # Latest version of the trace (append-only immutable versions).
         row = cur.execute(
-            "SELECT trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment FROM decision_traces WHERE trace_id=?",
+            "SELECT trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment FROM decision_traces WHERE trace_id=? ORDER BY version DESC LIMIT 1",
             (trace_id,),
         ).fetchone()
         return self._decision_trace_row_to_dict(row) if row is not None else None
