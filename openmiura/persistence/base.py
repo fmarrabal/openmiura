@@ -57,6 +57,67 @@ def canonical_chain_scope(
     })
 
 
+def decision_trace_chain_fields(
+    *,
+    ts: float,
+    session_id: str,
+    user_key: str,
+    channel: str,
+    agent_id: str,
+    request_text: str,
+    response_text: str,
+    status: str,
+    provider: str,
+    model: str,
+    latency_ms: float,
+    estimated_cost: float,
+    llm_calls: int,
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
+    context_json: str,
+    memory_json: str,
+    tools_considered_json: str,
+    tools_used_json: str,
+    policies_json: str,
+    decisions_json: str,
+    version: int,
+) -> dict[str, Any]:
+    """Canonical hashable fields for one decision_traces version row.
+
+    Defined once and used by BOTH the write path (``log_decision_trace``)
+    and the chain verifier, so a row_hash is reproducible. The ``*_json``
+    columns are re-parsed (the two-serializer trap) and ``version`` is part
+    of the hashed content. Pass the SAME (sanitized) values that are written
+    to the row.
+    """
+    return {
+        "ts": float(ts),
+        "session_id": session_id,
+        "user_key": user_key,
+        "channel": channel,
+        "agent_id": agent_id,
+        "request_text": request_text,
+        "response_text": response_text,
+        "status": status,
+        "provider": provider,
+        "model": model,
+        "latency_ms": float(latency_ms),
+        "estimated_cost": float(estimated_cost),
+        "llm_calls": int(llm_calls),
+        "input_tokens": int(input_tokens),
+        "output_tokens": int(output_tokens),
+        "total_tokens": int(total_tokens),
+        "context": parse_json_column(context_json),
+        "memory": parse_json_column(memory_json),
+        "tools_considered": parse_json_column(tools_considered_json),
+        "tools_used": parse_json_column(tools_used_json),
+        "policies": parse_json_column(policies_json),
+        "decisions": parse_json_column(decisions_json),
+        "version": int(version),
+    }
+
+
 def compute_chain_link(
     conn: Any,
     *,

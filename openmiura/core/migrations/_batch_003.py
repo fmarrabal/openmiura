@@ -102,6 +102,34 @@ def _postgres_triggers_down() -> tuple[str, ...]:
     return tuple(out)
 
 
+# Migration 26 — decision_traces is now append-only (option A, migration 25),
+# so it can carry the same UPDATE/DELETE-reject guard as events/tool_calls.
+# (Kept separate from migration 24 so the rebuild in migration 25 runs before
+# the trigger exists; reuses the openmiura_reject_audit_write() function from
+# migration 24 on Postgres.)
+_DT_MSG = "decision_traces is append-only (audit hash-chain)"
+_DT_SQLITE_UP = (
+    f"CREATE TRIGGER IF NOT EXISTS trg_decision_traces_no_update BEFORE UPDATE ON decision_traces BEGIN SELECT RAISE(ABORT, '{_DT_MSG}'); END",
+    f"CREATE TRIGGER IF NOT EXISTS trg_decision_traces_no_delete BEFORE DELETE ON decision_traces BEGIN SELECT RAISE(ABORT, '{_DT_MSG}'); END",
+)
+_DT_POSTGRES_UP = (
+    "CREATE OR REPLACE FUNCTION openmiura_reject_audit_write() RETURNS trigger "
+    "LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'append-only (audit hash-chain): % on %', TG_OP, TG_TABLE_NAME; END; $$",
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_update ON decision_traces",
+    "CREATE TRIGGER trg_decision_traces_no_update BEFORE UPDATE ON decision_traces FOR EACH ROW EXECUTE FUNCTION openmiura_reject_audit_write()",
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_delete ON decision_traces",
+    "CREATE TRIGGER trg_decision_traces_no_delete BEFORE DELETE ON decision_traces FOR EACH ROW EXECUTE FUNCTION openmiura_reject_audit_write()",
+)
+_DT_DOWN = (
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_update",
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_delete",
+)
+_DT_POSTGRES_DOWN = (
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_update ON decision_traces",
+    "DROP TRIGGER IF EXISTS trg_decision_traces_no_delete ON decision_traces",
+)
+
+
 BATCH_003_MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         23,
@@ -315,5 +343,13 @@ BATCH_003_MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE decision_traces ADD PRIMARY KEY (trace_id)",
             "ALTER TABLE decision_traces DROP COLUMN IF EXISTS version",
         ),
+    ),
+    Migration(
+        26,
+        "decision_traces_append_only_trigger",
+        _DT_SQLITE_UP,
+        _DT_POSTGRES_UP,
+        _DT_DOWN,
+        _DT_POSTGRES_DOWN,
     ),
 )

@@ -22,6 +22,7 @@ from typing import Any
 from openmiura.persistence.base import (
     canonical_chain_scope,
     canonical_row_digest,
+    decision_trace_chain_fields,
     parse_json_column,
 )
 
@@ -66,6 +67,26 @@ _SPECS: dict[str, dict[str, Any]] = {
             "ts, session_id, user_key, agent_id, tool_name, args_json, ok, result_excerpt, error, duration_ms FROM tool_calls"
         ),
         "fields": _tool_calls_row_fields,
+    },
+    "decision_traces": {
+        "select": (
+            "SELECT chain_seq, prev_hash, row_hash, tenant_id, workspace_id, environment, "
+            "ts, session_id, user_key, channel, agent_id, request_text, response_text, status, "
+            "provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, "
+            "total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, "
+            "policies_json, decisions_json, version FROM decision_traces WHERE chain_seq IS NOT NULL"
+        ),
+        # Reuse the exact writer-side canonical builder (one source of truth).
+        "fields": lambda row: decision_trace_chain_fields(
+            ts=row["ts"], session_id=row["session_id"], user_key=row["user_key"],
+            channel=row["channel"], agent_id=row["agent_id"], request_text=row["request_text"],
+            response_text=row["response_text"], status=row["status"], provider=row["provider"],
+            model=row["model"], latency_ms=row["latency_ms"], estimated_cost=row["estimated_cost"],
+            llm_calls=row["llm_calls"], input_tokens=row["input_tokens"], output_tokens=row["output_tokens"],
+            total_tokens=row["total_tokens"], context_json=row["context_json"], memory_json=row["memory_json"],
+            tools_considered_json=row["tools_considered_json"], tools_used_json=row["tools_used_json"],
+            policies_json=row["policies_json"], decisions_json=row["decisions_json"], version=row["version"],
+        ),
     },
 }
 

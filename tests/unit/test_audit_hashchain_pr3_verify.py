@@ -136,8 +136,8 @@ def test_cli_exit_codes(tmp_path):
 
     # Intact → exit 0.
     assert db_verify_chain_cli(config=str(cfg)) == 0
-    # Unknown table → usage error (3), no DB walk needed.
-    assert db_verify_chain_cli(config=str(cfg), table="decision_traces") == 3
+    # Unknown / non-chained table → usage error (3), no DB walk needed.
+    assert db_verify_chain_cli(config=str(cfg), table="sessions") == 3
 
     # Tamper → exit 1.
     _drop_append_only_triggers(store._conn)
