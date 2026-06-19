@@ -52,9 +52,9 @@ def test_delete_is_rejected(tmp_path, table):
         conn.cursor().execute(f"DELETE FROM {table}")
 
 
-def test_decision_traces_is_not_guarded(tmp_path):
-    """decision_traces legitimately upserts (one trace_id rewritten across a
-    streaming turn), so it must NOT carry the append-only trigger yet."""
+def test_all_three_audit_tables_are_guarded(tmp_path):
+    """events + tool_calls (migration 24) and decision_traces (migration 26,
+    after it became append-only) all carry the UPDATE/DELETE-reject guard."""
     conn = _conn(tmp_path)
     triggers = {
         r[0] for r in conn.cursor().execute(
@@ -63,7 +63,8 @@ def test_decision_traces_is_not_guarded(tmp_path):
     }
     assert "trg_events_no_update" in triggers
     assert "trg_tool_calls_no_delete" in triggers
-    assert not any("decision_traces" in t for t in triggers)
+    assert "trg_decision_traces_no_update" in triggers
+    assert "trg_decision_traces_no_delete" in triggers
 
 
 def test_triggers_dropped_on_downgrade(tmp_path):
