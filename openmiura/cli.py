@@ -824,8 +824,24 @@ def doctor_command(config: str | None, json_output: bool) -> None:
 @click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
 @click.option("--allow-dev-seed", is_flag=True, default=False, help="Treat dev-seed signatures as acceptable for the exit code (still reported).")
 @click.option("--strict", is_flag=True, default=False, help="Also gate on optional checks (e.g. chain of custody) when present.")
-def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: bool) -> None:
-    raise click.exceptions.Exit(verify_pack_cli(pack=pack, json_output=json_output, allow_dev_seed=allow_dev_seed, strict=strict))
+@click.option(
+    "--trust-anchor",
+    multiple=True,
+    metavar="PEM|FILE|HEX",
+    help="Trusted signer: a PEM public-key file, a file of fingerprints, or a "
+    "64-char hex fingerprint. Repeatable. When given, a pack is authoritative "
+    "only if its signing key matches one of these anchors.",
+)
+def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: bool, trust_anchor: tuple[str, ...]) -> None:
+    raise click.exceptions.Exit(
+        verify_pack_cli(
+            pack=pack,
+            json_output=json_output,
+            allow_dev_seed=allow_dev_seed,
+            strict=strict,
+            trust_anchor=trust_anchor,
+        )
+    )
 
 
 @db_app.command("check")

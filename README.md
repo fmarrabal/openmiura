@@ -239,25 +239,34 @@ re-hashes every embedded document, recomputes the manifest hash, and verifies
 the ed25519 (or ECDSA-P256) signature over the canonical signing input.
 
 ```text
-openmiura verify pack.zip                 # human-readable report
-openmiura verify pack.zip --json          # machine-readable result
-openmiura verify pack.zip --allow-dev-seed  # accept dev-seed sigs in CI
-openmiura verify pack.zip --strict        # also gate on chain-of-custody
+openmiura verify pack.zip                      # human-readable report
+openmiura verify pack.zip --json               # machine-readable result
+openmiura verify pack.zip --allow-dev-seed     # accept dev-seed sigs in CI
+openmiura verify pack.zip --strict             # also gate on chain-of-custody
+openmiura verify pack.zip --trust-anchor signer.pem   # bind to a known signer
 ```
 
 Exit codes: `0` verified and authoritative · `1` a check failed (tampered) ·
 `2` internally consistent but **not authoritative** (signed with the public
-development seed, signed only with the legacy reproducible hash, or unsigned) ·
-`3` usage error (missing file, not a ZIP, missing entries).
+development seed, signed only with the legacy reproducible hash, unsigned, or —
+with `--trust-anchor` — signed by a key that is not a trusted anchor) ·
+`3` usage error (missing file, not a ZIP, missing entries, bad anchor).
 
 What a green result means and does not mean: it proves the pack is internally
 consistent and untampered, and that it was signed by whoever held the embedded
 key. It does **not** by itself prove the signer's *identity* — the public key
-travels inside the pack, so binding a pack to a known signer (a trust anchor)
-is a deliberate, separate step. The one built-in dishonesty signal is the
-development-seed key, which this command detects independently of the pack's
-own metadata (it re-derives the public dev key and compares fingerprints, so
-stripping the pack's `dev_signing_key` flag does not hide it).
+travels inside the pack. To close that gap, pass `--trust-anchor` (repeatable):
+a PEM public-key file, a file of hex fingerprints, or a bare 64-char SHA-256
+fingerprint of a key you trust. With at least one anchor supplied, a pack is
+authoritative only if the key its signature *actually verified against* (by
+fingerprint, not the self-reported metadata) is one of them — so a forged pack
+signed with an attacker's own real key reads as **non-authoritative** (exit 2).
+Without any anchor, authenticity-of-signer is not checked (behaviour unchanged).
+The one built-in dishonesty signal is the development-seed key, which this
+command detects independently of the pack's own metadata (it re-derives the
+public dev key and compares fingerprints, so stripping the pack's
+`dev_signing_key` flag does not hide it — and anchoring the dev key does not
+promote it to authoritative).
 
 Notarization, custody-anchor and escrow receipts need a time reference,
 policy, or live cloud APIs and are therefore reported but not verified offline.

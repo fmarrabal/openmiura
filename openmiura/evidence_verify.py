@@ -331,12 +331,25 @@ def _read_entries(pack_path: Path) -> tuple[bytes, dict[str, Any]]:
     return archive_bytes, entries
 
 
-def verify_pack(pack_path: str | Path, *, strict: bool = False) -> dict[str, Any]:
+def verify_pack(
+    pack_path: str | Path,
+    *,
+    strict: bool = False,
+    trust_anchors: set[str] | None = None,
+) -> dict[str, Any]:
     """Verify an evidence pack ZIP on disk and return a structured result.
 
     Never raises for verification failures — those are reported in the
     result.  Structural/usage problems set ``ok=False`` and
     ``verdict='error'``.
+
+    ``trust_anchors`` is an optional set of trusted signer public-key
+    fingerprints (hex). When given, the pack is AUTHORITATIVE only if its
+    verified signing key's fingerprint is in the set — turning "internally
+    consistent + untampered" into "signed by a *known* party". A forged pack
+    signed with an attacker's own key verifies as consistent but, with a
+    trust anchor supplied, is reported non-authoritative. When ``None``
+    (default), authenticity-of-signer is not checked (behaviour unchanged).
     """
     path = Path(pack_path)
     try:
@@ -461,7 +474,29 @@ def verify_pack(pack_path: str | Path, *, strict: bool = False) -> dict[str, Any
             dev_key_fingerprint_match = False
     dev_signing_key = bool(public_key_block.get("dev_signing_key")) or dev_key_fingerprint_match
     signing_warning = public_key_block.get("signing_warning")
-    authoritative = consistent and cryptographically_signed and not dev_signing_key
+
+    # Trust anchor: bind the pack to a KNOWN signer. We compare the
+    # fingerprint of the key the signature actually verified against (not the
+    # self-reported metadata) to the caller's trusted set.
+    trust_anchor_checked = trust_anchors is not None
+    trusted_signer: bool | None = None
+    if trust_anchor_checked:
+        # Normalize here too so the public API honours the documented
+        # case-insensitive contract regardless of how the caller built the set
+        # (the CLI resolver already lowercases; direct callers may not).
+        normalized_anchors = {str(a).strip().lower() for a in trust_anchors}
+        trusted_signer = bool(
+            cryptographically_signed
+            and embedded_fingerprint
+            and embedded_fingerprint in normalized_anchors
+        )
+
+    authoritative = (
+        consistent
+        and cryptographically_signed
+        and not dev_signing_key
+        and (trusted_signer is not False)  # None (no anchor) or True both pass
+    )
 
     verdict = "verified" if consistent else "failed"
 
@@ -477,9 +512,16 @@ def verify_pack(pack_path: str | Path, *, strict: bool = False) -> dict[str, Any
         "cryptographically_signed": cryptographically_signed,
         "dev_signing_key": dev_signing_key,
         "dev_key_fingerprint_match": dev_key_fingerprint_match,
+        "trust_anchor_checked": trust_anchor_checked,
+        "trusted_signer": trusted_signer,
         "signing_warning": signing_warning,
         "signature_scheme": integrity.get("signature_scheme"),
-        "public_key_fingerprint": public_key_block.get("public_key_fingerprint"),
+        # Expose the fingerprint of the key the signature ACTUALLY verified
+        # against (the value the trust-anchor check uses), not the pack's
+        # self-reported metadata — so a fingerprint copied from this report is
+        # exactly what `--trust-anchor` compares. Falls back to the metadata
+        # value only for unsigned packs (no verified key).
+        "public_key_fingerprint": embedded_fingerprint or public_key_block.get("public_key_fingerprint"),
         "signer_provider": public_key_block.get("provider") or integrity.get("signer_provider"),
         "key_origin": public_key_block.get("origin") or integrity.get("key_origin"),
         "portfolio_id": str(((package_payload.get("portfolio") or {}).get("portfolio_id")) or "").strip() or None,
@@ -558,15 +600,128 @@ def _print_human(result: dict[str, Any]) -> None:
         kind = "unsigned" if not result.get("signed") else "signed only with the legacy reproducible hash"
         print(f"VERDICT: NON-AUTHORITATIVE — pack is internally consistent but is {kind};")
         print("there is no real cryptographic signature, so authenticity cannot be relied upon.")
+    elif result.get("trust_anchor_checked") and result.get("trusted_signer") is False:
+        print("VERDICT: NON-AUTHORITATIVE — pack is internally consistent and cryptographically")
+        print("signed, BUT the signing key is NOT one of the supplied trust anchors, so the")
+        print("signer's identity is not trusted (a forged pack signed with an unknown key looks")
+        print(f"like this). Signer fingerprint: {result.get('public_key_fingerprint')}")
     else:
         print("VERDICT: VERIFIED (internally consistent, signature valid)")
-        print("Note: this proves the pack is untampered and signed by whoever held")
-        print("the embedded key; it does not by itself prove the signer's identity.")
+        if result.get("trusted_signer"):
+            print("Signer matches a supplied trust anchor — authenticity confirmed.")
+        else:
+            print("Note: this proves the pack is untampered and signed by whoever held the")
+            print("embedded key; it does not by itself prove the signer's identity. Pass")
+            print("--trust-anchor to bind the pack to a known signer.")
 
 
-def verify_pack_cli(*, pack: str, json_output: bool = False, allow_dev_seed: bool = False, strict: bool = False) -> int:
+def _fingerprint_of_pem(pem_text: str) -> str:
+    """Fingerprint a PEM public key with the SAME rule the pack verifier uses
+    (raw bytes for Ed25519, DER SubjectPublicKeyInfo for EC), so a resolved
+    anchor compares equal to the pack's embedded `public_key_fingerprint`.
+
+    Only the key types the verifier can actually match (Ed25519, EC) are
+    accepted; any other type (RSA, DSA, …) raises rather than resolving to a
+    fingerprint that could never match a pack — a useless anchor would
+    otherwise read as a silent "signer not trusted"."""
+    public_key = load_pem_public_key(pem_text.encode("utf-8"))
+    if isinstance(public_key, ed25519.Ed25519PublicKey):
+        return _raw_ed25519_fingerprint(public_key)
+    if isinstance(public_key, ec.EllipticCurvePublicKey):
+        return _der_fingerprint(public_key)
+    raise ValueError(
+        f"unsupported trust-anchor key type: {type(public_key).__name__} "
+        "(expected Ed25519 or EC)"
+    )
+
+
+def _resolve_trust_anchors(values: tuple[str, ...] | list[str]) -> set[str]:
+    """Turn ``--trust-anchor`` values into a set of sha256 key fingerprints.
+
+    Each value is one of:
+      * a path to a PEM public-key file (``-----BEGIN PUBLIC KEY-----``); a
+        bundle of several concatenated PEM blocks anchors *every* key;
+      * a path to a text file mixing fingerprints and/or PEM blocks (``#``
+        comments and blank lines ignored; a line of 64 hex chars is a
+        fingerprint, a ``-----BEGIN`` line opens a PEM block);
+      * a bare 64-char hex fingerprint.
+
+    Fingerprints are lowercased. Raises ``ValueError`` on anything that is
+    neither a readable file nor a valid hex fingerprint, and on an input that
+    yields no usable anchor at all — so a typo'd or empty anchor fails loudly
+    instead of silently trusting nobody.
+    """
+    import re
+
+    hex64 = re.compile(r"^[0-9a-fA-F]{64}$")
+    anchors: set[str] = set()
+
+    def _ingest_text(text: str, *, source: str) -> None:
+        lines = text.splitlines()
+        found = False
+        i, n = 0, len(lines)
+        while i < n:
+            raw = lines[i]
+            if "-----BEGIN" in raw:  # accumulate one PEM block, fingerprint it
+                block = [raw]
+                i += 1
+                while i < n:
+                    block.append(lines[i])
+                    ended = "-----END" in lines[i]
+                    i += 1
+                    if ended:
+                        break
+                anchors.add(_fingerprint_of_pem("\n".join(block)))
+                found = True
+                continue
+            line = raw.split("#", 1)[0].strip()
+            i += 1
+            if not line:
+                continue
+            if not hex64.match(line):
+                raise ValueError(f"{source}: not a 64-char hex fingerprint: {line!r}")
+            anchors.add(line.lower())
+            found = True
+        if not found:
+            raise ValueError(f"{source}: no fingerprints found")
+
+    for value in values:
+        v = (value or "").strip()
+        if not v:
+            continue
+        # A well-formed bare fingerprint is unambiguous — never let a
+        # same-named file in the CWD shadow it.
+        if hex64.match(v):
+            anchors.add(v.lower())
+        elif Path(v).is_file():
+            _ingest_text(Path(v).read_text(encoding="utf-8"), source=v)
+        else:
+            raise ValueError(
+                f"trust anchor {v!r} is neither a readable file nor a 64-char hex fingerprint"
+            )
+
+    if values and not anchors:
+        raise ValueError("no usable trust anchors (all values were empty/whitespace)")
+    return anchors
+
+
+def verify_pack_cli(
+    *,
+    pack: str,
+    json_output: bool = False,
+    allow_dev_seed: bool = False,
+    strict: bool = False,
+    trust_anchor: tuple[str, ...] | list[str] = (),
+) -> int:
     """CLI entry point. Returns a process exit code."""
-    result = verify_pack(pack, strict=strict)
+    trust_anchors: set[str] | None = None
+    if trust_anchor:
+        try:
+            trust_anchors = _resolve_trust_anchors(trust_anchor)
+        except (ValueError, OSError) as exc:
+            print(f"ERROR: invalid --trust-anchor: {exc}")
+            return EXIT_USAGE
+    result = verify_pack(pack, strict=strict, trust_anchors=trust_anchors)
     exit_code = _exit_code_for(result, allow_dev_seed=allow_dev_seed)
     if json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
