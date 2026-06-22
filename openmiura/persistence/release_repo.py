@@ -17,7 +17,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    compute_chain_link,
     infer_scope_from_session,
+    release_approval_chain_fields,
     row_scope,
     scope_payload,
     scope_where,
@@ -604,9 +606,28 @@ class ReleaseRepo:
         approval_id = str(uuid.uuid4())
         now = time.time()
         cur = self._conn.cursor()
+        # Tamper-evident hash-chain link (same transaction as the row INSERT),
+        # mirroring sessions_repo.log_event. The signature-grade columns are
+        # part of the canonical row even though the legacy path leaves them
+        # NULL, so a later PR can fill them without changing the chain.
+        prev_hash, row_hash, chain_seq = compute_chain_link(
+            self._conn,
+            chain_table='release_approvals',
+            row_fields=release_approval_chain_fields(
+                release_id=release_id,
+                action=action,
+                actor=actor,
+                reason=reason or '',
+                created_at=now,
+            ),
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            environment=environment,
+            now_ts=now,
+        )
         cur.execute(
-            'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, tenant_id, workspace_id, environment) VALUES(?,?,?,?,?,?,?,?,?)',
-            (approval_id, release_id, actor, action, reason or '', now, tenant_id, workspace_id, environment),
+            'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+            (approval_id, release_id, actor, action, reason or '', now, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
         )
         self._conn.commit()
         return {
