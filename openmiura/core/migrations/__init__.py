@@ -35,12 +35,14 @@ class Migration:
 from openmiura.core.migrations._batch_001 import BATCH_001_MIGRATIONS
 from openmiura.core.migrations._batch_002 import BATCH_002_MIGRATIONS
 from openmiura.core.migrations._batch_003 import BATCH_003_MIGRATIONS
+from openmiura.core.migrations._batch_004 import BATCH_004_MIGRATIONS
 
 
 MIGRATIONS: tuple[Migration, ...] = (
     *BATCH_001_MIGRATIONS,
     *BATCH_002_MIGRATIONS,
     *BATCH_003_MIGRATIONS,
+    *BATCH_004_MIGRATIONS,
 )
 
 def _safe_execute(cursor, backend: str, sql: str, params: tuple[Any, ...] | None = None) -> None:
