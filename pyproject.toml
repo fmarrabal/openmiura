@@ -29,7 +29,7 @@ dependencies = [
   # (supply-chain attack via undocumented ``fastar``
   # dependency in ``[standard]``). Pin BELOW the malicious
   # release until upstream republishes a clean version.
-  "fastapi>=0.110,<0.136.3",
+  "fastapi>=0.110,<0.138.1",
   "uvicorn[standard]>=0.44.0",
   "httpx>=0.27",
   "numpy>=1.26",
