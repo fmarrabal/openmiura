@@ -118,6 +118,49 @@ def decision_trace_chain_fields(
     }
 
 
+def release_approval_chain_fields(
+    *,
+    release_id: str,
+    action: str,
+    actor: str,
+    reason: str,
+    created_at: float,
+    signer_user_key: str | None = None,
+    meaning: str | None = None,
+    second_factor_method: str | None = None,
+    otp_verified_at: float | None = None,
+    signature: str | None = None,
+    signature_scheme: str | None = None,
+    signer_key_id: str | None = None,
+    signature_input_hash: str | None = None,
+) -> dict[str, Any]:
+    """Canonical hashable fields for one release_approvals row.
+
+    Defined once and used by BOTH the write path (``_record_release_action``)
+    and the chain verifier, so a row_hash is reproducible. The signature-grade
+    columns (signer_user_key, meaning, second-factor, ed25519 signature, …) are
+    included even though the legacy write path leaves them NULL today — so when
+    a later PR fills them, the canonical form does NOT change and existing
+    chained rows stay verifiable. Pass the SAME values that are written to the
+    row.
+    """
+    return {
+        "release_id": release_id,
+        "action": action,
+        "actor": actor,
+        "reason": reason or "",
+        "created_at": float(created_at),
+        "signer_user_key": signer_user_key,
+        "meaning": meaning,
+        "second_factor_method": second_factor_method,
+        "otp_verified_at": (float(otp_verified_at) if otp_verified_at is not None else None),
+        "signature": signature,
+        "signature_scheme": signature_scheme,
+        "signer_key_id": signer_key_id,
+        "signature_input_hash": signature_input_hash,
+    }
+
+
 def compute_chain_link(
     conn: Any,
     *,

@@ -875,7 +875,7 @@ def db_version_command(config: str | None, json_output: bool) -> None:
 
 @db_app.command("verify-chain", help="Verify the tamper-evident audit hash-chain against the live DB.")
 @click.option("--config", type=str, default=None, help="Path to YAML config or config directory.")
-@click.option("--table", type=str, default=None, help="Only verify one table (events | tool_calls).")
+@click.option("--table", type=str, default=None, help="Only verify one table (events | tool_calls | decision_traces | release_approvals).")
 @click.option("--json", "json_output", is_flag=True, default=False, help="Emit JSON output.")
 def db_verify_chain_command(config: str | None, table: str | None, json_output: bool) -> None:
     raise click.exceptions.Exit(db_verify_chain_cli(config=config, table=table, json_output=json_output))

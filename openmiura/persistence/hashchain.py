@@ -24,6 +24,7 @@ from openmiura.persistence.base import (
     canonical_row_digest,
     decision_trace_chain_fields,
     parse_json_column,
+    release_approval_chain_fields,
 )
 
 
@@ -51,6 +52,24 @@ def _tool_calls_row_fields(row: Any) -> dict[str, Any]:
         "error": row["error"],
         "duration_ms": float(row["duration_ms"]),
     }
+
+
+def _release_approvals_row_fields(row: Any) -> dict[str, Any]:
+    return release_approval_chain_fields(
+        release_id=row["release_id"],
+        action=row["action"],
+        actor=row["actor"],
+        reason=row["reason"],
+        created_at=row["created_at"],
+        signer_user_key=row["signer_user_key"],
+        meaning=row["meaning"],
+        second_factor_method=row["second_factor_method"],
+        otp_verified_at=row["otp_verified_at"],
+        signature=row["signature"],
+        signature_scheme=row["signature_scheme"],
+        signer_key_id=row["signer_key_id"],
+        signature_input_hash=row["signature_input_hash"],
+    )
 
 
 _SPECS: dict[str, dict[str, Any]] = {
@@ -87,6 +106,18 @@ _SPECS: dict[str, dict[str, Any]] = {
             tools_considered_json=row["tools_considered_json"], tools_used_json=row["tools_used_json"],
             policies_json=row["policies_json"], decisions_json=row["decisions_json"], version=row["version"],
         ),
+    },
+    "release_approvals": {
+        # No "chain_seq IS NOT NULL" filter: like events/tool_calls, fetch all
+        # rows so legacy pre-feature rows (NULL link) are surfaced as
+        # preexisting_count rather than silently hidden.
+        "select": (
+            "SELECT chain_seq, prev_hash, row_hash, tenant_id, workspace_id, environment, "
+            "release_id, action, actor, reason, created_at, signer_user_key, meaning, "
+            "second_factor_method, otp_verified_at, signature, signature_scheme, signer_key_id, "
+            "signature_input_hash FROM release_approvals"
+        ),
+        "fields": _release_approvals_row_fields,
     },
 }
 
