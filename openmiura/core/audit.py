@@ -337,6 +337,14 @@ class AuditStore:
 
     def verify_auth_user(self, *, username: str, password: str) -> dict[str, Any] | None: return self._auth.verify_auth_user(username=username, password=password)
 
+    def set_user_otp_secret(self, *, user_key: str, otp_secret_enc: str) -> int: return self._auth.set_user_otp_secret(user_key=user_key, otp_secret_enc=otp_secret_enc)
+
+    def mark_user_otp_confirmed(self, *, user_key: str, confirmed_at: float | None = None) -> int: return self._auth.mark_user_otp_confirmed(user_key=user_key, confirmed_at=confirmed_at)
+
+    def disable_user_otp(self, *, user_key: str) -> int: return self._auth.disable_user_otp(user_key=user_key)
+
+    def get_user_otp(self, *, user_key: str) -> dict[str, Any] | None: return self._auth.get_user_otp(user_key=user_key)
+
     def create_auth_session( self, *, user_id: int, label: str = "ui", ttl_s: int | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None, ) -> dict[str, Any]: return self._auth.create_auth_session(user_id=user_id, label=label, ttl_s=ttl_s, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_auth_sessions(self, *, user_id: int | None = None, include_revoked: bool = False, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]: return self._auth.list_auth_sessions(user_id=user_id, include_revoked=include_revoked, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)

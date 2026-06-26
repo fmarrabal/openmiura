@@ -332,6 +332,60 @@ class AuthRepo:
         self._conn.commit()
         return self.get_auth_user(user_id=int(row["id"]))
 
+    # --- TOTP second factor (signature-grade approvals) --------------------
+    # The secret itself is encrypted by the application layer (TotpService)
+    # before it reaches here; this repo only persists the opaque ciphertext
+    # plus the enabled/confirmed flags. Keyed by user_key (the identity used
+    # on approvals).
+    def set_user_otp_secret(self, *, user_key: str, otp_secret_enc: str) -> int:
+        """Store a freshly enrolled (encrypted) TOTP secret, leaving 2FA
+        DISABLED until a code is confirmed."""
+        now = time.time()
+        cur = self._conn.cursor()
+        cur.execute(
+            "UPDATE auth_users SET otp_secret_enc=?, otp_enabled=0, otp_confirmed_at=NULL, updated_at=? WHERE user_key=?",
+            (otp_secret_enc, now, str(user_key)),
+        )
+        self._conn.commit()
+        return int(getattr(cur, "rowcount", 0) or 0)
+
+    def mark_user_otp_confirmed(self, *, user_key: str, confirmed_at: float | None = None) -> int:
+        """Enable 2FA for the user once enrolment has been confirmed."""
+        now = time.time()
+        ts = float(confirmed_at) if confirmed_at is not None else now
+        cur = self._conn.cursor()
+        cur.execute(
+            "UPDATE auth_users SET otp_enabled=1, otp_confirmed_at=?, updated_at=? WHERE user_key=?",
+            (ts, now, str(user_key)),
+        )
+        self._conn.commit()
+        return int(getattr(cur, "rowcount", 0) or 0)
+
+    def disable_user_otp(self, *, user_key: str) -> int:
+        """Turn 2FA off and forget the secret (e.g. on reset)."""
+        now = time.time()
+        cur = self._conn.cursor()
+        cur.execute(
+            "UPDATE auth_users SET otp_enabled=0, otp_secret_enc=NULL, otp_confirmed_at=NULL, updated_at=? WHERE user_key=?",
+            (now, str(user_key)),
+        )
+        self._conn.commit()
+        return int(getattr(cur, "rowcount", 0) or 0)
+
+    def get_user_otp(self, *, user_key: str) -> dict[str, Any] | None:
+        cur = self._conn.cursor()
+        row = cur.execute(
+            "SELECT otp_secret_enc, otp_enabled, otp_confirmed_at FROM auth_users WHERE user_key=?",
+            (str(user_key),),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "otp_secret_enc": row["otp_secret_enc"],
+            "otp_enabled": bool(row["otp_enabled"]),
+            "otp_confirmed_at": float(row["otp_confirmed_at"]) if row["otp_confirmed_at"] is not None else None,
+        }
+
     def create_auth_session(
         self,
         *,
