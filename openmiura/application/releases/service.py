@@ -5,6 +5,9 @@ import time
 from typing import Any
 
 from openmiura.application.auth.totp import TotpNotConfigured, TotpService
+from openmiura.application.releases.approval_signing import sign_release_approval
+
+_RELEASE_APPROVAL_SIGNER_KEY_ID = "openmiura-release-approvals"
 
 
 class ReleaseService:
@@ -336,6 +339,31 @@ class ReleaseService:
             second_factor_method = 'totp'
 
         quorum_met = new_distinct >= required_n
+        the_meaning = meaning or 'approved release for promotion'
+
+        # 5. Ed25519 signature manifestation (§11.50): sign the semantic
+        # approval content (who approved what, with what meaning + 2nd factor)
+        # over the same canonical signing_input the evidence verifier knows.
+        # created_at is deliberately NOT signed here — it is generated at record
+        # time and is already covered by the row's hash-chain link.
+        scope = {
+            'tenant_id': bundle.get('tenant_id'),
+            'workspace_id': bundle.get('workspace_id'),
+            'environment': bundle.get('environment'),
+        }
+        sig = sign_release_approval(
+            scope=scope,
+            payload={
+                'release_id': release_id,
+                'action': 'approve',
+                'signer_user_key': signer_user_key,
+                'meaning': the_meaning,
+                'second_factor_method': second_factor_method,
+                'otp_verified_at': otp_verified_at,
+            },
+            signer_key_id=_RELEASE_APPROVAL_SIGNER_KEY_ID,
+        )
+
         release = gw.audit.approve_release_bundle(
             release_id,
             actor=actor,
@@ -343,9 +371,13 @@ class ReleaseService:
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             signer_user_key=signer_user_key,
-            meaning=meaning or 'approved release for promotion',
+            meaning=the_meaning,
             second_factor_method=second_factor_method,
             otp_verified_at=otp_verified_at,
+            signature=sig['signature'],
+            signature_scheme=sig['signature_scheme'],
+            signer_key_id=sig['signer_key_id'],
+            signature_input_hash=sig['signature_input_hash'],
             vote_only=not quorum_met,
         )
         return {
@@ -357,6 +389,9 @@ class ReleaseService:
             'votes_remaining': max(0, required_n - new_distinct),
             'signer_user_key': signer_user_key,
             'second_factor': second_factor_method,
+            'signature_scheme': sig['signature_scheme'],
+            'signer_key_fingerprint': sig['public_key_fingerprint'],
+            'dev_signing_key': sig['dev_signing_key'],
         }
 
     def promote_release(
