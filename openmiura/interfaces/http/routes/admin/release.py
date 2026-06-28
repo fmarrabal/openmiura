@@ -23,6 +23,7 @@ from openmiura.interfaces.http.routes.admin._helpers import (
     _require_admin,
 )
 from openmiura.interfaces.http.routes.admin._models import *  # noqa: F401,F403
+from openmiura.application.auth.totp import TotpNotConfigured
 
 router = APIRouter(tags=["admin"])
 
@@ -106,14 +107,67 @@ def admin_release_submit(release_id: str, payload: ReleaseActionRequest, request
 @router.post("/admin/releases/{release_id}/approve")
 def admin_release_approve(release_id: str, payload: ReleaseActionRequest, request: Request):
     gw = _require_admin(request)
+    # Signature-grade is opt-in PER RELEASE: when a quorum policy is configured
+    # the strict path runs (identity + anti-self-approval + TOTP + n-of-m
+    # quorum); otherwise the legacy single-approver path is preserved so
+    # existing deployments are unchanged.
+    strict = gw.audit.get_release_quorum(release_id=release_id, action="approve") is not None
     try:
-        response = _ADMIN_SERVICE.approve_release(gw, release_id=release_id, actor=payload.actor, reason=payload.reason, tenant_id=payload.tenant_id, workspace_id=payload.workspace_id)
+        if strict:
+            response = _ADMIN_SERVICE.cast_release_approval_vote(
+                gw, release_id=release_id, actor=payload.actor, reason=payload.reason,
+                meaning=payload.meaning, otp_code=payload.otp_code,
+                tenant_id=payload.tenant_id, workspace_id=payload.workspace_id,
+            )
+        else:
+            response = _ADMIN_SERVICE.approve_release(gw, release_id=release_id, actor=payload.actor, reason=payload.reason, tenant_id=payload.tenant_id, workspace_id=payload.workspace_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="release_not_found") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, "release_approve", {"release_id": release_id, "actor": payload.actor})
+    _audit_admin(gw, "release_approve", {"release_id": release_id, "actor": payload.actor, "strict": strict, "quorum_met": response.get("quorum_met")})
     return response
+
+
+@router.post("/admin/releases/{release_id}/quorum")
+def admin_release_set_quorum(release_id: str, payload: ReleaseQuorumRequest, request: Request):
+    """Configure the signature-grade approval quorum for a release (opt in)."""
+    gw = _require_admin(request)
+    policy = gw.audit.set_release_quorum(
+        release_id=release_id, action=payload.action, required_n=payload.required_n,
+        distinct_required=payload.distinct_required, allow_self=payload.allow_self,
+        tenant_id=payload.tenant_id, workspace_id=payload.workspace_id, environment=payload.environment,
+    )
+    _audit_admin(gw, "release_quorum_set", {"release_id": release_id, "action": payload.action, "required_n": payload.required_n})
+    return {"ok": True, "quorum": policy}
+
+
+@router.post("/admin/auth/otp/enroll")
+def admin_otp_enroll(payload: OtpEnrollRequest, request: Request):
+    """Enrol a TOTP second factor for a user (returns a provisioning URI)."""
+    gw = _require_admin(request)
+    try:
+        result = _ADMIN_SERVICE.enroll_user_totp(gw, user_key=payload.user_key, account_name=payload.account_name)
+    except TotpNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _audit_admin(gw, "otp_enroll", {"user_key": payload.user_key})
+    return {"ok": True, **result}
+
+
+@router.post("/admin/auth/otp/confirm")
+def admin_otp_confirm(payload: OtpConfirmRequest, request: Request):
+    """Confirm TOTP enrolment with the first code, enabling 2FA for the user."""
+    gw = _require_admin(request)
+    try:
+        result = _ADMIN_SERVICE.confirm_user_totp(gw, user_key=payload.user_key, code=payload.code)
+    except TotpNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail="invalid_or_expired_code")
+    _audit_admin(gw, "otp_confirm", {"user_key": payload.user_key})
+    return result
 
 
 @router.post("/admin/releases/{release_id}/promote")
