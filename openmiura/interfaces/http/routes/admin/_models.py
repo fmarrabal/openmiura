@@ -208,6 +208,30 @@ class ReleaseActionRequest(BaseModel):
     to_environment: Optional[str] = Field(default=None)
     tenant_id: Optional[str] = Field(default=None)
     workspace_id: Optional[str] = Field(default=None)
+    # Signature-grade approval (optional, additive): a TOTP second-factor code
+    # and the §11.50 meaning of the signature. Ignored by non-approve actions.
+    otp_code: Optional[str] = Field(default=None)
+    meaning: Optional[str] = Field(default=None)
+
+
+class OtpEnrollRequest(BaseModel):
+    user_key: str = Field(...)
+    account_name: Optional[str] = Field(default=None)
+
+
+class OtpConfirmRequest(BaseModel):
+    user_key: str = Field(...)
+    code: str = Field(...)
+
+
+class ReleaseQuorumRequest(BaseModel):
+    action: str = Field(default="approve")
+    required_n: int = Field(default=2, ge=1, le=16)
+    distinct_required: bool = Field(default=True)
+    allow_self: bool = Field(default=False)
+    tenant_id: Optional[str] = Field(default=None)
+    workspace_id: Optional[str] = Field(default=None)
+    environment: Optional[str] = Field(default=None)
 
 
 class ReleaseCanaryRequest(BaseModel):

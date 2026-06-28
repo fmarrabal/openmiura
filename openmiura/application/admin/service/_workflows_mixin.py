@@ -175,3 +175,36 @@ class _AdminServiceWorkflowsMixin:
             workspace_id=workspace_id,
         )
 
+    def cast_release_approval_vote(
+        self,
+        gw: AdminGatewayLike,
+        *,
+        release_id: str,
+        actor: str,
+        reason: str = '',
+        meaning: str | None = None,
+        otp_code: str | None = None,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self.release_service.cast_release_approval_vote(
+            gw,
+            release_id=release_id,
+            actor=actor,
+            reason=reason,
+            meaning=meaning,
+            otp_code=otp_code,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+        )
+
+    def enroll_user_totp(self, gw: AdminGatewayLike, *, user_key: str, account_name: str | None = None) -> dict[str, Any]:
+        from openmiura.application.auth.totp import TotpService
+
+        return TotpService().enroll(gw.audit, user_key=user_key, account_name=account_name)
+
+    def confirm_user_totp(self, gw: AdminGatewayLike, *, user_key: str, code: str) -> dict[str, Any]:
+        from openmiura.application.auth.totp import TotpService
+
+        return {'ok': bool(TotpService().confirm(gw.audit, user_key=user_key, code=code))}
+
