@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from typing import Any
+
+from openmiura.application.auth.totp import TotpNotConfigured, TotpService
 
 
 class ReleaseService:
@@ -229,6 +232,132 @@ class ReleaseService:
             workspace_id=workspace_id,
         )
         return {'ok': True, 'release': release}
+
+    @staticmethod
+    def _canonical_identity(gw, handle: Any) -> str | None:
+        """Resolve an actor handle (username OR user_key) to its canonical
+        user_key, so separation-of-duty compares stable identities. An
+        unregistered handle canonicalizes to its trimmed self."""
+        h = str(handle or '').strip()
+        if not h:
+            return None
+        user = gw.audit.get_auth_user(user_key=h) or gw.audit.get_auth_user(username=h)
+        return str((user or {}).get('user_key') or h).strip()
+
+    def cast_release_approval_vote(
+        self,
+        gw,
+        *,
+        release_id: str,
+        actor: str,
+        reason: str = '',
+        meaning: str | None = None,
+        otp_code: str | None = None,
+        auth_ctx: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Signature-grade approval (21 CFR Part 11 §11.50 / §11.200).
+
+        Unlike the legacy :meth:`approve_release` (which accepts any actor
+        string and flips the release to ``approved`` on the first call), this:
+
+          * resolves ``actor`` to a registered identity (rejected as unknown
+            when a quorum policy is configured for the release);
+          * enforces separation of duty — the release creator and submitter
+            cannot approve their own release, and no signer can vote twice;
+          * requires a valid TOTP second factor from any signer who has 2FA
+            enabled, recording ``otp_verified_at``;
+          * counts DISTINCT approvers against the per-release quorum (default
+            n=1 when no policy is configured, preserving legacy behaviour) and
+            only flips the release to ``approved`` once the quorum is met.
+
+        Signer + meaning + timestamp are recorded on the hash-chained approval
+        row (its ed25519 signature and evidence-pack binding land in a later
+        PR). This is a Part-11 MAPPING, not a conformance claim.
+        """
+        bundle = gw.audit.get_release_bundle(release_id, tenant_id=tenant_id, workspace_id=workspace_id)
+        if bundle is None:
+            raise KeyError(release_id)
+        b_tenant = bundle.get('tenant_id')
+        b_ws = bundle.get('workspace_id')
+
+        quorum = gw.audit.get_release_quorum(release_id=release_id, action='approve')
+        strict = quorum is not None
+        allow_self = bool(quorum and quorum.get('allow_self'))
+        required_n = int(quorum['required_n']) if quorum else 1
+
+        # 1. Resolve the actor to a real identity.
+        identity = gw.audit.get_auth_user(user_key=actor) or gw.audit.get_auth_user(username=actor)
+        if strict and identity is None:
+            raise PermissionError(
+                f"unknown approver '{actor}': signature-grade approval requires a registered identity"
+            )
+        signer_user_key = str((identity or {}).get('user_key') or actor).strip()
+
+        # 2. Separation of duty: creator / submitter cannot self-approve.
+        # Both sides are canonicalized to a user_key first — otherwise a user
+        # who SUBMITS under their username ('alice') could APPROVE under their
+        # user_key ('user:alice') and slip past a raw string compare.
+        if not allow_self:
+            created_by_key = self._canonical_identity(gw, bundle.get('created_by'))
+            if created_by_key and created_by_key == signer_user_key:
+                raise PermissionError('the release creator cannot approve their own release')
+            submitter_keys = {
+                self._canonical_identity(gw, a.get('actor'))
+                for a in gw.audit.list_release_approvals(release_id=release_id, limit=500, tenant_id=b_tenant, workspace_id=b_ws)
+                if a.get('action') == 'submit'
+            }
+            if signer_user_key in submitter_keys:
+                raise PermissionError('the release submitter cannot approve their own release')
+
+        # 3. No double-voting; count distinct prior signers for quorum.
+        prior_signers = {
+            str(v.get('signer_user_key') or '').strip()
+            for v in gw.audit.list_release_approval_votes(release_id=release_id, action='approve')
+            if v.get('signer_user_key')
+        }
+        if signer_user_key in prior_signers:
+            raise PermissionError(f"{signer_user_key} has already approved this release")
+        new_distinct = len(prior_signers | {signer_user_key})
+
+        # 4. Second factor: required from any signer who has 2FA enabled.
+        totp = TotpService()
+        otp_verified_at: float | None = None
+        second_factor_method: str | None = None
+        if totp.is_enabled(gw.audit, user_key=signer_user_key):
+            try:
+                ok = bool(otp_code) and totp.verify(gw.audit, user_key=signer_user_key, code=str(otp_code))
+            except TotpNotConfigured as exc:
+                raise PermissionError('second factor required but TOTP is not configured on this server') from exc
+            if not ok:
+                raise PermissionError('a valid TOTP code is required to approve this release')
+            otp_verified_at = time.time()
+            second_factor_method = 'totp'
+
+        quorum_met = new_distinct >= required_n
+        release = gw.audit.approve_release_bundle(
+            release_id,
+            actor=actor,
+            reason=reason,
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            signer_user_key=signer_user_key,
+            meaning=meaning or 'approved release for promotion',
+            second_factor_method=second_factor_method,
+            otp_verified_at=otp_verified_at,
+            vote_only=not quorum_met,
+        )
+        return {
+            'ok': True,
+            'release': release,
+            'quorum_met': quorum_met,
+            'votes_recorded': new_distinct,
+            'votes_required': required_n,
+            'votes_remaining': max(0, required_n - new_distinct),
+            'signer_user_key': signer_user_key,
+            'second_factor': second_factor_method,
+        }
 
     def promote_release(
         self,

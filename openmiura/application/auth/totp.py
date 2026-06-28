@@ -11,9 +11,12 @@ fail closed (``TotpNotConfigured``) rather than persisting a usable secret a
 DB read would expose — a second factor stored in the clear is not a second
 factor.
 
-Replay note: ``verify`` accepts a ±1 time-step window for clock skew. Single
-use of a given code is enforced at the approval layer (a quorum needs DISTINCT
-signers, and each approval records ``otp_verified_at``), not here.
+Replay note: ``verify`` accepts a ±1 time-step window for clock skew. It does
+NOT enforce single-use of a code. The distinct-signer quorum stops the same
+signer voting twice on one release, but a code could in principle be reused on
+a *different* release within its ~60 s window. Global single-use (consumed
+time-step tracking) is a known limitation, deferred to the HTTP-facing PR where
+an intercepted code becomes externally replayable.
 """
 from __future__ import annotations
 

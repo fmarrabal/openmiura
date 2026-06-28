@@ -602,14 +602,32 @@ class ReleaseRepo:
         self._conn.commit()
         return self.get_release_change_report(release_id, tenant_id=tenant_id, workspace_id=workspace_id) or {'release_id': release_id}
 
-    def _record_release_action(self, *, release_id: str, actor: str, action: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]:
+    def _record_release_action(
+        self,
+        *,
+        release_id: str,
+        actor: str,
+        action: str,
+        reason: str = '',
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+        signer_user_key: str | None = None,
+        meaning: str | None = None,
+        second_factor_method: str | None = None,
+        otp_verified_at: float | None = None,
+        signature: str | None = None,
+        signature_scheme: str | None = None,
+        signer_key_id: str | None = None,
+        signature_input_hash: str | None = None,
+    ) -> dict[str, Any]:
         approval_id = str(uuid.uuid4())
         now = time.time()
         cur = self._conn.cursor()
         # Tamper-evident hash-chain link (same transaction as the row INSERT),
         # mirroring sessions_repo.log_event. The signature-grade columns are
-        # part of the canonical row even though the legacy path leaves them
-        # NULL, so a later PR can fill them without changing the chain.
+        # part of the canonical row, so filling them (signature-grade vote) vs
+        # leaving them NULL (legacy action) both hash consistently.
         prev_hash, row_hash, chain_seq = compute_chain_link(
             self._conn,
             chain_table='release_approvals',
@@ -619,6 +637,14 @@ class ReleaseRepo:
                 actor=actor,
                 reason=reason or '',
                 created_at=now,
+                signer_user_key=signer_user_key,
+                meaning=meaning,
+                second_factor_method=second_factor_method,
+                otp_verified_at=otp_verified_at,
+                signature=signature,
+                signature_scheme=signature_scheme,
+                signer_key_id=signer_key_id,
+                signature_input_hash=signature_input_hash,
             ),
             tenant_id=tenant_id,
             workspace_id=workspace_id,
@@ -626,8 +652,16 @@ class ReleaseRepo:
             now_ts=now,
         )
         cur.execute(
-            'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-            (approval_id, release_id, actor, action, reason or '', now, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
+            'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, '
+            'tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method, '
+            'otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash, '
+            'row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (
+                approval_id, release_id, actor, action, reason or '', now,
+                tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method,
+                otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash,
+                row_hash, prev_hash, chain_seq,
+            ),
         )
         self._conn.commit()
         return {
@@ -640,6 +674,14 @@ class ReleaseRepo:
             'tenant_id': tenant_id,
             'workspace_id': workspace_id,
             'environment': environment,
+            'signer_user_key': signer_user_key,
+            'meaning': meaning,
+            'second_factor_method': second_factor_method,
+            'otp_verified_at': float(otp_verified_at) if otp_verified_at is not None else None,
+            'signature': signature,
+            'signature_scheme': signature_scheme,
+            'signer_key_id': signer_key_id,
+            'signature_input_hash': signature_input_hash,
         }
 
     def submit_release_bundle(self, release_id: str, *, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]:
@@ -655,7 +697,24 @@ class ReleaseRepo:
         self._record_release_action(release_id=release_id, actor=actor, action='submit', reason=reason, tenant_id=bundle.get('tenant_id'), workspace_id=bundle.get('workspace_id'), environment=bundle.get('environment'))
         return self.get_release_bundle(release_id, tenant_id=tenant_id, workspace_id=workspace_id) or bundle
 
-    def approve_release_bundle(self, release_id: str, *, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]:
+    def approve_release_bundle(
+        self,
+        release_id: str,
+        *,
+        actor: str,
+        reason: str = '',
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        signer_user_key: str | None = None,
+        meaning: str | None = None,
+        second_factor_method: str | None = None,
+        otp_verified_at: float | None = None,
+        signature: str | None = None,
+        signature_scheme: str | None = None,
+        signer_key_id: str | None = None,
+        signature_input_hash: str | None = None,
+        vote_only: bool = False,
+    ) -> dict[str, Any]:
         bundle = self.get_release_bundle(release_id, tenant_id=tenant_id, workspace_id=workspace_id)
         if bundle is None:
             raise KeyError(release_id)
@@ -663,10 +722,96 @@ class ReleaseRepo:
             raise ValueError('release must be in candidate or pending_approval before approval')
         now = time.time()
         cur = self._conn.cursor()
-        cur.execute('UPDATE release_bundles SET status=?, approved_at=COALESCE(approved_at, ?), updated_at=?, notes=? WHERE release_id=?', ('approved', now, now, reason or bundle.get('notes') or '', release_id))
+        # vote_only records an approval VOTE that does not yet meet quorum: the
+        # release advances to (or stays at) pending_approval. A final approval
+        # (legacy single-approver, or the vote that meets quorum) flips it to
+        # approved. Legacy callers (vote_only=False) behave exactly as before.
+        if vote_only:
+            target_status = 'pending_approval' if bundle['status'] == 'candidate' else bundle['status']
+            cur.execute('UPDATE release_bundles SET status=?, updated_at=?, notes=? WHERE release_id=?', (target_status, now, reason or bundle.get('notes') or '', release_id))
+        else:
+            cur.execute('UPDATE release_bundles SET status=?, approved_at=COALESCE(approved_at, ?), updated_at=?, notes=? WHERE release_id=?', ('approved', now, now, reason or bundle.get('notes') or '', release_id))
         self._conn.commit()
-        self._record_release_action(release_id=release_id, actor=actor, action='approve', reason=reason, tenant_id=bundle.get('tenant_id'), workspace_id=bundle.get('workspace_id'), environment=bundle.get('environment'))
+        self._record_release_action(
+            release_id=release_id, actor=actor, action='approve', reason=reason,
+            tenant_id=bundle.get('tenant_id'), workspace_id=bundle.get('workspace_id'), environment=bundle.get('environment'),
+            signer_user_key=signer_user_key, meaning=meaning, second_factor_method=second_factor_method,
+            otp_verified_at=otp_verified_at, signature=signature, signature_scheme=signature_scheme,
+            signer_key_id=signer_key_id, signature_input_hash=signature_input_hash,
+        )
         return self.get_release_bundle(release_id, tenant_id=tenant_id, workspace_id=workspace_id) or bundle
+
+    # --- signature-grade quorum (per release, per action) ------------------
+    def set_release_quorum(
+        self,
+        *,
+        release_id: str,
+        action: str = 'approve',
+        required_n: int = 2,
+        distinct_required: bool = True,
+        allow_self: bool = False,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+        environment: str | None = None,
+    ) -> dict[str, Any]:
+        now = time.time()
+        cur = self._conn.cursor()
+        cur.execute('DELETE FROM release_approval_quorum WHERE release_id=? AND action=?', (release_id, action))
+        cur.execute(
+            'INSERT INTO release_approval_quorum(release_id, action, required_n, distinct_required, allow_self, tenant_id, workspace_id, environment, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+            (release_id, action, int(required_n), 1 if distinct_required else 0, 1 if allow_self else 0, tenant_id, workspace_id, environment, now),
+        )
+        self._conn.commit()
+        return self.get_release_quorum(release_id=release_id, action=action) or {}
+
+    def get_release_quorum(self, *, release_id: str, action: str = 'approve') -> dict[str, Any] | None:
+        cur = self._conn.cursor()
+        row = cur.execute(
+            'SELECT release_id, action, required_n, distinct_required, allow_self, tenant_id, workspace_id, environment FROM release_approval_quorum WHERE release_id=? AND action=?',
+            (release_id, action),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            'release_id': row['release_id'],
+            'action': row['action'],
+            'required_n': int(row['required_n']),
+            'distinct_required': bool(row['distinct_required']),
+            'allow_self': bool(row['allow_self']),
+            'tenant_id': row['tenant_id'],
+            'workspace_id': row['workspace_id'],
+            'environment': row['environment'],
+        }
+
+    def list_release_approval_votes(self, *, release_id: str, action: str = 'approve') -> list[dict[str, Any]]:
+        """Signature-grade votes for a release/action (rows carrying a resolved
+        ``signer_user_key`` — i.e. cast through the strict path). Used to count
+        DISTINCT approvers for quorum."""
+        cur = self._conn.cursor()
+        rows = cur.execute(
+            'SELECT approval_id, release_id, actor, action, signer_user_key, meaning, second_factor_method, '
+            'otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash, created_at '
+            'FROM release_approvals WHERE release_id=? AND action=? AND signer_user_key IS NOT NULL ORDER BY created_at ASC',
+            (release_id, action),
+        ).fetchall()
+        return [
+            {
+                'approval_id': r['approval_id'],
+                'release_id': r['release_id'],
+                'actor': r['actor'],
+                'action': r['action'],
+                'signer_user_key': r['signer_user_key'],
+                'meaning': r['meaning'],
+                'second_factor_method': r['second_factor_method'],
+                'otp_verified_at': float(r['otp_verified_at']) if r['otp_verified_at'] is not None else None,
+                'signature': r['signature'],
+                'signature_scheme': r['signature_scheme'],
+                'signer_key_id': r['signer_key_id'],
+                'signature_input_hash': r['signature_input_hash'],
+                'created_at': float(r['created_at']),
+            }
+            for r in rows
+        ]
 
     def promote_release_bundle(self, release_id: str, *, to_environment: str, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]:
         bundle = self.get_release_bundle(release_id, tenant_id=tenant_id, workspace_id=workspace_id)

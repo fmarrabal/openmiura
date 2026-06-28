@@ -498,7 +498,13 @@ class AuditStore:
 
     def submit_release_bundle(self, release_id: str, *, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]: return self._release.submit_release_bundle(release_id, actor=actor, reason=reason, tenant_id=tenant_id, workspace_id=workspace_id)
 
-    def approve_release_bundle(self, release_id: str, *, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]: return self._release.approve_release_bundle(release_id, actor=actor, reason=reason, tenant_id=tenant_id, workspace_id=workspace_id)
+    def approve_release_bundle(self, release_id: str, *, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None, signer_user_key: str | None = None, meaning: str | None = None, second_factor_method: str | None = None, otp_verified_at: float | None = None, signature: str | None = None, signature_scheme: str | None = None, signer_key_id: str | None = None, signature_input_hash: str | None = None, vote_only: bool = False) -> dict[str, Any]: return self._release.approve_release_bundle(release_id, actor=actor, reason=reason, tenant_id=tenant_id, workspace_id=workspace_id, signer_user_key=signer_user_key, meaning=meaning, second_factor_method=second_factor_method, otp_verified_at=otp_verified_at, signature=signature, signature_scheme=signature_scheme, signer_key_id=signer_key_id, signature_input_hash=signature_input_hash, vote_only=vote_only)
+
+    def set_release_quorum(self, *, release_id: str, action: str = 'approve', required_n: int = 2, distinct_required: bool = True, allow_self: bool = False, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> dict[str, Any]: return self._release.set_release_quorum(release_id=release_id, action=action, required_n=required_n, distinct_required=distinct_required, allow_self=allow_self, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
+
+    def get_release_quorum(self, *, release_id: str, action: str = 'approve') -> dict[str, Any] | None: return self._release.get_release_quorum(release_id=release_id, action=action)
+
+    def list_release_approval_votes(self, *, release_id: str, action: str = 'approve') -> list[dict[str, Any]]: return self._release.list_release_approval_votes(release_id=release_id, action=action)
 
     def promote_release_bundle(self, release_id: str, *, to_environment: str, actor: str, reason: str = '', tenant_id: str | None = None, workspace_id: str | None = None) -> dict[str, Any]: return self._release.promote_release_bundle(release_id, to_environment=to_environment, actor=actor, reason=reason, tenant_id=tenant_id, workspace_id=workspace_id)
 
