@@ -386,6 +386,24 @@ class AuthRepo:
             "otp_confirmed_at": float(row["otp_confirmed_at"]) if row["otp_confirmed_at"] is not None else None,
         }
 
+    def consume_otp_step(self, *, user_key: str, time_step: int) -> bool:
+        """Atomically claim a TOTP (user, time-step). Returns True the first
+        time it is claimed and False on any replay (already consumed), so a
+        code cannot be reused within its validity window."""
+        now = time.time()
+        cur = self._conn.cursor()
+        if self._conn.backend == "postgresql":
+            sql = (
+                "INSERT INTO otp_consumed_steps(user_key, time_step, consumed_at) VALUES(?,?,?) "
+                "ON CONFLICT (user_key, time_step) DO NOTHING"
+            )
+        else:
+            sql = "INSERT OR IGNORE INTO otp_consumed_steps(user_key, time_step, consumed_at) VALUES(?,?,?)"
+        cur.execute(sql, (str(user_key), int(time_step), now))
+        inserted = int(getattr(cur, "rowcount", 0) or 0) > 0
+        self._conn.commit()
+        return inserted
+
     def create_auth_session(
         self,
         *,

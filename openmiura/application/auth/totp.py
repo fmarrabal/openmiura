@@ -11,12 +11,12 @@ fail closed (``TotpNotConfigured``) rather than persisting a usable secret a
 DB read would expose — a second factor stored in the clear is not a second
 factor.
 
-Replay note: ``verify`` accepts a ±1 time-step window for clock skew. It does
-NOT enforce single-use of a code. The distinct-signer quorum stops the same
-signer voting twice on one release, but a code could in principle be reused on
-a *different* release within its ~60 s window. Global single-use (consumed
-time-step tracking) is a known limitation, deferred to the HTTP-facing PR where
-an intercepted code becomes externally replayable.
+Replay note: ``verify`` accepts a ±1 time-step window for clock skew and is
+SINGLE-USE — it claims the code's generation time-step in ``otp_consumed_steps``
+(via ``store.consume_otp_step``) and rejects any later presentation of the same
+code, so an intercepted code cannot approve a second release within its window.
+``confirm`` (enrolment) deliberately does NOT consume, so the same code can
+immediately be used for a real action.
 """
 from __future__ import annotations
 
@@ -86,19 +86,26 @@ class TotpService:
         raw = base64.b32decode(secret_b32)
         return TOTP(raw, _DIGITS, hashes.SHA1(), _STEP_SECONDS)
 
-    def _verify_code(self, secret_b32: str, code: str, *, skew_steps: int = _DEFAULT_SKEW_STEPS) -> bool:
+    def _matched_step(self, secret_b32: str, code: str, *, skew_steps: int = _DEFAULT_SKEW_STEPS) -> int | None:
+        """Return the GENERATION time-step a code matches (within the skew
+        window), or None. Two presentations of the same code map to the same
+        generation step, which is what single-use consumption keys on."""
         totp = self._totp(secret_b32)
         code_b = str(code or "").strip().encode("ascii")
         if not code_b:
-            return False
+            return None
         now = int(self._now())
         for offset in range(-skew_steps, skew_steps + 1):
+            t = now + offset * _STEP_SECONDS
             try:
-                totp.verify(code_b, now + offset * _STEP_SECONDS)
-                return True
+                totp.verify(code_b, t)
+                return t // _STEP_SECONDS
             except InvalidToken:
                 continue
-        return False
+        return None
+
+    def _verify_code(self, secret_b32: str, code: str, *, skew_steps: int = _DEFAULT_SKEW_STEPS) -> bool:
+        return self._matched_step(secret_b32, code, skew_steps=skew_steps) is not None
 
     # --- lifecycle ---------------------------------------------------------
     def enroll(self, store: Any, *, user_key: str, account_name: str | None = None, issuer: str = "openMiura") -> dict[str, Any]:
@@ -123,12 +130,21 @@ class TotpService:
         return True
 
     def verify(self, store: Any, *, user_key: str, code: str) -> bool:
-        """Verify a code for a user with 2FA ENABLED. False if not enrolled,
-        not enabled, or the code is wrong."""
+        """Verify a code for a user with 2FA ENABLED, consuming it single-use.
+        False if not enrolled, not enabled, the code is wrong, OR the code was
+        already used (replay) — so an intercepted code cannot approve a second
+        release within its window."""
         rec = store.get_user_otp(user_key=user_key)
         if not rec or not rec.get("otp_enabled") or not rec.get("otp_secret_enc"):
             return False
-        return self._verify_code(self._decrypt(rec["otp_secret_enc"]), code)
+        step = self._matched_step(self._decrypt(rec["otp_secret_enc"]), code)
+        if step is None:
+            return False
+        # Claim the generation step single-use; a replay loses the race.
+        consume = getattr(store, "consume_otp_step", None)
+        if consume is not None and not consume(user_key=user_key, time_step=step):
+            return False
+        return True
 
     def is_enabled(self, store: Any, *, user_key: str) -> bool:
         rec = store.get_user_otp(user_key=user_key)
