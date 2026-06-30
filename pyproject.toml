@@ -38,6 +38,9 @@ dependencies = [
   "click>=8.3.2",
   "discord.py>=2.4",
   "cryptography>=46.0.7",
+  # RFC 3161 trusted-timestamp parsing/verification (TimeStampToken / TSTInfo /
+  # CMS). Pure-Python, MIT (Apache-2.0 compatible), no transitive deps.
+  "asn1crypto>=1.5",
   "prometheus-client>=0.25.0",
   "mcp>=1.0",
 ]
