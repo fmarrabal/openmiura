@@ -345,6 +345,8 @@ class AuditStore:
 
     def get_user_otp(self, *, user_key: str) -> dict[str, Any] | None: return self._auth.get_user_otp(user_key=user_key)
 
+    def consume_otp_step(self, *, user_key: str, time_step: int) -> bool: return self._auth.consume_otp_step(user_key=user_key, time_step=time_step)
+
     def create_auth_session( self, *, user_id: int, label: str = "ui", ttl_s: int | None = None, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None, ) -> dict[str, Any]: return self._auth.create_auth_session(user_id=user_id, label=label, ttl_s=ttl_s, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)
 
     def list_auth_sessions(self, *, user_id: int | None = None, include_revoked: bool = False, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> list[dict[str, Any]]: return self._auth.list_auth_sessions(user_id=user_id, include_revoked=include_revoked, tenant_id=tenant_id, workspace_id=workspace_id, environment=environment)

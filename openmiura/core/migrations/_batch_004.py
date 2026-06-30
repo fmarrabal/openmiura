@@ -151,4 +151,34 @@ BATCH_004_MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE auth_users DROP COLUMN IF EXISTS otp_confirmed_at",
         ),
     ),
+    # Migration 28 — TOTP single-use. Records each consumed (user, time-step)
+    # so a code cannot be replayed within its ~60 s validity window (e.g. to
+    # approve a second release). PK (user_key, time_step) makes the consume an
+    # atomic insert-or-ignore.
+    Migration(
+        28,
+        "otp_single_use",
+        (
+            """
+            CREATE TABLE IF NOT EXISTS otp_consumed_steps (
+                user_key    TEXT NOT NULL,
+                time_step   INTEGER NOT NULL,
+                consumed_at REAL NOT NULL,
+                PRIMARY KEY (user_key, time_step)
+            )
+            """,
+        ),
+        (
+            """
+            CREATE TABLE IF NOT EXISTS otp_consumed_steps (
+                user_key    TEXT NOT NULL,
+                time_step   BIGINT NOT NULL,
+                consumed_at DOUBLE PRECISION NOT NULL,
+                PRIMARY KEY (user_key, time_step)
+            )
+            """,
+        ),
+        ("DROP TABLE IF EXISTS otp_consumed_steps",),
+        ("DROP TABLE IF EXISTS otp_consumed_steps",),
+    ),
 )

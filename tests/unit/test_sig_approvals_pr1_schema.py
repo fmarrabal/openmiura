@@ -39,13 +39,12 @@ def _migrated_conn(tmp_path):
     return conn
 
 
-def test_migration_27_is_registered_and_latest():
+def test_migration_27_is_registered():
     by_version = {m.version: m for m in MIGRATIONS}
     assert 27 in by_version
     assert by_version[27].name == "signature_grade_release_approvals"
-    assert max(by_version) == 27
     # versions stay contiguous (no gaps) up to the latest
-    assert sorted(by_version) == list(range(1, 28))
+    assert sorted(by_version) == list(range(1, max(by_version) + 1))
 
 
 def test_auth_users_gains_totp_columns(tmp_path):
