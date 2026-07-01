@@ -244,7 +244,15 @@ openmiura verify pack.zip --json               # machine-readable result
 openmiura verify pack.zip --allow-dev-seed     # accept dev-seed sigs in CI
 openmiura verify pack.zip --strict             # also gate on chain-of-custody
 openmiura verify pack.zip --trust-anchor signer.pem   # bind to a known signer
+openmiura verify pack.zip --tsa-anchor tsa.pem        # trust a timestamping authority
 ```
+
+If the pack carries an RFC 3161 trusted timestamp (a `timestamp.json` entry
+with a `TimeStampToken` over the pack's signature), `verify` checks it offline
+and reports the `genTime` — proving *when* the signed pack existed. `valid`
+means the token's imprint matches and the TSA's signature verifies; pass
+`--tsa-anchor` (a PEM/DER cert of the TSA or its issuing CA, repeatable) to also
+confirm the timestamp was issued by a *trusted* authority.
 
 Exit codes: `0` verified and authoritative · `1` a check failed (tampered) ·
 `2` internally consistent but **not authoritative** (signed with the public

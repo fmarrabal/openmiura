@@ -832,7 +832,15 @@ def doctor_command(config: str | None, json_output: bool) -> None:
     "64-char hex fingerprint. Repeatable. When given, a pack is authoritative "
     "only if its signing key matches one of these anchors.",
 )
-def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: bool, trust_anchor: tuple[str, ...]) -> None:
+@click.option(
+    "--tsa-anchor",
+    multiple=True,
+    metavar="CERTFILE",
+    help="Trusted Timestamping Authority: a PEM/DER X.509 certificate file of "
+    "the TSA (or its issuing CA). Repeatable. When given, an embedded RFC 3161 "
+    "timestamp is reported as trusted only if its signer matches an anchor.",
+)
+def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: bool, trust_anchor: tuple[str, ...], tsa_anchor: tuple[str, ...]) -> None:
     raise click.exceptions.Exit(
         verify_pack_cli(
             pack=pack,
@@ -840,6 +848,7 @@ def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: b
             allow_dev_seed=allow_dev_seed,
             strict=strict,
             trust_anchor=trust_anchor,
+            tsa_anchor=tsa_anchor,
         )
     )
 

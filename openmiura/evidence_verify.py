@@ -331,11 +331,40 @@ def _read_entries(pack_path: Path) -> tuple[bytes, dict[str, Any]]:
     return archive_bytes, entries
 
 
+def _verify_pack_timestamp(
+    entries: dict[str, Any],
+    integrity: dict[str, Any],
+    tsa_trust_anchors: list[bytes] | None,
+) -> dict[str, Any] | None:
+    """Verify an optional RFC 3161 ``timestamp.json`` entry over the pack's
+    signature bytes. Returns None when absent; never raises."""
+    entry = entries.get("timestamp.json")
+    if not isinstance(entry, dict) or not entry:
+        return None
+    token_b64 = str(entry.get("token_b64") or "").strip()
+    if not token_b64:
+        return {"present": True, "valid": False, "error": "missing_token"}
+    try:
+        from openmiura.rfc3161 import verify_timestamp_token
+
+        covered = base64.b64decode(str(integrity.get("signature") or "").encode("ascii"))
+        token_der = base64.b64decode(token_b64.encode("ascii"))
+        ts = verify_timestamp_token(
+            token_der=token_der,
+            data=covered,
+            trusted_tsa_certs=(list(tsa_trust_anchors) if tsa_trust_anchors is not None else None),
+        )
+        return {"present": True, "covers": entry.get("covers") or "integrity.signature", **ts}
+    except Exception as exc:  # defensive: a broken entry must not crash verify
+        return {"present": True, "valid": False, "error": f"{type(exc).__name__}:{exc}"}
+
+
 def verify_pack(
     pack_path: str | Path,
     *,
     strict: bool = False,
     trust_anchors: set[str] | None = None,
+    tsa_trust_anchors: list[bytes] | None = None,
 ) -> dict[str, Any]:
     """Verify an evidence pack ZIP on disk and return a structured result.
 
@@ -498,10 +527,17 @@ def verify_pack(
         and (trusted_signer is not False)  # None (no anchor) or True both pass
     )
 
+    # RFC 3161 trusted timestamp (optional). A `timestamp.json` entry carries a
+    # base64 TimeStampToken over the pack's signature bytes; verifying it
+    # offline proves WHEN the signed pack existed. `trusted` requires a supplied
+    # TSA anchor — same honest split as the signer trust anchors above.
+    timestamp_result = _verify_pack_timestamp(entries, integrity, tsa_trust_anchors)
+
     verdict = "verified" if consistent else "failed"
 
     return {
         "ok": True,
+        "timestamp": timestamp_result,
         "pack": path.as_posix(),
         "archive_sha256": archive_sha256,
         "archive_size_bytes": len(archive_bytes),
@@ -580,6 +616,13 @@ def _print_human(result: dict[str, Any]) -> None:
     chain = (result.get("details") or {}).get("chain_of_custody")
     if chain is not None:
         print(f"[INFO] chain_of_custody: {chain.get('count')} entries, chain_valid={chain.get('valid')}")
+    ts = result.get("timestamp")
+    if ts is not None:
+        if ts.get("valid"):
+            trust = {True: "trusted TSA", False: "UNTRUSTED signer", None: "no TSA anchor given"}[ts.get("trusted")]
+            print(f"[{'PASS' if ts.get('trusted') is not False else 'WARN'}] rfc3161 timestamp: genTime={ts.get('gen_time')} ({trust}; {ts.get('tsa')})")
+        else:
+            print(f"[FAIL] rfc3161 timestamp present but INVALID: {ts.get('error') or 'imprint/signature mismatch'}")
     nvo = result.get("not_verified_offline") or {}
     present = [k.replace("_present", "") for k, v in nvo.items() if v]
     if present:
@@ -705,6 +748,25 @@ def _resolve_trust_anchors(values: tuple[str, ...] | list[str]) -> set[str]:
     return anchors
 
 
+def _resolve_tsa_anchors(values: tuple[str, ...] | list[str]) -> list[bytes]:
+    """Resolve ``--tsa-anchor`` values (PEM/DER X.509 certificate files of
+    trusted Timestamping Authorities, or their issuing CA) to DER bytes."""
+    from cryptography.hazmat.primitives.serialization import Encoding
+    from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
+
+    out: list[bytes] = []
+    for value in values:
+        v = (value or "").strip()
+        if not v:
+            continue
+        raw = Path(v).read_bytes()  # OSError → caught by caller
+        cert = load_pem_x509_certificate(raw) if b"-----BEGIN" in raw else load_der_x509_certificate(raw)
+        out.append(cert.public_bytes(Encoding.DER))
+    if values and not out:
+        raise ValueError("no usable TSA anchors (all values were empty)")
+    return out
+
+
 def verify_pack_cli(
     *,
     pack: str,
@@ -712,6 +774,7 @@ def verify_pack_cli(
     allow_dev_seed: bool = False,
     strict: bool = False,
     trust_anchor: tuple[str, ...] | list[str] = (),
+    tsa_anchor: tuple[str, ...] | list[str] = (),
 ) -> int:
     """CLI entry point. Returns a process exit code."""
     trust_anchors: set[str] | None = None
@@ -721,7 +784,14 @@ def verify_pack_cli(
         except (ValueError, OSError) as exc:
             print(f"ERROR: invalid --trust-anchor: {exc}")
             return EXIT_USAGE
-    result = verify_pack(pack, strict=strict, trust_anchors=trust_anchors)
+    tsa_trust_anchors: list[bytes] | None = None
+    if tsa_anchor:
+        try:
+            tsa_trust_anchors = _resolve_tsa_anchors(tsa_anchor)
+        except Exception as exc:
+            print(f"ERROR: invalid --tsa-anchor: {exc}")
+            return EXIT_USAGE
+    result = verify_pack(pack, strict=strict, trust_anchors=trust_anchors, tsa_trust_anchors=tsa_trust_anchors)
     exit_code = _exit_code_for(result, allow_dev_seed=allow_dev_seed)
     if json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
