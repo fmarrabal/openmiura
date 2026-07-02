@@ -254,6 +254,12 @@ means the token's imprint matches and the TSA's signature verifies; pass
 `--tsa-anchor` (a PEM/DER cert of the TSA or its issuing CA, repeatable) to also
 confirm the timestamp was issued by a *trusted* authority.
 
+To add one, request a token from any RFC 3161 TSA and embed it:
+
+```text
+openmiura timestamp pack.zip --tsa-url https://freetsa.org/tsr -o stamped.zip
+```
+
 Exit codes: `0` verified and authoritative · `1` a check failed (tampered) ·
 `2` internally consistent but **not authoritative** (signed with the public
 development seed, signed only with the legacy reproducible hash, unsigned, or —
