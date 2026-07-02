@@ -11,7 +11,7 @@ import httpx
 import uvicorn
 
 from openmiura import __version__
-from openmiura.evidence_verify import verify_pack_cli
+from openmiura.evidence_verify import timestamp_pack_cli, verify_pack_cli
 from openmiura.core.worker_runtime import build_worker_manager, resolve_worker_mode
 from openmiura.infrastructure.persistence.db import DBConnection
 from openmiura.core.migrations import apply_migrations, backup_database, downgrade_migrations, restore_database, schema_status
@@ -851,6 +851,14 @@ def verify_command(pack: str, json_output: bool, allow_dev_seed: bool, strict: b
             tsa_anchor=tsa_anchor,
         )
     )
+
+
+@app.command("timestamp", help="Add an RFC 3161 trusted timestamp to an evidence pack (over its signature).")
+@click.argument("pack", type=click.Path(dir_okay=False, path_type=str))
+@click.option("--tsa-url", type=str, required=True, help="RFC 3161 Timestamping Authority URL to request a token from.")
+@click.option("--output", "-o", type=str, default=None, help="Output pack path (default: overwrite the input pack).")
+def timestamp_command(pack: str, tsa_url: str, output: str | None) -> None:
+    raise click.exceptions.Exit(timestamp_pack_cli(pack=pack, tsa_url=tsa_url, output=output))
 
 
 @db_app.command("check")

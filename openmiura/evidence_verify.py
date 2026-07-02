@@ -798,3 +798,28 @@ def verify_pack_cli(
     else:
         _print_human(result)
     return exit_code
+
+
+def timestamp_pack_cli(*, pack: str, tsa_url: str | None = None, output: str | None = None, http_client: Any = None) -> int:
+    """Add an RFC 3161 trusted timestamp (over the pack's signature) to an
+    evidence pack by requesting a token from ``tsa_url``. Returns an exit code.
+    """
+    if not tsa_url:
+        print("ERROR: --tsa-url is required")
+        return EXIT_USAGE
+    try:
+        data = Path(pack).read_bytes()
+    except OSError as exc:
+        print(f"ERROR: cannot read {pack}: {exc}")
+        return EXIT_USAGE
+    try:
+        from openmiura.rfc3161 import add_timestamp_to_pack
+
+        stamped = add_timestamp_to_pack(data, tsa_url=tsa_url, http_client=http_client)
+    except Exception as exc:
+        print(f"ERROR: timestamping failed: {exc}")
+        return EXIT_FAILED
+    out_path = output or pack
+    Path(out_path).write_bytes(stamped)
+    print(f"timestamped pack written to {out_path}")
+    return EXIT_OK

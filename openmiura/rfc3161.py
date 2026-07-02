@@ -20,7 +20,11 @@ verifies the signer's certificate signature.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
+import io
+import json
+import zipfile
 from datetime import datetime
 from typing import Any
 
@@ -218,7 +222,8 @@ def verify_timestamp_token(
 
 def build_timestamp_token(
     *,
-    data: bytes,
+    data: bytes | None = None,
+    hashed_message: bytes | None = None,
     gen_time: datetime,
     private_key: Any,
     certificate: Any,
@@ -226,14 +231,21 @@ def build_timestamp_token(
     hash_name: str = "sha256",
     policy_oid: str = _DEFAULT_POLICY,
 ) -> bytes:
-    """Build an RFC 3161 TimeStampToken over ``data`` (what a TSA does).
+    """Build an RFC 3161 TimeStampToken (what a TSA does).
 
-    ``gen_time`` must be a timezone-aware UTC datetime; ``certificate`` /
-    ``private_key`` are the ``cryptography`` cert + key of the (local) TSA.
+    Provide the message imprint either as ``data`` (hashed here) or as a
+    precomputed ``hashed_message`` (what a real TSA receives — it never sees the
+    original data). ``gen_time`` must be a timezone-aware UTC datetime;
+    ``certificate`` / ``private_key`` are the ``cryptography`` cert + key of the
+    (local) TSA.
     """
+    if hashed_message is None:
+        if data is None:
+            raise ValueError("provide data or hashed_message")
+        hashed_message = _digest(hash_name, data)
     imprint = tsp.MessageImprint({
         "hash_algorithm": algos.DigestAlgorithm({"algorithm": hash_name}),
-        "hashed_message": _digest(hash_name, data),
+        "hashed_message": hashed_message,
     })
     tst_info = tsp.TSTInfo({
         "version": "v1",
@@ -284,3 +296,92 @@ def build_timestamp_token(
         "signer_infos": [signer_info],
     })
     return cms.ContentInfo({"content_type": "signed_data", "content": signed_data}).dump()
+
+
+# ---------------------------------------------------------------------------
+# Issuance — request a token from a real TSA, and embed one in a pack
+# ---------------------------------------------------------------------------
+
+
+def request_timestamp(
+    *,
+    data: bytes,
+    tsa_url: str,
+    hash_name: str = "sha256",
+    timeout: float = 15.0,
+    http_client: Any = None,
+) -> bytes:
+    """Request an RFC 3161 TimeStampToken for ``data`` from a TSA over HTTP.
+
+    Sends a ``TimeStampReq`` (Content-Type ``application/timestamp-query``) and
+    returns the DER ``TimeStampToken``. ``http_client`` (an ``httpx.Client``)
+    may be injected for testing; otherwise a one-shot request is made. Raises
+    ``ValueError`` if the TSA does not grant the request.
+    """
+    req = tsp.TimeStampReq({
+        "version": "v1",
+        "message_imprint": tsp.MessageImprint({
+            "hash_algorithm": algos.DigestAlgorithm({"algorithm": hash_name}),
+            "hashed_message": _digest(hash_name, data),
+        }),
+        "cert_req": True,
+    })
+    headers = {"Content-Type": "application/timestamp-query", "Accept": "application/timestamp-reply"}
+    if http_client is not None:
+        response = http_client.post(tsa_url, content=req.dump(), headers=headers)
+    else:
+        import httpx
+
+        response = httpx.post(tsa_url, content=req.dump(), headers=headers, timeout=timeout)
+    response.raise_for_status()
+    ts_resp = tsp.TimeStampResp.load(response.content)
+    status = ts_resp["status"]["status"].native
+    if status not in ("granted", "granted_with_mods"):
+        detail = ts_resp["status"]["status_string"].native if ts_resp["status"]["status_string"] else ""
+        raise ValueError(f"TSA did not grant the timestamp (status={status!r}: {detail})")
+    return ts_resp["time_stamp_token"].dump()
+
+
+def add_timestamp_to_pack(
+    pack_bytes: bytes,
+    *,
+    tsa_url: str | None = None,
+    local_signer: tuple[Any, Any, datetime] | None = None,
+    hash_name: str = "sha256",
+    http_client: Any = None,
+) -> bytes:
+    """Return a copy of an evidence pack with a ``timestamp.json`` entry
+    carrying an RFC 3161 timestamp over the pack's ``integrity.signature``.
+
+    Provide either ``tsa_url`` (a real TSA) or ``local_signer`` (a
+    ``(private_key, certificate, gen_time)`` tuple for a self-asserted local
+    timestamp). Any pre-existing ``timestamp.json`` is replaced.
+    """
+    with zipfile.ZipFile(io.BytesIO(pack_bytes)) as zin:
+        integrity = json.loads(zin.read("integrity.json").decode("utf-8"))
+    signature_b64 = str(integrity.get("signature") or "").strip()
+    if not signature_b64:
+        raise ValueError("pack has no signature to timestamp")
+    covered = base64.b64decode(signature_b64.encode("ascii"))
+
+    if tsa_url:
+        token = request_timestamp(data=covered, tsa_url=tsa_url, hash_name=hash_name, http_client=http_client)
+    elif local_signer is not None:
+        key, cert, gen_time = local_signer
+        token = build_timestamp_token(data=covered, gen_time=gen_time, private_key=key, certificate=cert, hash_name=hash_name)
+    else:
+        raise ValueError("either tsa_url or local_signer is required")
+
+    entry = {
+        "format": "rfc3161",
+        "covers": "integrity.signature",
+        "token_b64": base64.b64encode(token).decode("ascii"),
+    }
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(pack_bytes)) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name in zin.namelist():
+            if name == "timestamp.json":
+                continue
+            zout.writestr(name, zin.read(name))
+        zout.writestr("timestamp.json", json.dumps(entry, ensure_ascii=False, sort_keys=True, indent=2))
+    return out.getvalue()
