@@ -9,7 +9,7 @@ description = "Governed agent operations platform with releases, policies, appro
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "Francisco Arrabal" }
+  { name = "Francisco Arrabal", email = "fmarrabal@ual.es" }
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -66,6 +66,8 @@ openmiura = "openmiura.cli:main"
 
 [tool.setuptools]
 include-package-data = true
+# Load-bearing: `openmiura run` starts the server via uvicorn.run("app:app")
+# (openmiura/cli.py), so the root `app` module must ship in the wheel.
 py-modules = ["app"]
 
 [tool.setuptools.packages.find]
@@ -85,4 +87,7 @@ filterwarnings = [
 ]
 
 [tool.setuptools.package-data]
-openmiura = ["builtin_skills/**/*.yaml", "builtin_skills/**/*.md", "ui/static/*"]
+# NB: `*` does not cross directory separators in setuptools package-data —
+# use `**/*` so nested assets (ui/static/icons/*, the whole ui/v2 tree the
+# app mounts at /ui/v2) actually land in the wheel.
+openmiura = ["builtin_skills/**/*.yaml", "builtin_skills/**/*.md", "ui/static/**/*", "ui/v2/static/**/*"]

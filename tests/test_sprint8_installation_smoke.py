@@ -130,6 +130,16 @@ def test_artifact_install_smoke_for_wheel_sdist_and_bundle(tmp_path: Path) -> No
     sdist_path = next(dist_dir.glob('openmiura-1.0.0.tar.gz'))
     bundle_path = next(dist_dir.glob('openmiura-desktop-v1.0.0-*.zip'))
 
+    # Wheel-content pin: the app mounts /ui/v2 from openmiura/ui/v2/static and
+    # /ui from openmiura/ui/static (incl. icons/), and `openmiura run` starts
+    # uvicorn with "app:app" — a wheel missing any of these ships a broken
+    # server/UI even though every import works.
+    with zipfile.ZipFile(wheel_path) as wf:
+        wheel_names = wf.namelist()
+    assert 'app.py' in wheel_names
+    assert sum(1 for n in wheel_names if n.startswith('openmiura/ui/v2/static/')) >= 30
+    assert any(n.startswith('openmiura/ui/static/icons/') for n in wheel_names)
+
     # wheel install smoke
     wheel_venv = tmp_path / 'wheel-venv'
     wheel_python, wheel_openmiura = _create_venv(wheel_venv)
