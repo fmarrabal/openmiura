@@ -30,19 +30,22 @@ dependencies = [
   # dependency in ``[standard]``). Pin BELOW the malicious
   # release until upstream republishes a clean version.
   "fastapi>=0.110,<0.136.3",
-  "uvicorn[standard]>=0.44.0",
-  "httpx>=0.27",
-  "numpy>=1.26",
-  "pydantic>=2.12.5",
-  "PyYAML>=6.0",
-  "click>=8.3.2",
-  "discord.py>=2.4",
-  "cryptography>=46.0.7",
+  # Upper caps sit one major ABOVE the latest published release at the time of
+  # writing, so today's resolution is unchanged while the next breaking major
+  # cannot silently alter audit-trail/signing behaviour. Bump deliberately.
+  "uvicorn[standard]>=0.44.0,<1",
+  "httpx>=0.27,<1",
+  "numpy>=1.26,<3",
+  "pydantic>=2.12.5,<3",
+  "PyYAML>=6.0,<7",
+  "click>=8.3.2,<9",
+  "discord.py>=2.4,<3",
+  "cryptography>=46.0.7,<50",
   # RFC 3161 trusted-timestamp parsing/verification (TimeStampToken / TSTInfo /
   # CMS). Pure-Python, MIT (Apache-2.0 compatible), no transitive deps.
-  "asn1crypto>=1.5",
-  "prometheus-client>=0.25.0",
-  "mcp>=1.0",
+  "asn1crypto>=1.5,<2",
+  "prometheus-client>=0.25.0,<1",
+  "mcp>=1.0,<2",
 ]
 
 

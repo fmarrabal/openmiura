@@ -7,6 +7,10 @@ include .env.example
 
 recursive-include configs *.yaml
 recursive-include docs *.md
+# Internal material must not ship in the public sdist: work journals
+# (Spanish, internal) and archived pre-Phase-0 marketing narrative.
+prune docs/_workjournal
+prune docs/_archive
 recursive-include packaging *
 recursive-include scripts *.py
 recursive-include ops/env *.env
