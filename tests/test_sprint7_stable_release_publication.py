@@ -31,6 +31,23 @@ def test_release_workflow_supports_stable_publication_to_github_release() -> Non
     assert 'dist/SHA256SUMS.txt' in publish_step['run']
 
 
+def test_release_workflow_publishes_to_pypi_via_trusted_publishing() -> None:
+    workflow = _load_yaml('.github/workflows/release.yml')
+    job = workflow['jobs']['publish-pypi']
+
+    # Gated on the same stable-publish decision as the GitHub Release upload.
+    assert job['needs'] == 'build-release'
+    assert job['if'] == "needs.build-release.outputs.publish_release == 'true'"
+    # Approval gate + OIDC (no long-lived token stored in the repo).
+    assert job['environment'] == 'pypi'
+    assert job['permissions']['id-token'] == 'write'
+    # Top-level workflow permissions stay least-privilege (contents only).
+    assert 'id-token' not in workflow['permissions']
+
+    publish = next(s for s in job['steps'] if str(s.get('uses', '')).startswith('pypa/gh-action-pypi-publish'))
+    assert publish['with']['packages-dir'] == 'dist-pypi'
+
+
 def test_stable_release_publication_docs_are_linked_and_define_rc_vs_stable_policy() -> None:
     docs_index = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
     publication = (ROOT / 'docs' / 'release_publication.md').read_text(encoding='utf-8')

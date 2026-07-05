@@ -22,6 +22,11 @@ permissions:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      stable: ${{ steps.meta.outputs.stable }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      publish_release: ${{ steps.meta.outputs.publish_release }}
     env:
       PYTHONHASHSEED: "0"
       SOURCE_DATE_EPOCH: "1577836800"
@@ -156,3 +161,40 @@ jobs:
             dist/RELEASE_MANIFEST.json \
             dist/SHA256SUMS.txt \
             --clobber
+
+  # Publish the reproducible wheel + sdist to PyPI via Trusted Publishing
+  # (OIDC — no long-lived token stored in the repo). This runs ONLY for a
+  # published, non-prerelease, stable-tag GitHub Release, and is gated behind
+  # the `pypi` Environment so a human can require approval before the upload.
+  #
+  # ONE-TIME OUT-OF-REPO SETUP (maintainer): create the `openmiura` project on
+  # PyPI and add a Trusted Publisher pointing at repo fmarrabal/openmiura,
+  # workflow `release.yml`, environment `pypi`. Until that exists this job is
+  # inert (it only runs on a stable Release and would otherwise fail closed).
+  publish-pypi:
+    needs: build-release
+    if: needs.build-release.outputs.publish_release == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # mint the OIDC token PyPI Trusted Publishing verifies
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: openmiura-release-${{ needs.build-release.outputs.tag }}
+          path: artifacts
+
+      - name: Collect wheel + sdist only
+        shell: bash
+        run: |
+          mkdir -p dist-pypi
+          cp artifacts/dist/*.whl dist-pypi/
+          cp artifacts/dist/*.tar.gz dist-pypi/
+          ls -l dist-pypi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-pypi
+          print-hash: true

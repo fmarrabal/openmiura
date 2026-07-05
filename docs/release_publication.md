@@ -147,3 +147,28 @@ Supporting public material:
 - [Installation](installation.md)
 - [Canonical demo](demos/canonical_demo.md)
 - [Stable release text pack](media/stable_release_text_pack.md)
+
+## 10. Publishing to PyPI (Trusted Publishing / OIDC)
+
+Status: `experimental`. The `release.yml` workflow contains a `publish-pypi`
+job that uploads the reproducible wheel + sdist to PyPI on a **published,
+non-prerelease, stable-tag** GitHub Release, gated behind the `pypi`
+Environment.
+
+No API token is stored in the repository — publication uses
+[PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC).
+This requires a **one-time, out-of-repo setup by the maintainer**:
+
+1. Create the `openmiura` project on PyPI (or upload the first release manually
+   once to claim the name).
+2. On the project's *Publishing* settings, add a **Trusted Publisher**:
+   - Owner / repository: `fmarrabal/openmiura`
+   - Workflow name: `release.yml`
+   - Environment name: `pypi`
+3. In the GitHub repository settings, create an Environment named `pypi` and
+   (recommended) add required reviewers so a human approves each upload.
+
+Until that setup exists the job is inert — it only runs for a stable Release
+and otherwise fails closed. Recommended first run: publish a release to
+**TestPyPI** first (temporarily point the publish step's `repository-url` at
+`https://test.pypi.org/legacy/`) before flipping to real PyPI.
