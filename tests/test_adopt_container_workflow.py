@@ -44,3 +44,6 @@ def test_dockerfile_and_entrypoint_are_present() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "pip install ." in dockerfile
     assert "/app/docker/entrypoint.sh" in dockerfile
+    # A `<<heredoc` is NOT valid in a Dockerfile — buildkit reads each following
+    # line as its own instruction (this broke the HEALTHCHECK). Keep it out.
+    assert "<<" not in dockerfile
