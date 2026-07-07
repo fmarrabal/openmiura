@@ -26,17 +26,11 @@ USER openmiura
 
 EXPOSE 8081 8091
 
+# Single-line health probe: a shell heredoc after HEALTHCHECK CMD is NOT valid
+# in a Dockerfile (buildkit reads each following line as its own instruction),
+# so use one self-contained `python -c` command.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD python - <<'PY' || exit 1
-import os
-import sys
-from urllib.request import urlopen
-host = os.environ.get('OPENMIURA_HEALTHCHECK_HOST', '127.0.0.1')
-port = os.environ.get('OPENMIURA_SERVER_PORT', '8081')
-url = f'http://{host}:{port}/health'
-with urlopen(url, timeout=3) as response:
-    sys.exit(0 if response.status == 200 else 1)
-PY
+  CMD python -c "import os,sys,urllib.request as u; sys.exit(0 if u.urlopen('http://%s:%s/health' % (os.environ.get('OPENMIURA_HEALTHCHECK_HOST','127.0.0.1'), os.environ.get('OPENMIURA_SERVER_PORT','8081')), timeout=3).status==200 else 1)"
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD []
