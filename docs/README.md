@@ -35,6 +35,11 @@
 ## Operational guides
 
 - [Deployment](deployment.md)
+- [Container image (GHCR)](container_image.md)
+- [Secrets and keys](secrets_and_keys.md)
+- [Health and monitoring](health_and_monitoring.md)
+- [Upgrades](upgrades.md)
+- [Backup and restore](backup_restore.md)
 - [Observability](observability.md)
 - [MCP](mcp.md)
 - [CI/CD](ci_cd.md)
