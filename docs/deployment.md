@@ -1,21 +1,21 @@
-# Despliegue
+# Deployment
 
-## Arranque con Docker Compose
+## Startup with Docker Compose
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-## Perfil observability
+## Observability profile
 
 ```bash
 docker compose --profile observability up --build
 ```
 
-### Receptores reales de alertas
+### Real alert receivers
 
-Variables soportadas:
+Supported variables:
 
 - `OPENMIURA_ALERT_WEBHOOK_URL`
 - `OPENMIURA_ALERT_WEBHOOK_HTTP_CONFIG_BEARER_TOKEN`
@@ -28,11 +28,12 @@ Variables soportadas:
 - `OPENMIURA_ALERT_EMAIL_AUTH_PASSWORD`
 - `OPENMIURA_ALERT_EMAIL_REQUIRE_TLS`
 
-Alertmanager renderiza su configuración final al iniciar el contenedor. Así puedes usar el mismo stack en laboratorio o producción solo cambiando `.env`.
+Alertmanager renders its final configuration when the container starts, so you
+can use the same stack in lab or production by only changing `.env`.
 
-## Validación de alertas
+## Alert validation
 
-Una vez levantado Alertmanager:
+Once Alertmanager is up:
 
 ```bash
 python scripts/fire_test_alerts.py --alertmanager-url http://localhost:9093
@@ -40,19 +41,21 @@ python scripts/fire_test_alerts.py --alertmanager-url http://localhost:9093
 
 ## Reverse proxy
 
-Publica solo los puertos necesarios y protege Grafana/Prometheus/Alertmanager detrás de red interna o autenticación adicional si van fuera de laboratorio.
+Publish only the necessary ports, and protect Grafana/Prometheus/Alertmanager
+behind an internal network or additional authentication if they go beyond the
+lab.
 
 
-## Rollback de migraciones
+## Migration rollback
 
-openMiura soporta downgrade formal de esquema. Ejemplos:
+openMiura supports formal schema downgrades. Examples:
 
 ```bash
 openmiura db rollback --config configs/ --steps 1
 openmiura db rollback --config configs/ --to-version 1
 ```
 
-Antes de un downgrade en producción, genera un backup:
+Before a downgrade in production, take a backup:
 
 ```bash
 openmiura db backup --config configs/

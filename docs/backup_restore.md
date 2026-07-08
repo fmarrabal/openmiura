@@ -1,10 +1,10 @@
-# Guía de backup y restore
+# Backup and restore guide
 
-openMiura soporta backup y restore tanto para SQLite como para PostgreSQL.
+openMiura supports backup and restore for both SQLite and PostgreSQL.
 
 ## 1. SQLite
 
-SQLite es la opción por defecto y la más cómoda para un entorno casero.
+SQLite is the default option and the most convenient for a home setup.
 
 ### Backup
 
@@ -12,7 +12,7 @@ SQLite es la opción por defecto y la más cómoda para un entorno casero.
 openmiura db backup --config configs/
 ```
 
-El backup se guarda en el directorio configurado en:
+The backup is written to the directory configured in:
 
 ```yaml
 storage:
@@ -25,17 +25,17 @@ storage:
 openmiura db restore --config configs/ --backup data/backups/openmiura-YYYYMMDD-HHMMSS.sqlite3
 ```
 
-### Buenas prácticas
+### Best practices
 
-- haz backup antes de migrar o hacer rollback
-- conserva al menos varias generaciones
-- prueba el restore en una copia de trabajo, no sobre la instalación principal
+- back up before migrating or rolling back
+- keep at least several generations
+- test the restore on a working copy, not on the primary installation
 
 ## 2. PostgreSQL
 
-Cuando `storage.backend=postgresql`, openMiura usa utilidades del sistema.
+When `storage.backend=postgresql`, openMiura uses system utilities.
 
-### Requisitos
+### Requirements
 
 - `pg_dump`
 - `psql`
@@ -52,36 +52,36 @@ openmiura db backup --config configs/
 openmiura db restore --config configs/ --backup data/backups/openmiura-YYYYMMDD-HHMMSS.sql
 ```
 
-## 3. Estrategia recomendada
+## 3. Recommended strategy
 
-### Entorno casero
+### Home environment
 
 - SQLite
-- backup diario o antes de cambios importantes
-- copia adicional fuera de la carpeta del proyecto
+- daily backup, or before significant changes
+- an extra copy outside the project folder
 
-### Entorno serio
+### Serious environment
 
 - PostgreSQL
-- backup automatizado diario
-- retención por política
-- restauración de prueba al menos una vez al mes
+- automated daily backup
+- retention by policy
+- a test restore at least once a month
 
-## 4. Qué incluir en un plan de recuperación
+## 4. What to include in a recovery plan
 
-- backup de base de datos
-- copia de `configs/`
-- copia de `skills/` si personalizas skills
-- `.env` guardado de forma segura
-- inventario de tokens y secretos vigentes
+- database backup
+- a copy of `configs/`
+- a copy of `skills/` if you customize skills
+- `.env` stored securely
+- an inventory of active tokens and secrets
 
-## 5. Validación de restore
+## 5. Restore validation
 
-Tras restaurar, comprueba:
+After restoring, check:
 
-- login admin
-- listado de sesiones
-- búsqueda de memoria
-- eventos de auditoría
-- tools y agentes visibles
-- UI operativa
+- admin login
+- session listing
+- memory search
+- audit events
+- tools and agents visible
+- UI operational

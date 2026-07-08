@@ -1,123 +1,128 @@
 # Troubleshooting
 
-## 1. `openmiura doctor` falla con config no encontrada
+## 1. `openmiura doctor` fails with config not found
 
-Comprueba:
+Check:
 
 ```bash
 openmiura doctor --config configs/
 ```
 
-Si `--config` apunta a un directorio, openMiura busca `openmiura.yaml` dentro.
+If `--config` points to a directory, openMiura looks for `openmiura.yaml` inside
+it.
 
-## 2. Error con `cryptography`
+## 2. `cryptography` error
 
-Si activas Context Vault y no tienes instalada la dependencia:
+If you enable the Context Vault and the dependency is not installed:
 
 ```bash
 pip install cryptography
 ```
 
-Con Vault desactivado, openMiura no debería necesitarla para arrancar.
+With the Vault disabled, openMiura should not need it to start.
 
-## 3. Error con `prometheus_client`
+## 3. `prometheus_client` error
 
-Si no lo tienes instalado, openMiura usa un fallback básico para `/metrics`, pero para operación real conviene instalar:
+If it is not installed, openMiura uses a basic fallback for `/metrics`, but for
+real operation you should install:
 
 ```bash
 pip install prometheus-client
 ```
 
-## 4. Error con `mcp`
+## 4. `mcp` error
 
-Para usar el servidor MCP:
+To use the MCP server:
 
 ```bash
 pip install mcp
 ```
 
-## 5. En Windows, `terminal_exec` con `echo` o `dir`
+## 5. On Windows, `terminal_exec` with `echo` or `dir`
 
-En Windows esos comandos son built-ins de `cmd.exe`. openMiura ya incluye una ruta compatible, pero si falla revisa:
+On Windows those commands are `cmd.exe` built-ins. openMiura already includes a
+compatible path, but if it fails, check:
 
-- allowlist del rol
+- the role allowlist
 - `allow_shell`
 - `allow_shell_metacharacters`
 
-## 6. El chat streaming o SSE se cortan detrás del proxy
+## 6. Streaming chat or SSE cuts off behind the proxy
 
-Revisa:
+Check:
 
-- `proxy_buffering off` en Nginx
-- timeouts del proxy
-- cabeceras `X-Forwarded-*`
+- `proxy_buffering off` in Nginx
+- proxy timeouts
+- the `X-Forwarded-*` headers
 
 ## 7. `403 CSRF validation failed`
 
-Si usas auth por cookie:
+If you use cookie auth:
 
-- comprueba que la cookie CSRF existe
-- envía `X-CSRF-Token`
-- revisa `OPENMIURA_AUTH_CSRF_ENABLED`
-- revisa `OPENMIURA_AUTH_COOKIE_SECURE` si estás en HTTP local
+- check that the CSRF cookie exists
+- send `X-CSRF-Token`
+- check `OPENMIURA_AUTH_CSRF_ENABLED`
+- check `OPENMIURA_AUTH_COOKIE_SECURE` if you are on local HTTP
 
 ## 8. `429 Rate limit exceeded`
 
-Revisa:
+Check:
 
 - `broker.rate_limit_per_minute`
 - `broker.auth_rate_limit_per_minute`
 
-Si estás probando desde scripts o CI local, quizá estás reusando siempre la misma IP o token.
+If you are testing from scripts or local CI, you may be reusing the same IP or
+token every time.
 
-## 9. El provider LLM remoto no responde
+## 9. The remote LLM provider does not respond
 
-Comprueba:
+Check:
 
 - `OPENMIURA_LLM_API_KEY`
 - `llm.base_url`
 - `llm.model`
-- conectividad saliente
+- outbound connectivity
 
-## 10. Migraciones o rollback fallan
+## 10. Migrations or rollback fail
 
-Haz primero un backup:
+Take a backup first:
 
 ```bash
 openmiura db backup --config configs/
 ```
 
-Luego comprueba la versión:
+Then check the version:
 
 ```bash
 openmiura db version --config configs/
 ```
 
-## 11. El login admin no funciona
+## 11. Admin login does not work
 
-Comprueba:
+Check:
 
 - `OPENMIURA_UI_ADMIN_USERNAME`
 - `OPENMIURA_UI_ADMIN_PASSWORD`
-- que el bootstrap se haya ejecutado sobre la DB correcta
+- that the bootstrap ran against the correct DB
 
-## 12. La memoria no devuelve lo esperado
+## 12. Memory does not return what you expect
 
-Revisa:
+Check:
 
 - `memory.enabled`
 - `memory.embed_model`
-- backend de embeddings disponible
-- que la base de datos restaurada sea la correcta
+- an available embeddings backend
+- that the restored database is the correct one
 
-## 13. Slack / Telegram / Discord no responden
+## 13. Slack / Telegram / Discord do not respond
 
-Verifica tokens, firma de Slack, permisos del bot y que el canal esté habilitado en config.
+Verify tokens, the Slack signature, bot permissions, and that the channel is
+enabled in the config.
 
-## 14. Grafana o Alertmanager no levantan
+## 14. Grafana or Alertmanager do not start
 
-Comprueba:
+Check:
 
 - `docker compose --profile observability up --build`
-- variables de entorno de alerta
-- que no haya puertos 3000, 9090 o 9093 ocupados
+- the alert environment variables
+- that ports 3000, 9090, or 9093 are not already in use
