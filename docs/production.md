@@ -1,46 +1,51 @@
-# Guía de producción
+# Production guide
 
-Esta guía resume una configuración razonable para desplegar openMiura de forma estable.
+This guide summarizes a reasonable configuration for deploying openMiura in a
+stable way.
 
-## 1. Modo recomendado
+## 1. Recommended mode
 
-Para producción ligera o doméstica avanzada:
+For light production or advanced home use:
 
 - backend: SQLite
-- UI + broker en un único contenedor
-- reverse proxy con TLS
-- backups programados
+- UI + broker in a single container
+- reverse proxy with TLS
+- scheduled backups
 
-Para producción más seria:
+For more serious production:
 
 - backend: PostgreSQL
-- reverse proxy dedicado
-- observabilidad con Prometheus/Grafana/Alertmanager
-- rotación de tokens y sesiones activada
+- dedicated reverse proxy
+- observability with Prometheus/Grafana/Alertmanager
+- token and session rotation enabled
 
-## 2. Despliegue recomendado
+## 2. Recommended deployment
 
-### Opción A: entorno casero / laboratorio
+### Option A: home / lab environment
 
 - `storage.backend=sqlite`
-- volumen persistente en `data/`
-- TLS terminado en Caddy o Nginx
-- broker protegido por token o auth UI
+- persistent volume under `data/`
+- TLS terminated at Caddy or Nginx
+- broker protected by a token or UI auth
 
-### Opción B: operación seria
+### Option B: serious operation
 
 - `storage.backend=postgresql`
 - `OPENMIURA_AUTH_COOKIE_ENABLED=true`
 - `OPENMIURA_AUTH_COOKIE_SECURE=true`
 - `OPENMIURA_AUTH_CSRF_ENABLED=true`
-- Prometheus/Grafana/Alertmanager activos
-- API tokens con TTL y rotación
+- Prometheus/Grafana/Alertmanager active
+- API tokens with TTL and rotation
 
-## 3. Perfil base recomendado
+## 3. Recommended base profile
 
-Usa `ops/env/production-like.env` como plantilla inicial. openMiura es ahora secure-by-default: limita dominios de `web_fetch`, deja `terminal_exec` deshabilitado y obliga a revisar explícitamente cualquier relajación. Después sustituye todos los placeholders y revisa `docs/configuration_profiles.md` para entender la precedencia entre `.env` y YAML.
+Use `ops/env/production-like.env` as the initial template. openMiura is now
+secure-by-default: it limits `web_fetch` domains, leaves `terminal_exec`
+disabled, and forces you to explicitly review any relaxation. Then replace all
+placeholders and read `docs/configuration_profiles.md` to understand the
+precedence between `.env` and YAML.
 
-## 4. Variables importantes
+## 4. Important variables
 
 - `OPENMIURA_ADMIN_TOKEN`
 - `OPENMIURA_UI_ADMIN_USERNAME`
@@ -56,54 +61,56 @@ Usa `ops/env/production-like.env` como plantilla inicial. openMiura es ahora sec
 - `OPENMIURA_AUTH_COOKIE_SECURE`
 - `OPENMIURA_AUTH_CSRF_ENABLED`
 
-## 5. Reverse proxy y TLS
+## 5. Reverse proxy and TLS
 
-Publica openMiura detrás de Nginx o Caddy. Termina TLS ahí y reenvía:
+Publish openMiura behind Nginx or Caddy. Terminate TLS there and forward:
 
 - `Host`
 - `X-Forwarded-Proto`
 - `X-Forwarded-For`
 - `X-Request-ID`
 
-Mantén `proxy_buffering off` si vas a usar SSE de chat, terminal o eventos live.
+Keep `proxy_buffering off` if you are going to use chat, terminal, or live-event
+SSE.
 
-## 6. Endpoints a proteger especialmente
+## 6. Endpoints to protect with special care
 
 - `/broker/auth/*`
 - `/broker/admin/*`
 - `/broker/tools/call`
 - `/broker/terminal/stream`
-- `/metrics`, Grafana, Prometheus y Alertmanager si no están en red interna
+- `/metrics`, Grafana, Prometheus, and Alertmanager if they are not on an
+  internal network
 
-## 7. Recomendaciones operativas
+## 7. Operational recommendations
 
-- usa roles `user`, `operator` y `admin`
-- restringe `terminal_exec` al mínimo posible
-- activa cookies seguras y CSRF si la UI se usa desde navegador
-- rota tokens regularmente
-- revisa dashboards a diario si el sistema está en uso continuo
-- programa backups y prueba restore periódicamente
+- use the `user`, `operator`, and `admin` roles
+- restrict `terminal_exec` to the minimum possible
+- enable secure cookies and CSRF if the UI is used from a browser
+- rotate tokens regularly
+- review dashboards daily if the system is in continuous use
+- schedule backups and test the restore periodically
 
-## 8. Arranque recomendado con Compose
+## 8. Recommended startup with Compose
 
 ```bash
 cp ops/env/production-like.env .env
 docker compose --profile observability up --build -d
 ```
 
-## 9. Lista de comprobación previa a producción
+## 9. Pre-production checklist
 
-- `openmiura doctor --config configs/openmiura.yaml` sin errores críticos
-- backup inicial generado
-- login admin probado
-- alertas sintéticas enviadas
-- dashboard Grafana cargado
-- reverse proxy con TLS probado
-- rate limiting verificado
-- expiración/rotación de sesiones y tokens configurada
+- `openmiura doctor --config configs/openmiura.yaml` with no critical errors
+- initial backup generated
+- admin login tested
+- synthetic alerts sent
+- Grafana dashboard loaded
+- reverse proxy with TLS tested
+- rate limiting verified
+- session and token expiry/rotation configured
 
 
-## Referencias alpha
+## Alpha references
 
 - [Self-hosted Enterprise Alpha](enterprise_alpha.md)
 - [Enterprise Alpha release checklist](alpha_release_checklist.md)

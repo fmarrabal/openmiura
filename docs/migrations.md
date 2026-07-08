@@ -1,75 +1,77 @@
-# Guía de migraciones
+# Migrations guide
 
-openMiura incluye migraciones formales, versionado de esquema y rollback.
+openMiura includes formal migrations, schema versioning, and rollback.
 
-## 1. Conceptos
+## 1. Concepts
 
-- la tabla `schema_migrations` guarda la versión aplicada
-- las migraciones son idempotentes
-- el sistema puede aplicar upgrades y downgrades
+- the `schema_migrations` table records the applied version
+- migrations are idempotent
+- the system can apply upgrades and downgrades
 
-## 2. Ver versión de esquema
+## 2. View the schema version
 
 ```bash
 openmiura db version --config configs/
 ```
 
-## 3. Aplicar migraciones
+## 3. Apply migrations
 
 ```bash
 openmiura db migrate --config configs/
 ```
 
-Si `storage.auto_migrate=true`, openMiura aplicará las migraciones necesarias al arrancar.
+If `storage.auto_migrate=true`, openMiura applies the necessary migrations at
+startup.
 
-## 4. Rollback formal
+## 4. Formal rollback
 
-Por número de pasos:
+By number of steps:
 
 ```bash
 openmiura db rollback --config configs/ --steps 1
 ```
 
-Hasta una versión concreta:
+Down to a specific version:
 
 ```bash
 openmiura db rollback --config configs/ --to-version 1
 ```
 
-## 5. Recomendación crítica
+## 5. Critical recommendation
 
-Haz siempre un backup antes de migrar o hacer rollback:
+Always take a backup before migrating or rolling back:
 
 ```bash
 openmiura db backup --config configs/
 ```
 
-## 6. Flujo seguro de cambio de esquema
+## 6. Safe schema-change flow
 
-1. generar backup
-2. revisar versión actual
-3. aplicar migración o rollback
-4. arrancar `openmiura doctor`
-5. comprobar UI, login, memoria y auditoría
+1. generate a backup
+2. review the current version
+3. apply the migration or rollback
+4. run `openmiura doctor`
+5. check the UI, login, memory, and audit
 
 ## 7. SQLite vs PostgreSQL
 
 ### SQLite
 
-Algunos downgrades requieren reconstrucción formal de tablas, porque SQLite no soporta todas las operaciones `ALTER TABLE` con la misma flexibilidad que PostgreSQL.
+Some downgrades require a formal table rebuild, because SQLite does not support
+all `ALTER TABLE` operations with the same flexibility as PostgreSQL.
 
 ### PostgreSQL
 
-Los downgrades pueden usar operaciones más directas, como `DROP COLUMN`.
+Downgrades can use more direct operations, such as `DROP COLUMN`.
 
-## 8. Cuándo usar rollback
+## 8. When to use rollback
 
-- release defectuosa
-- cambio de esquema que rompe compatibilidad
-- necesidad de volver a una versión estable
+- a faulty release
+- a schema change that breaks compatibility
+- a need to return to a stable version
 
-## 9. Cuándo preferir restore en vez de rollback
+## 9. When to prefer restore over rollback
 
-- corrupción lógica severa
-- duda sobre el estado intermedio del esquema
-- incidentes operativos donde quieres volver a una instantánea conocida
+- severe logical corruption
+- doubt about the intermediate state of the schema
+- operational incidents where you want to return to a known snapshot
