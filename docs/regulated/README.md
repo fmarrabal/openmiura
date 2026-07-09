@@ -30,6 +30,9 @@ quality system can issue.
   and the V-model lifecycle.
 - [`alcoa_plus_self_assessment.md`](alcoa_plus_self_assessment.md) — ALCOA+
   data integrity self-assessment, dimension by dimension.
+- [`traceability_matrix.md`](traceability_matrix.md) — consolidated
+  control ↔ **executable test** matrix across all four frameworks; the cited
+  test globs are machine-checked so the matrix cannot silently rot.
 - [`policy_packs/`](policy_packs/) — concrete, executable YAML
   policy packs covering lab release, SOP review, OOS/OOT
   investigation, deviation reporting and analytical interpretation.
