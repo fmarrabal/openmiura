@@ -21,6 +21,7 @@ from openmiura.interfaces.http.routes.admin._helpers import (
     _get_gw,
     _rate_limit,
     _require_admin,
+    run_in_threadpool,
 )
 from openmiura.interfaces.http.routes.admin._models import *  # noqa: F401,F403
 
@@ -63,7 +64,8 @@ async def admin_openclaw_dispatch_cancel(dispatch_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
     try:
-        response = _ADMIN_SERVICE.cancel_openclaw_dispatch(
+        response = await run_in_threadpool(
+            _ADMIN_SERVICE.cancel_openclaw_dispatch,
             gw,
             dispatch_id=dispatch_id,
             actor=str(payload.get('actor') or 'admin'),
@@ -79,7 +81,7 @@ async def admin_openclaw_dispatch_cancel(dispatch_id: str, request: Request):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, 'openclaw_dispatch_cancel', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_dispatch_cancel', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
     return response
 
 
@@ -88,7 +90,8 @@ async def admin_openclaw_dispatch_retry(dispatch_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
     try:
-        response = _ADMIN_SERVICE.retry_openclaw_dispatch(
+        response = await run_in_threadpool(
+            _ADMIN_SERVICE.retry_openclaw_dispatch,
             gw,
             dispatch_id=dispatch_id,
             actor=str(payload.get('actor') or 'admin'),
@@ -107,7 +110,7 @@ async def admin_openclaw_dispatch_retry(dispatch_id: str, request: Request):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, 'openclaw_dispatch_retry', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'new_dispatch_id': response.get('dispatch', {}).get('dispatch_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_dispatch_retry', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'new_dispatch_id': response.get('dispatch', {}).get('dispatch_id')})
     return response
 
 
@@ -116,7 +119,8 @@ async def admin_openclaw_dispatch_reconcile(dispatch_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
     try:
-        response = _ADMIN_SERVICE.reconcile_openclaw_dispatch(
+        response = await run_in_threadpool(
+            _ADMIN_SERVICE.reconcile_openclaw_dispatch,
             gw,
             dispatch_id=dispatch_id,
             actor=str(payload.get('actor') or 'admin'),
@@ -133,7 +137,7 @@ async def admin_openclaw_dispatch_reconcile(dispatch_id: str, request: Request):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, 'openclaw_dispatch_reconcile', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_dispatch_reconcile', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
     return response
 
 
@@ -142,7 +146,8 @@ async def admin_openclaw_dispatch_poll(dispatch_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
     try:
-        response = _ADMIN_SERVICE.poll_openclaw_dispatch(
+        response = await run_in_threadpool(
+            _ADMIN_SERVICE.poll_openclaw_dispatch,
             gw,
             dispatch_id=dispatch_id,
             actor=str(payload.get('actor') or 'admin'),
@@ -158,7 +163,7 @@ async def admin_openclaw_dispatch_poll(dispatch_id: str, request: Request):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, 'openclaw_dispatch_poll', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_dispatch_poll', {'dispatch_id': dispatch_id, 'ok': response.get('ok'), 'canonical_status': ((response.get('dispatch') or {}).get('canonical_status'))})
     return response
 
 

@@ -9,6 +9,7 @@ from collections import defaultdict, deque
 from typing import Any
 
 from fastapi import HTTPException, Request
+from fastapi.concurrency import run_in_threadpool  # noqa: F401  (re-exported for routers)
 
 from openmiura.application.admin import AdminService
 
