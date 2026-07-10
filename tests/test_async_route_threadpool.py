@@ -78,3 +78,15 @@ def test_dispatch_poll_service_runs_off_the_event_loop(tmp_path: Path, monkeypat
         )
         assert resp.status_code == 200, resp.text
         assert seen.get("off_loop") is True, "blocking dispatch-poll service ran on the event loop"
+
+
+def test_runtime_register_service_runs_off_the_event_loop(tmp_path: Path, monkeypatch) -> None:
+    """Covers the runtimes router sweep too (identical run_in_threadpool wrap)."""
+    cfg = tmp_path / "openmiura.yaml"
+    _write_config(cfg)
+    app = app_module.create_app(config_path=str(cfg), gateway_factory=Gateway.from_config)
+
+    with TestClient(app) as client:
+        seen = _runs_off_loop(monkeypatch, "register_openclaw_runtime")
+        _create_async_runtime(client)  # POSTs /admin/openclaw/runtimes (async handler)
+        assert seen.get("off_loop") is True, "blocking runtime-register service ran on the event loop"

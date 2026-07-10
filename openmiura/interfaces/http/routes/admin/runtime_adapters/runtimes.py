@@ -21,6 +21,7 @@ from openmiura.interfaces.http.routes.admin._helpers import (
     _get_gw,
     _rate_limit,
     _require_admin,
+    run_in_threadpool,
 )
 from openmiura.interfaces.http.routes.admin._models import *  # noqa: F401,F403
 
@@ -46,7 +47,7 @@ def admin_openclaw_runtimes(
 async def admin_openclaw_register_runtime(request: Request):
     gw = _require_admin(request)
     payload = await request.json()
-    response = _ADMIN_SERVICE.register_openclaw_runtime(
+    response = await run_in_threadpool(_ADMIN_SERVICE.register_openclaw_runtime,
         gw,
         actor=str(payload.get('actor') or 'admin'),
         name=str(payload.get('name') or ''),
@@ -61,7 +62,7 @@ async def admin_openclaw_register_runtime(request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_register', {'runtime_id': response.get('runtime', {}).get('runtime_id'), 'tenant_id': payload.get('tenant_id'), 'workspace_id': payload.get('workspace_id'), 'environment': payload.get('environment')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_register', {'runtime_id': response.get('runtime', {}).get('runtime_id'), 'tenant_id': payload.get('tenant_id'), 'workspace_id': payload.get('workspace_id'), 'environment': payload.get('environment')})
     return response
 
 
@@ -69,7 +70,7 @@ async def admin_openclaw_register_runtime(request: Request):
 async def admin_openclaw_runtime_policy_pack(runtime_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.apply_openclaw_policy_pack(
+    response = await run_in_threadpool(_ADMIN_SERVICE.apply_openclaw_policy_pack,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -80,7 +81,7 @@ async def admin_openclaw_runtime_policy_pack(runtime_id: str, request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_policy_pack', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'policy_pack': ((response.get('runtime_summary') or {}).get('metadata') or {}).get('policy_pack')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_policy_pack', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'policy_pack': ((response.get('runtime_summary') or {}).get('metadata') or {}).get('policy_pack')})
     return response
 
 
@@ -88,7 +89,7 @@ async def admin_openclaw_runtime_policy_pack(runtime_id: str, request: Request):
 async def admin_openclaw_runtime_schedule_recovery(runtime_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.schedule_openclaw_runtime_recovery_job(
+    response = await run_in_threadpool(_ADMIN_SERVICE.schedule_openclaw_runtime_recovery_job,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -106,7 +107,7 @@ async def admin_openclaw_runtime_schedule_recovery(runtime_id: str, request: Req
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_schedule_recovery', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'job_id': response.get('job', {}).get('job_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_schedule_recovery', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'job_id': response.get('job', {}).get('job_id')})
     return response
 
 
@@ -187,7 +188,7 @@ def admin_openclaw_runtime_alert_governance(
 async def admin_openclaw_runtime_alert_governance_simulate(runtime_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.simulate_openclaw_alert_governance(
+    response = await run_in_threadpool(_ADMIN_SERVICE.simulate_openclaw_alert_governance,
         gw,
         runtime_id=runtime_id,
         candidate_policy=dict(payload.get('candidate_policy') or payload.get('policy') or {}),
@@ -200,7 +201,7 @@ async def admin_openclaw_runtime_alert_governance_simulate(runtime_id: str, requ
         limit=int(payload.get('limit') or 200),
         now_ts=float(payload.get('now_ts')) if payload.get('now_ts') is not None else None,
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_governance_simulate', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'mode': response.get('mode'), 'affected_count': ((response.get('summary') or {}).get('affected_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_governance_simulate', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'mode': response.get('mode'), 'affected_count': ((response.get('summary') or {}).get('affected_count'))})
     return response
 
 
@@ -224,7 +225,7 @@ def admin_openclaw_runtime_alert_governance_versions(
 async def admin_openclaw_runtime_alert_governance_activate(runtime_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.activate_openclaw_alert_governance(
+    response = await run_in_threadpool(_ADMIN_SERVICE.activate_openclaw_alert_governance,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'system'),
@@ -239,7 +240,7 @@ async def admin_openclaw_runtime_alert_governance_activate(runtime_id: str, requ
         limit=int(payload.get('limit') or 200),
         now_ts=float(payload.get('now_ts')) if payload.get('now_ts') is not None else None,
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_governance_activate', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'version_id': ((response.get('version') or {}).get('version_id')), 'affected_count': (((response.get('simulation') or {}).get('summary') or {}).get('affected_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_governance_activate', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'version_id': ((response.get('version') or {}).get('version_id')), 'affected_count': (((response.get('simulation') or {}).get('summary') or {}).get('affected_count'))})
     return response
 
 
@@ -247,7 +248,7 @@ async def admin_openclaw_runtime_alert_governance_activate(runtime_id: str, requ
 async def admin_openclaw_runtime_alert_governance_rollback(runtime_id: str, version_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.rollback_openclaw_alert_governance_version(
+    response = await run_in_threadpool(_ADMIN_SERVICE.rollback_openclaw_alert_governance_version,
         gw,
         runtime_id=runtime_id,
         version_id=version_id,
@@ -257,7 +258,7 @@ async def admin_openclaw_runtime_alert_governance_rollback(runtime_id: str, vers
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_governance_rollback', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'version_id': version_id, 'new_version_id': ((response.get('version') or {}).get('version_id'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_governance_rollback', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'version_id': version_id, 'new_version_id': ((response.get('version') or {}).get('version_id'))})
     return response
 
 
@@ -265,7 +266,7 @@ async def admin_openclaw_runtime_alert_governance_rollback(runtime_id: str, vers
 async def admin_openclaw_runtime_alert_dispatch(runtime_id: str, alert_code: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.dispatch_openclaw_runtime_alert_notifications(
+    response = await run_in_threadpool(_ADMIN_SERVICE.dispatch_openclaw_runtime_alert_notifications,
         gw,
         runtime_id=runtime_id,
         alert_code=alert_code,
@@ -278,7 +279,7 @@ async def admin_openclaw_runtime_alert_dispatch(runtime_id: str, alert_code: str
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_dispatch', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok'), 'count': len(response.get('items', []))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_dispatch', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok'), 'count': len(response.get('items', []))})
     return response
 
 
@@ -286,7 +287,7 @@ async def admin_openclaw_runtime_alert_dispatch(runtime_id: str, alert_code: str
 async def admin_openclaw_runtime_alert_ack(runtime_id: str, alert_code: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.ack_openclaw_runtime_alert(
+    response = await run_in_threadpool(_ADMIN_SERVICE.ack_openclaw_runtime_alert,
         gw,
         runtime_id=runtime_id,
         alert_code=alert_code,
@@ -296,7 +297,7 @@ async def admin_openclaw_runtime_alert_ack(runtime_id: str, alert_code: str, req
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_ack', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_ack', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
     return response
 
 
@@ -304,7 +305,7 @@ async def admin_openclaw_runtime_alert_ack(runtime_id: str, alert_code: str, req
 async def admin_openclaw_runtime_alert_silence(runtime_id: str, alert_code: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.silence_openclaw_runtime_alert(
+    response = await run_in_threadpool(_ADMIN_SERVICE.silence_openclaw_runtime_alert,
         gw,
         runtime_id=runtime_id,
         alert_code=alert_code,
@@ -315,7 +316,7 @@ async def admin_openclaw_runtime_alert_silence(runtime_id: str, alert_code: str,
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_silence', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_silence', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
     return response
 
 
@@ -323,7 +324,7 @@ async def admin_openclaw_runtime_alert_silence(runtime_id: str, alert_code: str,
 async def admin_openclaw_runtime_alert_escalate(runtime_id: str, alert_code: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.escalate_openclaw_runtime_alert(
+    response = await run_in_threadpool(_ADMIN_SERVICE.escalate_openclaw_runtime_alert,
         gw,
         runtime_id=runtime_id,
         alert_code=alert_code,
@@ -335,7 +336,7 @@ async def admin_openclaw_runtime_alert_escalate(runtime_id: str, alert_code: str
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_alert_escalate', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_alert_escalate', {'runtime_id': runtime_id, 'alert_code': alert_code, 'ok': response.get('ok')})
     return response
 
 
@@ -372,7 +373,7 @@ def admin_openclaw_runtime_timeline(
 async def admin_openclaw_runtime_health(runtime_id: str, request: Request):
     gw = _require_admin(request)
     payload = await request.json()
-    response = _ADMIN_SERVICE.check_openclaw_runtime_health(
+    response = await run_in_threadpool(_ADMIN_SERVICE.check_openclaw_runtime_health,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -384,7 +385,7 @@ async def admin_openclaw_runtime_health(runtime_id: str, request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_health', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'health_status': ((response.get('health') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_health', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'health_status': ((response.get('health') or {}).get('status'))})
     return response
 
 
@@ -392,7 +393,7 @@ async def admin_openclaw_runtime_health(runtime_id: str, request: Request):
 async def admin_openclaw_runtime_recover(runtime_id: str, request: Request):
     gw = _require_admin(request)
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
-    response = _ADMIN_SERVICE.recover_openclaw_runtime(
+    response = await run_in_threadpool(_ADMIN_SERVICE.recover_openclaw_runtime,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -405,7 +406,7 @@ async def admin_openclaw_runtime_recover(runtime_id: str, request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_recover', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'reconciled_count': ((response.get('summary') or {}).get('reconciled_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_recover', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'reconciled_count': ((response.get('summary') or {}).get('reconciled_count'))})
     return response
 
 
@@ -414,7 +415,7 @@ async def admin_openclaw_dispatch(runtime_id: str, request: Request):
     gw = _require_admin(request)
     payload = await request.json()
     try:
-        response = _ADMIN_SERVICE.dispatch_openclaw_runtime(
+        response = await run_in_threadpool(_ADMIN_SERVICE.dispatch_openclaw_runtime,
             gw,
             runtime_id=runtime_id,
             actor=str(payload.get('actor') or 'admin'),
@@ -433,7 +434,7 @@ async def admin_openclaw_dispatch(runtime_id: str, request: Request):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_admin(gw, 'openclaw_dispatch', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'dispatch_id': response.get('dispatch', {}).get('dispatch_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_dispatch', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'dispatch_id': response.get('dispatch', {}).get('dispatch_id')})
     return response
 
 
@@ -441,7 +442,7 @@ async def admin_openclaw_dispatch(runtime_id: str, request: Request):
 async def admin_openclaw_runtime_event(runtime_id: str, request: Request):
     gw = _require_admin(request)
     payload = await request.json()
-    response = _ADMIN_SERVICE.ingest_openclaw_runtime_event(
+    response = await run_in_threadpool(_ADMIN_SERVICE.ingest_openclaw_runtime_event,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -461,7 +462,7 @@ async def admin_openclaw_runtime_event(runtime_id: str, request: Request):
         auth_mode='admin',
         require_token=False,
     )
-    _audit_admin(gw, 'openclaw_runtime_event', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'duplicate': response.get('duplicate', False), 'dispatch_id': response.get('event', {}).get('dispatch_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_event', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'duplicate': response.get('duplicate', False), 'dispatch_id': response.get('event', {}).get('dispatch_id')})
     return response
 
 
@@ -469,7 +470,7 @@ async def admin_openclaw_runtime_event(runtime_id: str, request: Request):
 async def admin_openclaw_runtime_conformance(runtime_id: str, request: Request):
     gw = _require_admin(request)
     payload = await request.json()
-    response = _ADMIN_SERVICE.run_openclaw_runtime_conformance(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_openclaw_runtime_conformance,
         gw,
         runtime_id=runtime_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -480,7 +481,7 @@ async def admin_openclaw_runtime_conformance(runtime_id: str, request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_runtime_conformance', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'ready': ((response.get('conformance') or {}).get('ready'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_runtime_conformance', {'runtime_id': runtime_id, 'ok': response.get('ok'), 'ready': ((response.get('conformance') or {}).get('ready'))})
     return response
 
 
@@ -490,7 +491,7 @@ async def openclaw_runtime_event_webhook(runtime_id: str, request: Request):
     payload = await request.json()
     token = request.headers.get('X-OpenClaw-Event-Token') or _extract_bearer_token(request)
     try:
-        response = _ADMIN_SERVICE.ingest_openclaw_runtime_event(
+        response = await run_in_threadpool(_ADMIN_SERVICE.ingest_openclaw_runtime_event,
             gw,
             runtime_id=runtime_id,
             actor=str(payload.get('actor') or payload.get('source') or 'openclaw'),

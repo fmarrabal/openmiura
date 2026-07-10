@@ -21,6 +21,7 @@ from openmiura.interfaces.http.routes.admin._helpers import (
     _get_gw,
     _rate_limit,
     _require_admin,
+    run_in_threadpool,
 )
 from openmiura.interfaces.http.routes.admin._models import *  # noqa: F401,F403
 
@@ -80,7 +81,7 @@ def admin_openclaw_alert_governance_bundles(
 async def admin_openclaw_alert_governance_bundle_create(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.create_openclaw_alert_governance_bundle(
+    response = await run_in_threadpool(_ADMIN_SERVICE.create_openclaw_alert_governance_bundle,
         gw,
         name=str(payload.get('name') or 'openclaw-alert-governance-bundle'),
         version=str(payload.get('version') or f"bundle-{int(time.time())}"),
@@ -100,7 +101,7 @@ async def admin_openclaw_alert_governance_bundle_create(request: Request):
         environment=payload.get('environment'),
         limit=int(payload.get('limit') or 200),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_bundle_create', {'ok': response.get('ok'), 'bundle_id': response.get('bundle_id'), 'target_count': ((response.get('summary') or {}).get('target_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_bundle_create', {'ok': response.get('ok'), 'bundle_id': response.get('bundle_id'), 'target_count': ((response.get('summary') or {}).get('target_count'))})
     return response
 
 
@@ -136,7 +137,7 @@ def admin_openclaw_alert_governance_bundle_detail(
 async def admin_openclaw_alert_governance_bundle_submit(bundle_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.submit_openclaw_alert_governance_bundle(
+    response = await run_in_threadpool(_ADMIN_SERVICE.submit_openclaw_alert_governance_bundle,
         gw,
         bundle_id=bundle_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -145,7 +146,7 @@ async def admin_openclaw_alert_governance_bundle_submit(bundle_id: str, request:
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_bundle_submit', {'bundle_id': bundle_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_bundle_submit', {'bundle_id': bundle_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
     return response
 
 
@@ -153,7 +154,7 @@ async def admin_openclaw_alert_governance_bundle_submit(bundle_id: str, request:
 async def admin_openclaw_alert_governance_bundle_approve(bundle_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.approve_openclaw_alert_governance_bundle(
+    response = await run_in_threadpool(_ADMIN_SERVICE.approve_openclaw_alert_governance_bundle,
         gw,
         bundle_id=bundle_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -162,7 +163,7 @@ async def admin_openclaw_alert_governance_bundle_approve(bundle_id: str, request
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_bundle_approve', {'bundle_id': bundle_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_bundle_approve', {'bundle_id': bundle_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
     return response
 
 
@@ -170,7 +171,7 @@ async def admin_openclaw_alert_governance_bundle_approve(bundle_id: str, request
 async def admin_openclaw_alert_governance_bundle_wave_run(bundle_id: str, wave_no: int, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_openclaw_alert_governance_bundle_wave(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_openclaw_alert_governance_bundle_wave,
         gw,
         bundle_id=bundle_id,
         wave_no=wave_no,
@@ -181,7 +182,7 @@ async def admin_openclaw_alert_governance_bundle_wave_run(bundle_id: str, wave_n
         environment=payload.get('environment'),
         limit=int(payload.get('limit') or 200),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_bundle_wave_run', {'bundle_id': bundle_id, 'wave_no': wave_no, 'ok': response.get('ok'), 'errors': ((response.get('wave_execution') or {}).get('errors'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_bundle_wave_run', {'bundle_id': bundle_id, 'wave_no': wave_no, 'ok': response.get('ok'), 'errors': ((response.get('wave_execution') or {}).get('errors'))})
     return response
 
 
@@ -203,7 +204,7 @@ def admin_openclaw_alert_governance_baseline_catalogs(
 async def admin_openclaw_alert_governance_baseline_catalog_create(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.create_openclaw_alert_governance_baseline_catalog(
+    response = await run_in_threadpool(_ADMIN_SERVICE.create_openclaw_alert_governance_baseline_catalog,
         gw,
         name=str(payload.get('name') or 'openclaw-baseline-catalog'),
         version=str(payload.get('version') or f'catalog-{int(time.time())}'),
@@ -216,7 +217,7 @@ async def admin_openclaw_alert_governance_baseline_catalog_create(request: Reque
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_catalog_create', {'ok': response.get('ok'), 'catalog_id': response.get('catalog_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_catalog_create', {'ok': response.get('ok'), 'catalog_id': response.get('catalog_id')})
     return response
 
 
@@ -238,7 +239,7 @@ def admin_openclaw_alert_governance_baseline_catalog_detail(
 async def admin_openclaw_alert_governance_baseline_promotion_simulate(catalog_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.simulate_openclaw_alert_governance_baseline_promotion(
+    response = await run_in_threadpool(_ADMIN_SERVICE.simulate_openclaw_alert_governance_baseline_promotion,
         gw,
         catalog_id=catalog_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -252,7 +253,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_simulate(catalog_id
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_promotion_simulate', {'catalog_id': catalog_id, 'ok': response.get('ok'), 'validation_status': ((response.get('validation') or {}).get('status')), 'approvable': ((response.get('summary') or {}).get('approvable'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_promotion_simulate', {'catalog_id': catalog_id, 'ok': response.get('ok'), 'validation_status': ((response.get('validation') or {}).get('status')), 'approvable': ((response.get('summary') or {}).get('approvable'))})
     return response
 
 
@@ -260,7 +261,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_simulate(catalog_id
 async def admin_openclaw_alert_governance_baseline_promotion_create(catalog_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.create_openclaw_alert_governance_baseline_promotion(
+    response = await run_in_threadpool(_ADMIN_SERVICE.create_openclaw_alert_governance_baseline_promotion,
         gw,
         catalog_id=catalog_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -274,7 +275,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_create(catalog_id: 
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_promotion_create', {'catalog_id': catalog_id, 'ok': response.get('ok'), 'promotion_id': response.get('promotion_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_promotion_create', {'catalog_id': catalog_id, 'ok': response.get('ok'), 'promotion_id': response.get('promotion_id')})
     return response
 
 
@@ -355,7 +356,7 @@ def admin_openclaw_alert_governance_baseline_promotion_timeline(
 async def admin_openclaw_alert_governance_baseline_promotion_attestation_export(promotion_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.export_openclaw_alert_governance_baseline_promotion_attestation(
+    response = await run_in_threadpool(_ADMIN_SERVICE.export_openclaw_alert_governance_baseline_promotion_attestation,
         gw,
         promotion_id=promotion_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -364,7 +365,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_attestation_export(
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_promotion_attestation_export', {'promotion_id': promotion_id, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_promotion_attestation_export', {'promotion_id': promotion_id, 'ok': response.get('ok')})
     return response
 
 
@@ -372,7 +373,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_attestation_export(
 async def admin_openclaw_alert_governance_baseline_promotion_postmortem_export(promotion_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.export_openclaw_alert_governance_baseline_promotion_postmortem(
+    response = await run_in_threadpool(_ADMIN_SERVICE.export_openclaw_alert_governance_baseline_promotion_postmortem,
         gw,
         promotion_id=promotion_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -381,7 +382,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_postmortem_export(p
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_promotion_postmortem_export', {'promotion_id': promotion_id, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_promotion_postmortem_export', {'promotion_id': promotion_id, 'ok': response.get('ok')})
     return response
 
 
@@ -392,7 +393,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_action(promotion_id
     normalized_action = str(action or '').strip().lower()
     if normalized_action not in {'approve', 'reject', 'advance', 'rollback', 'pause', 'resume'}:
         return {'ok': False, 'error': 'unsupported_action', 'action': normalized_action, 'promotion_id': promotion_id}
-    response = _ADMIN_SERVICE.decide_openclaw_alert_governance_baseline_promotion(
+    response = await run_in_threadpool(_ADMIN_SERVICE.decide_openclaw_alert_governance_baseline_promotion,
         gw,
         promotion_id=promotion_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -402,7 +403,7 @@ async def admin_openclaw_alert_governance_baseline_promotion_action(promotion_id
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_promotion_action', {'promotion_id': promotion_id, 'action': normalized_action, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_promotion_action', {'promotion_id': promotion_id, 'action': normalized_action, 'ok': response.get('ok')})
     return response
 
 
@@ -413,7 +414,7 @@ async def admin_openclaw_alert_governance_baseline_simulation_custody_alert_acti
     normalized_action = str(action or '').strip().lower()
     if normalized_action not in {'acknowledge', 'mute', 'unmute', 'resolve', 'claim', 'assign', 'release', 'reroute'}:
         return {'ok': False, 'error': 'unsupported_action', 'action': normalized_action, 'promotion_id': promotion_id}
-    response = _ADMIN_SERVICE.update_openclaw_alert_governance_baseline_simulation_custody_alert(
+    response = await run_in_threadpool(_ADMIN_SERVICE.update_openclaw_alert_governance_baseline_simulation_custody_alert,
         gw,
         promotion_id=promotion_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -431,7 +432,7 @@ async def admin_openclaw_alert_governance_baseline_simulation_custody_alert_acti
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_simulation_custody_alert_action', {'promotion_id': promotion_id, 'action': normalized_action, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_simulation_custody_alert_action', {'promotion_id': promotion_id, 'action': normalized_action, 'ok': response.get('ok')})
     return response
 
 
@@ -454,7 +455,7 @@ def admin_openclaw_alert_governance_baseline_advance_jobs(
 async def admin_openclaw_alert_governance_baseline_advance_jobs_run_due(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_due_openclaw_alert_governance_baseline_advance_jobs(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_due_openclaw_alert_governance_baseline_advance_jobs,
         gw,
         actor=str(payload.get('actor') or 'admin'),
         limit=int(payload.get('limit') or 20),
@@ -463,7 +464,7 @@ async def admin_openclaw_alert_governance_baseline_advance_jobs_run_due(request:
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_baseline_advance_jobs_run_due', {'promotion_id': payload.get('promotion_id'), 'executed': ((response.get('summary') or {}).get('executed'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_baseline_advance_jobs_run_due', {'promotion_id': payload.get('promotion_id'), 'executed': ((response.get('summary') or {}).get('executed'))})
     return response
 
 
@@ -491,7 +492,7 @@ async def admin_openclaw_alert_governance_portfolio_create(request: Request):
     for extra_key in ('freeze_windows', 'blackout_windows', 'dependency_graph', 'approval_policy', 'security_gate_policy', 'drift_policy', 'export_policy', 'notarization_policy', 'retention_policy', 'escrow_policy', 'signing_policy', 'chain_of_custody_policy', 'custody_anchor_policy', 'verification_gate_policy', 'environment_tier_policies', 'environment_envelopes', 'environment_policy_baselines', 'policy_baselines', 'baseline_catalog_ref', 'baseline_catalog_reference', 'baseline_catalog_overrides', 'deviation_management_policy', 'deviation_policy', 'strict_conflict_check', 'auto_reschedule', 'spacing_s', 'base_release_at', 'default_event_window_s', 'reschedule_buffer_s', 'default_timezone', 'rollout_timezone'):
         if extra_key in payload and payload.get(extra_key) is not None:
             train_policy[extra_key] = payload.get(extra_key)
-    response = _ADMIN_SERVICE.create_openclaw_alert_governance_portfolio(
+    response = await run_in_threadpool(_ADMIN_SERVICE.create_openclaw_alert_governance_portfolio,
         gw,
         name=str(payload.get('name') or 'openclaw-alert-governance-portfolio'),
         version=str(payload.get('version') or f"portfolio-{int(time.time())}"),
@@ -504,7 +505,7 @@ async def admin_openclaw_alert_governance_portfolio_create(request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_create', {'ok': response.get('ok'), 'portfolio_id': response.get('portfolio_id'), 'bundle_count': ((response.get('summary') or {}).get('bundle_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_create', {'ok': response.get('ok'), 'portfolio_id': response.get('portfolio_id'), 'bundle_count': ((response.get('summary') or {}).get('bundle_count'))})
     return response
 
 
@@ -526,7 +527,7 @@ def admin_openclaw_alert_governance_portfolio_detail(
 async def admin_openclaw_alert_governance_portfolio_submit(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.submit_openclaw_alert_governance_portfolio(
+    response = await run_in_threadpool(_ADMIN_SERVICE.submit_openclaw_alert_governance_portfolio,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -535,7 +536,7 @@ async def admin_openclaw_alert_governance_portfolio_submit(portfolio_id: str, re
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_submit', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_submit', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
     return response
 
 
@@ -543,7 +544,7 @@ async def admin_openclaw_alert_governance_portfolio_submit(portfolio_id: str, re
 async def admin_openclaw_alert_governance_portfolio_approve(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.approve_openclaw_alert_governance_portfolio(
+    response = await run_in_threadpool(_ADMIN_SERVICE.approve_openclaw_alert_governance_portfolio,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -552,7 +553,7 @@ async def admin_openclaw_alert_governance_portfolio_approve(portfolio_id: str, r
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_approve', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_approve', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'release_status': ((response.get('release') or {}).get('status'))})
     return response
 
 
@@ -574,7 +575,7 @@ def admin_openclaw_alert_governance_portfolio_calendar(
 async def admin_openclaw_alert_governance_portfolio_simulate(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.simulate_openclaw_alert_governance_portfolio(
+    response = await run_in_threadpool(_ADMIN_SERVICE.simulate_openclaw_alert_governance_portfolio,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -586,7 +587,7 @@ async def admin_openclaw_alert_governance_portfolio_simulate(portfolio_id: str, 
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_simulate', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'validation_status': ((response.get('simulation') or {}).get('validation_status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_simulate', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'validation_status': ((response.get('simulation') or {}).get('validation_status'))})
     return response
 
 
@@ -622,7 +623,7 @@ def admin_openclaw_alert_governance_portfolio_custody_anchors(
 async def admin_openclaw_alert_governance_portfolio_custody_anchors_reconcile(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.reconcile_openclaw_alert_governance_portfolio_custody_anchors(
+    response = await run_in_threadpool(_ADMIN_SERVICE.reconcile_openclaw_alert_governance_portfolio_custody_anchors,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -630,7 +631,7 @@ async def admin_openclaw_alert_governance_portfolio_custody_anchors_reconcile(po
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_custody_anchors_reconcile', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'status': ((response.get('reconciliation') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_custody_anchors_reconcile', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'status': ((response.get('reconciliation') or {}).get('status'))})
     return response
 
 
@@ -706,7 +707,7 @@ def admin_openclaw_alert_governance_portfolio_deviation_exceptions(
 async def admin_openclaw_alert_governance_portfolio_deviation_exception_request(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.request_openclaw_alert_governance_portfolio_policy_deviation_exception(
+    response = await run_in_threadpool(_ADMIN_SERVICE.request_openclaw_alert_governance_portfolio_policy_deviation_exception,
         gw,
         portfolio_id=portfolio_id,
         deviation_id=str(payload.get('deviation_id') or ''),
@@ -717,7 +718,7 @@ async def admin_openclaw_alert_governance_portfolio_deviation_exception_request(
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_deviation_exception_request', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'exception_id': ((response.get('exception') or {}).get('exception_id'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_deviation_exception_request', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'exception_id': ((response.get('exception') or {}).get('exception_id'))})
     return response
 
 
@@ -728,7 +729,7 @@ async def admin_openclaw_alert_governance_portfolio_deviation_approval_action(ap
     normalized_action = str(action or '').strip().lower()
     if normalized_action not in {'approve', 'reject'}:
         return {'ok': False, 'error': 'unsupported_action', 'action': normalized_action, 'approval_id': approval_id}
-    response = _ADMIN_SERVICE.decide_openclaw_alert_governance_portfolio_policy_deviation_exception(
+    response = await run_in_threadpool(_ADMIN_SERVICE.decide_openclaw_alert_governance_portfolio_policy_deviation_exception,
         gw,
         approval_id=approval_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -738,7 +739,7 @@ async def admin_openclaw_alert_governance_portfolio_deviation_approval_action(ap
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_deviation_approval_action', {'approval_id': approval_id, 'action': normalized_action, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_deviation_approval_action', {'approval_id': approval_id, 'action': normalized_action, 'ok': response.get('ok')})
     return response
 
 
@@ -746,7 +747,7 @@ async def admin_openclaw_alert_governance_portfolio_deviation_approval_action(ap
 async def admin_openclaw_alert_governance_portfolio_provider_validation(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.validate_openclaw_alert_governance_portfolio_provider_integrations(
+    response = await run_in_threadpool(_ADMIN_SERVICE.validate_openclaw_alert_governance_portfolio_provider_integrations,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -754,7 +755,7 @@ async def admin_openclaw_alert_governance_portfolio_provider_validation(portfoli
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_provider_validation', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'valid': response.get('valid')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_provider_validation', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'valid': response.get('valid')})
     return response
 
 
@@ -762,7 +763,7 @@ async def admin_openclaw_alert_governance_portfolio_provider_validation(portfoli
 async def admin_openclaw_alert_governance_portfolio_custody_anchors_attest(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.attest_openclaw_alert_governance_portfolio_custody_anchor(
+    response = await run_in_threadpool(_ADMIN_SERVICE.attest_openclaw_alert_governance_portfolio_custody_anchor,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -772,7 +773,7 @@ async def admin_openclaw_alert_governance_portfolio_custody_anchors_attest(portf
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_custody_anchors_attest', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_custody_anchors_attest', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id')})
     return response
 
 
@@ -808,7 +809,7 @@ def admin_openclaw_alert_governance_portfolio_evidence_packages(
 async def admin_openclaw_alert_governance_portfolio_drift_detect(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.detect_openclaw_alert_governance_portfolio_drift(
+    response = await run_in_threadpool(_ADMIN_SERVICE.detect_openclaw_alert_governance_portfolio_drift,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -817,7 +818,7 @@ async def admin_openclaw_alert_governance_portfolio_drift_detect(portfolio_id: s
         environment=payload.get('environment'),
         persist_metadata=bool(payload.get('persist_metadata', True)),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_drift_detect', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'overall_status': ((response.get('drift') or {}).get('overall_status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_drift_detect', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'overall_status': ((response.get('drift') or {}).get('overall_status'))})
     return response
 
 
@@ -825,7 +826,7 @@ async def admin_openclaw_alert_governance_portfolio_drift_detect(portfolio_id: s
 async def admin_openclaw_alert_governance_portfolio_attestation_export(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_attestation(
+    response = await run_in_threadpool(_ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_attestation,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -834,7 +835,7 @@ async def admin_openclaw_alert_governance_portfolio_attestation_export(portfolio
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_attestation_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'attestation_id': response.get('attestation_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_attestation_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'attestation_id': response.get('attestation_id')})
     return response
 
 
@@ -842,7 +843,7 @@ async def admin_openclaw_alert_governance_portfolio_attestation_export(portfolio
 async def admin_openclaw_alert_governance_portfolio_postmortem_export(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_postmortem(
+    response = await run_in_threadpool(_ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_postmortem,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -852,7 +853,7 @@ async def admin_openclaw_alert_governance_portfolio_postmortem_export(portfolio_
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_postmortem_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'attestation_id': response.get('attestation_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_postmortem_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'attestation_id': response.get('attestation_id')})
     return response
 
 
@@ -860,7 +861,7 @@ async def admin_openclaw_alert_governance_portfolio_postmortem_export(portfolio_
 async def admin_openclaw_alert_governance_portfolio_evidence_package_export(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_evidence_package(
+    response = await run_in_threadpool(_ADMIN_SERVICE.export_openclaw_alert_governance_portfolio_evidence_package,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -870,7 +871,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_package_export(port
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_evidence_package_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_evidence_package_export', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id')})
     return response
 
 
@@ -878,7 +879,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_package_export(port
 async def admin_openclaw_alert_governance_portfolio_evidence_package_prune(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.prune_openclaw_alert_governance_portfolio_evidence_packages(
+    response = await run_in_threadpool(_ADMIN_SERVICE.prune_openclaw_alert_governance_portfolio_evidence_packages,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -886,7 +887,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_package_prune(portf
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_evidence_package_prune', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'removed_count': (((response.get('prune') or {}).get('summary') or {}).get('removed_count'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_evidence_package_prune', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'removed_count': (((response.get('prune') or {}).get('summary') or {}).get('removed_count'))})
     return response
 
 
@@ -894,7 +895,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_package_prune(portf
 async def admin_openclaw_alert_governance_portfolio_evidence_artifact_verify(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.verify_openclaw_alert_governance_portfolio_evidence_artifact(
+    response = await run_in_threadpool(_ADMIN_SERVICE.verify_openclaw_alert_governance_portfolio_evidence_artifact,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -905,7 +906,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_artifact_verify(por
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_evidence_artifact_verify', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id'), 'verification_status': ((response.get('verification') or {}).get('status'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_evidence_artifact_verify', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id'), 'verification_status': ((response.get('verification') or {}).get('status'))})
     return response
 
 
@@ -913,7 +914,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_artifact_verify(por
 async def admin_openclaw_alert_governance_portfolio_evidence_artifact_restore(portfolio_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.restore_openclaw_alert_governance_portfolio_evidence_artifact(
+    response = await run_in_threadpool(_ADMIN_SERVICE.restore_openclaw_alert_governance_portfolio_evidence_artifact,
         gw,
         portfolio_id=portfolio_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -925,7 +926,7 @@ async def admin_openclaw_alert_governance_portfolio_evidence_artifact_restore(po
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_evidence_artifact_restore', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id'), 'restore_id': (((response.get('restore') or {}).get('restore_session') or {}).get('restore_id'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_evidence_artifact_restore', {'portfolio_id': portfolio_id, 'ok': response.get('ok'), 'package_id': response.get('package_id'), 'restore_id': (((response.get('restore') or {}).get('restore_session') or {}).get('restore_id'))})
     return response
 
 
@@ -952,7 +953,7 @@ async def admin_openclaw_alert_governance_portfolio_approval_action(approval_id:
     normalized_action = str(action or '').strip().lower()
     if normalized_action not in {'approve', 'reject'}:
         return {'ok': False, 'error': 'unsupported_action', 'action': normalized_action, 'approval_id': approval_id}
-    response = _ADMIN_SERVICE.decide_openclaw_alert_governance_portfolio_approval(
+    response = await run_in_threadpool(_ADMIN_SERVICE.decide_openclaw_alert_governance_portfolio_approval,
         gw,
         approval_id=approval_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -962,7 +963,7 @@ async def admin_openclaw_alert_governance_portfolio_approval_action(approval_id:
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_portfolio_approval_action', {'approval_id': approval_id, 'action': normalized_action, 'ok': response.get('ok')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_portfolio_approval_action', {'approval_id': approval_id, 'action': normalized_action, 'ok': response.get('ok')})
     return response
 
 
@@ -985,7 +986,7 @@ def admin_openclaw_alert_governance_release_train_jobs(
 async def admin_openclaw_alert_governance_release_train_jobs_run_due(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_due_openclaw_release_train_jobs(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_due_openclaw_release_train_jobs,
         gw,
         actor=str(payload.get('actor') or 'system'),
         limit=int(payload.get('limit') or 20),
@@ -994,7 +995,7 @@ async def admin_openclaw_alert_governance_release_train_jobs_run_due(request: Re
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_release_train_jobs_run_due', {'count': len(response.get('items', [])), 'portfolio_id': payload.get('portfolio_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_release_train_jobs_run_due', {'count': len(response.get('items', [])), 'portfolio_id': payload.get('portfolio_id')})
     return response
 
 
@@ -1017,7 +1018,7 @@ def admin_openclaw_alert_governance_advance_jobs(
 async def admin_openclaw_alert_governance_advance_jobs_run_due(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_due_openclaw_alert_governance_advance_jobs(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_due_openclaw_alert_governance_advance_jobs,
         gw,
         actor=str(payload.get('actor') or 'admin'),
         limit=int(payload.get('limit') or 20),
@@ -1026,7 +1027,7 @@ async def admin_openclaw_alert_governance_advance_jobs_run_due(request: Request)
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_advance_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'bundle_id': payload.get('bundle_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_advance_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'bundle_id': payload.get('bundle_id')})
     return response
 
 
@@ -1050,7 +1051,7 @@ def admin_openclaw_alert_governance_promotion_approvals(
 async def admin_openclaw_alert_governance_promotion_approval_decide(approval_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.decide_openclaw_alert_governance_promotion_approval(
+    response = await run_in_threadpool(_ADMIN_SERVICE.decide_openclaw_alert_governance_promotion_approval,
         gw,
         approval_id=approval_id,
         actor=str(payload.get('actor') or 'system'),
@@ -1060,7 +1061,7 @@ async def admin_openclaw_alert_governance_promotion_approval_decide(approval_id:
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_governance_promotion_approval_decide', {'approval_id': approval_id, 'ok': response.get('ok'), 'decision': payload.get('decision') or payload.get('action') or 'approve', 'version_id': ((response.get('version') or {}).get('version_id'))})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_governance_promotion_approval_decide', {'approval_id': approval_id, 'ok': response.get('ok'), 'decision': payload.get('decision') or payload.get('action') or 'approve', 'version_id': ((response.get('version') or {}).get('version_id'))})
     return response
 
 
@@ -1103,7 +1104,7 @@ def admin_openclaw_alert_delivery_jobs(
 async def admin_openclaw_alert_delivery_jobs_run_due(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_due_openclaw_alert_delivery_jobs(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_due_openclaw_alert_delivery_jobs,
         gw,
         actor=str(payload.get('actor') or 'admin'),
         limit=int(payload.get('limit') or 20),
@@ -1113,7 +1114,7 @@ async def admin_openclaw_alert_delivery_jobs_run_due(request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_delivery_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'runtime_id': payload.get('runtime_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_delivery_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'runtime_id': payload.get('runtime_id')})
     return response
 
 
@@ -1121,7 +1122,7 @@ async def admin_openclaw_alert_delivery_jobs_run_due(request: Request):
 async def admin_openclaw_alert_escalation_approval_decide(approval_id: str, request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.decide_openclaw_alert_escalation_approval(
+    response = await run_in_threadpool(_ADMIN_SERVICE.decide_openclaw_alert_escalation_approval,
         gw,
         approval_id=approval_id,
         actor=str(payload.get('actor') or 'admin'),
@@ -1131,7 +1132,7 @@ async def admin_openclaw_alert_escalation_approval_decide(approval_id: str, requ
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_alert_escalation_approval_decide', {'approval_id': approval_id, 'ok': response.get('ok'), 'decision': payload.get('decision') or payload.get('action') or 'approve'})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_alert_escalation_approval_decide', {'approval_id': approval_id, 'ok': response.get('ok'), 'decision': payload.get('decision') or payload.get('action') or 'approve'})
     return response
 
 

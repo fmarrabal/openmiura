@@ -21,6 +21,7 @@ from openmiura.interfaces.http.routes.admin._helpers import (
     _get_gw,
     _rate_limit,
     _require_admin,
+    run_in_threadpool,
 )
 from openmiura.interfaces.http.routes.admin._models import *  # noqa: F401,F403
 
@@ -93,7 +94,7 @@ def admin_openclaw_recovery_jobs(
 async def admin_openclaw_recovery_jobs_run_due(request: Request):
     payload = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     gw = _require_admin(request)
-    response = _ADMIN_SERVICE.run_due_openclaw_recovery_jobs(
+    response = await run_in_threadpool(_ADMIN_SERVICE.run_due_openclaw_recovery_jobs,
         gw,
         actor=str(payload.get('actor') or 'admin'),
         limit=int(payload.get('limit') or 20),
@@ -104,7 +105,7 @@ async def admin_openclaw_recovery_jobs_run_due(request: Request):
         workspace_id=payload.get('workspace_id'),
         environment=payload.get('environment'),
     )
-    _audit_admin(gw, 'openclaw_recovery_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'runtime_id': payload.get('runtime_id')})
+    await run_in_threadpool(_audit_admin, gw, 'openclaw_recovery_jobs_run_due', {'executed': ((response.get('summary') or {}).get('executed')), 'runtime_id': payload.get('runtime_id')})
     return response
 
 
