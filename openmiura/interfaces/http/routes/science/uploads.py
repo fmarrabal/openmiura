@@ -55,6 +55,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 
 from openmiura.interfaces.http.routes.science._helpers import (
@@ -185,7 +186,11 @@ async def science_upload(
 
     sha = hasher.hexdigest()
     target = _stored_path(gw, sha)
-    if not target.exists():
+
+    def _persist_content() -> None:
+        # Blocking disk I/O — run in the threadpool, not on the event loop.
+        if target.exists():
+            return
         target.parent.mkdir(parents=True, exist_ok=True)
         # Write to a sibling .tmp first so a crashing process
         # cannot leave a half-written content-addressed file
@@ -195,6 +200,8 @@ async def science_upload(
             for c in chunks:
                 fh.write(c)
         tmp.replace(target)
+
+    await run_in_threadpool(_persist_content)
 
     upload_id = secrets.token_hex(12)  # 24 chars, ~96 bits of entropy
     stored_at = int(time.time())
@@ -210,9 +217,9 @@ async def science_upload(
         "description": (description or "").strip() or None,
         "stored_at":   stored_at,
     }
-    _index_append(gw, record)
+    await run_in_threadpool(_index_append, gw, record)
 
-    audit_id = _audit_science(gw, "upload", {
+    audit_id = await run_in_threadpool(_audit_science, gw, "upload", {
         "upload_id":  upload_id,
         "sha256":     sha,
         "size":       total,
