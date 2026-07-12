@@ -121,14 +121,14 @@ def test_installation_docs_define_bundle_as_official_route() -> None:
 def test_artifact_install_smoke_for_wheel_sdist_and_bundle(tmp_path: Path) -> None:
     dist_dir = tmp_path / 'dist'
     _run(
-        [sys.executable, 'scripts/build_release_artifacts.py', '--dist-dir', str(dist_dir), '--tag', 'v1.0.0', '--target', 'desktop', '--strict'],
+        [sys.executable, 'scripts/build_release_artifacts.py', '--dist-dir', str(dist_dir), '--tag', 'v1.1.0', '--target', 'desktop', '--strict'],
         cwd=ROOT,
         timeout=600,
     )
 
-    wheel_path = next(dist_dir.glob('openmiura-1.0.0-*.whl'))
-    sdist_path = next(dist_dir.glob('openmiura-1.0.0.tar.gz'))
-    bundle_path = next(dist_dir.glob('openmiura-desktop-v1.0.0-*.zip'))
+    wheel_path = next(dist_dir.glob('openmiura-1.1.0-*.whl'))
+    sdist_path = next(dist_dir.glob('openmiura-1.1.0.tar.gz'))
+    bundle_path = next(dist_dir.glob('openmiura-desktop-v1.1.0-*.zip'))
 
     # Wheel-content pin: the app mounts /ui/v2 from openmiura/ui/v2/static and
     # /ui from openmiura/ui/static (incl. icons/), and `openmiura run` starts
