@@ -1,6 +1,6 @@
 # Installation
 
-This guide defines the **official minimum adoption path** for openMiura `1.0.0`. It is written for an external evaluator who wants to reach a serious first boot quickly and then run the canonical governed-runtime demo.
+This guide defines the **official minimum adoption path** for openMiura `1.1.0`. It is written for an external evaluator who wants to reach a serious first boot quickly and then run the canonical governed-runtime demo.
 
 ## Official route
 
@@ -116,7 +116,7 @@ openmiura run --config configs/openmiura.yaml
 Use the wheel when you already manage your own config file and want a standard Python install.
 
 ```bash
-python -m pip install openmiura-1.0.0-py3-none-any.whl
+python -m pip install openmiura-1.1.0-py3-none-any.whl
 openmiura version
 ```
 
@@ -132,7 +132,7 @@ openmiura run --config /path/to/openmiura.yaml
 Use the sdist when you want a source-oriented Python packaging path.
 
 ```bash
-python -m pip install openmiura-1.0.0.tar.gz
+python -m pip install openmiura-1.1.0.tar.gz
 openmiura version
 ```
 
@@ -167,7 +167,7 @@ cp ops/env/secure-default.env .env
 
 A clean installation is considered successful when all of these are true:
 
-- `openmiura version` prints `1.0.0`
+- `openmiura version` prints `1.1.0`
 - `openmiura doctor --config configs/openmiura.yaml` exits without critical errors
 - `openmiura run --config configs/openmiura.yaml` starts the service
 - `GET /health` returns `{"ok": true, ...}`
