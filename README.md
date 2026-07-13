@@ -61,23 +61,42 @@ The audit trail is itself the deliverable: every tool call, every secret read, e
 ## Quick start
 
 ```bash
-# Clone + install
+# Install from PyPI
+pip install openmiura
+
+# Minimal config (SQLite, local Ollama; see docs/installation.md for more)
+cat > openmiura.yaml <<'EOF'
+server: { host: 127.0.0.1, port: 8081 }
+storage: { db_path: data/audit.db }
+llm: { provider: ollama, base_url: "http://127.0.0.1:11434", model: "qwen2.5:7b-instruct" }
+agents: { default: { system_prompt: "You are a helpful assistant." } }
+tools: { sandbox_dir: data/sandbox }
+EOF
+
+# Verify configuration and start the HTTP service
+openmiura doctor --config openmiura.yaml
+openmiura run --config openmiura.yaml
+# → http://127.0.0.1:8081
+#   /health, /metrics, /ui/v2/admin.html, /ui/v2/science.html, ...
+```
+
+Or run the container image (bundles a default config; see
+[docs/container_image.md](docs/container_image.md)):
+
+```bash
+docker run --rm -p 8081:8081 -v openmiura-data:/app/data ghcr.io/fmarrabal/openmiura:latest
+```
+
+For development — and to run the canonical end-to-end demo, which produces a
+real audit trail with policy evaluation, human approval, signed release
+evidence and a reviewable canvas inspector:
+
+```bash
 git clone https://github.com/fmarrabal/openmiura.git
 cd openmiura
 pip install -e .[dev]
-
-# Verify configuration
 openmiura doctor --config configs/openmiura.yaml
-
-# Run the canonical end-to-end demo (produces a real audit trail
-# with policy evaluation, human approval, signed release evidence
-# and a reviewable canvas inspector)
 python scripts/run_canonical_demo.py --output /tmp/demo.json
-
-# Start the HTTP service
-openmiura run --config configs/openmiura.yaml
-# → http://127.0.0.1:8081
-#   /health, /metrics, /ui/v2/admin.html, /ui/v2/science.html, ...
 ```
 
 **Requirements**: Python ≥ 3.10. Tested on 3.10 / 3.11 / 3.12. SQLite (bundled) or PostgreSQL via the `postgres` extra.
