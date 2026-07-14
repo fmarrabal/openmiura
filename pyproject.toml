@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=82.0.1", "wheel"]
+# setuptools>=83.0.0: PYSEC-2026-3447 fixed MANIFEST.in exclude/prune
+# handling, which our sdist trim (prune docs/_workjournal, docs/_archive)
+# depends on. https://osv.dev/vulnerability/PYSEC-2026-3447
+requires = ["setuptools>=83.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]

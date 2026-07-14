@@ -13,7 +13,13 @@ jobs:
       - uses: ./.github/actions/setup-openmiura
         with:
           python-version: "3.11"
-      - run: python -m pip install pip-audit
+      # PYSEC-2026-3447 / CVE-2026-59890 / GHSA-h35f-9h28-mq5c:
+      # setuptools < 83.0.0 can mis-apply MANIFEST.in exclude/prune
+      # semantics. The runner's bundled setuptools is part of the
+      # audited environment, so upgrade it to the fixed release.
+      # Verified: https://osv.dev/vulnerability/PYSEC-2026-3447 and
+      # https://pypi.org/project/setuptools/83.0.0/
+      - run: python -m pip install -U "setuptools>=83.0.0" pip-audit
       # PYSEC-2025-183 / CVE-2025-45768 is a disputed advisory against
       # PyJWT (key-length recommendations); upstream rejects the
       # classification and no fixed version has been released. Tracked
