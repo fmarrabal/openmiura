@@ -32,7 +32,7 @@ dependencies = [
   # (supply-chain attack via undocumented ``fastar``
   # dependency in ``[standard]``). Pin BELOW the malicious
   # release until upstream republishes a clean version.
-  "fastapi>=0.110,<0.136.3",
+  "fastapi>=0.110,<0.139.3",
   # Upper caps sit one major ABOVE the latest published release at the time of
   # writing, so today's resolution is unchanged while the next breaking major
   # cannot silently alter audit-trail/signing behaviour. Bump deliberately.
