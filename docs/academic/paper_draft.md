@@ -1,7 +1,9 @@
 # openMiura: an open governance layer for LLM agents in regulated scientific environments
 
-*Working draft, May 2026. The paper accompanies the public
-implementation at <https://github.com/fmarrabal/openmiura>.*
+*Working draft, revised July 2026. The paper accompanies the
+public implementation at <https://github.com/fmarrabal/openmiura>,
+released as version 1.1.0 on PyPI (`pip install openmiura`) and as
+a container image on GHCR.*
 
 **Author:** Francisco Manuel Arrabal Campos
 (Universidad de Almería, Spain).
@@ -25,20 +27,25 @@ computerised systems can adapt. We present openMiura, an open
 governance layer that sits in front of an arbitrary agent
 runtime and enforces four primitives — policy, approval gates,
 tamper-evident evidence packs and scope isolation — without
-attempting to validate the agent's internal reasoning. We
-position openMiura as a Category 4 product under GAMP 5: a
-configured platform where the value comes from the policy
-packs, not from the binary. We map the primitives
-control-by-control to FDA 21 CFR Part 11, EU GMP Annex 11 and
-ALCOA+ data integrity, and we argue that the platform
+attempting to validate the agent's internal reasoning. The
+audit trail is an append-only per-scope hash chain; evidence
+packs are Ed25519-signed and verifiable **offline**
+(`openmiura verify`), optionally bound to a known signer and an
+RFC 3161 trusted timestamp. We
+position openMiura as a GAMP 5 Category 4 product: the value
+comes from the policy packs, not the binary. We map the
+primitives control-by-control to FDA 21 CFR Part 11, EU GMP
+Annex 11 and ALCOA+ data integrity, arguing that the platform
 contributes meaningfully to roughly half of the technical
-controls in those frameworks while making the residual
-organisational responsibilities explicit. We describe a
+controls while making the residual organisational
+responsibilities explicit. We describe a
 non-clinical reference implementation: a governed assistant
 for ¹H / ¹³C NMR interpretation of organometallic catalytic
 compounds at the Universidad de Almería, with three distinct
-identities, signed two-party approval, and a reproducible
-smoke-test artefact. We discuss the limits of any governance
+identities, signature-grade approval (resolved identity,
+separation of duties, an *n*-of-*m* quorum, a TOTP second factor
+and a per-approval signature), and a
+reproducible smoke-test artefact. We discuss the limits of any governance
 layer that cannot, by construction, eliminate hallucination
 inside the agent itself, and we frame the path that takes a
 non-governed laboratory copilot through four stages — mirror,
@@ -48,7 +55,7 @@ control-mapping that practitioners can use today; the open
 question is whether the pattern survives contact with a
 sufficient number of QA / regulatory teams to become the
 default.
-*(247 words)*
+*(272 words)*
 
 ## 1. Introduction
 
@@ -197,6 +204,20 @@ and the **timestamp**. The gate enforces 21 CFR §11.50: a
 gate that lacks any of the three signature components is
 rejected at write time.
 
+For the controls that go beyond a single manifested signature,
+release approval offers a *signature-grade* path (opt-in per
+release) that maps onto 21 CFR §11.200. It resolves the actor to
+a registered identity rather than accepting a free-form string;
+it enforces separation of duties (the creator and the submitter
+of a release cannot approve it, and no signer can vote twice);
+it requires an *n*-of-*m* quorum of **distinct** approvers before
+the release advances; it accepts a TOTP second factor (the secret
+is encrypted at rest, and a code is single-use); and it writes a
+per-approval Ed25519 signature over the canonical approval tuple.
+Each approval is recorded on the same append-only hash chain as
+the rest of the audit trail (§3.3), so an approval cannot be
+altered or back-dated after the fact.
+
 ### 3.3 Evidence packs
 
 Every workflow that ends in a record can produce a self-
@@ -208,6 +229,29 @@ manifest with SHA-256 hashes of every embedded artefact, and
 the signer identity and signature meaning. The pack is the
 unit of record an inspector or an internal investigation
 would request.
+
+Two properties make the pack usable as evidence by a party that
+does not trust the operator. First, the operational audit tables
+(`events`, `tool_calls`, `decision_traces`, `release_approvals`)
+are each an append-only **hash chain**, partitioned per scope:
+every row stores a digest over its canonical content plus the
+previous row's digest, database triggers reject any `UPDATE` or
+`DELETE`, and a chain head can be recomputed and matched
+(`openmiura db verify-chain`); the head is attested inside the
+signed pack, so a later edit to the live database is detectable
+against the pack. Second, the pack is verifiable **offline**: a
+standalone `openmiura verify <pack.zip>` re-hashes every embedded
+document, recomputes the manifest, and checks the Ed25519 (or
+ECDSA-P256) signature over a canonical signing input, using only
+the `cryptography` library — no server, no database. A supplied
+`--trust-anchor` binds the pack to a *known* signer (a pack
+forged with an attacker's own key then reads as
+*non-authoritative*), and the built-in public development seed is
+detected by re-deriving its fingerprint rather than by trusting
+self-reported metadata. Finally, `openmiura timestamp` obtains an
+RFC 3161 token from a Timestamping Authority over the pack
+signature, which `openmiura verify --tsa-anchor` checks offline —
+adding a trusted *when* to the trusted *what* and *who*.
 
 ### 3.4 Scope isolation
 
@@ -229,20 +273,37 @@ them over 1,500 lines of code. The HTTP admin layer is split
 into 15 sub-routers under `openmiura/interfaces/http/routes/admin/`.
 The codebase is GAMP 5 Category 4: the binary is generic, the
 configuration (policy packs in YAML, role assignments,
-deployment profile) is the validated artefact.
+deployment profile) is the validated artefact. The auditor-facing
+functions are also exposed as a command-line interface
+(`openmiura verify`, `openmiura timestamp`, `openmiura db
+verify-chain`), and the package is distributed on PyPI
+(`pip install openmiura`) and as a container image, so a
+reviewer can reproduce the verification claims of §3.2–§3.3 on a
+clean machine. The regulatory mappings of §4 are additionally
+published as a control-to-test traceability matrix in the
+repository, in which each cited test is checked to exist by a
+test of its own so the matrix cannot silently drift from the
+implementation.
 
 ## 4. Mapping to regulatory frameworks
 
 We summarise the mapping; the full control-by-control tables
 live in the project repository under `docs/regulated/`.
 
-**21 CFR Part 11.** openMiura contributes meaningfully to 15
+**21 CFR Part 11.** openMiura contributes meaningfully to 17
 of 26 controls (Beta or Partial); 7 of 26 are out of technical
 scope (organisational training, hardware tokens, certification
 to FDA). The strongest contributions are §11.10(e) audit
 trail, §11.50 signature manifestations and §11.70
-signature/record linking. These are also the controls under
-which most CSV remediations get cited, so the contribution is
+signature/record linking. Since the initial mapping, the
+audit-trail control §11.10(e) has been strengthened from a
+plain append-only table to a per-scope hash chain with
+database-enforced immutability, and §11.200 (electronic-signature
+components) has moved from a placeholder to a working second
+factor: the signature-grade approval path (§3.2) adds a
+single-use TOTP factor and an *n*-of-*m* distinct-approver
+quorum. These are also the controls under which most CSV
+remediations get cited, so the contribution is
 practically valuable, not merely formal.
 
 **EU GMP Annex 11.** openMiura contributes to 19 of 25
@@ -263,7 +324,11 @@ state.
 
 **ALCOA+.** Of the nine dimensions, seven are *Strong* at the
 technical layer (Attributable, Legible, Contemporaneous,
-Original, Complete, Consistent, Available). Two are *Partial*:
+Original, Complete, Consistent, Available). *Contemporaneous* and
+*Original* are now backed not only by internal timestamps but by
+an optional RFC 3161 trusted timestamp over the signed record,
+which attests *when* independently of the operator's clock. Two
+dimensions are *Partial*:
 *Accurate* depends on the agent's output (no governance plane
 can solve hallucination from outside), and *Enduring* depends
 on the operating organisation's long-term storage substrate.
@@ -351,18 +416,27 @@ has been verified at the SQL level. A formal red-team audit
 attempting to bypass the filter is on the roadmap and remains
 open.
 
-Second, *long-term tamper-evident storage*. Evidence packs
-have a stable file format and a signed manifest. Integration
-with corporate WORM substrates (S3 Object Lock, immutable
-filesystem, blockchain anchor) is documented but not yet
-deployed in production.
+Second, *long-term tamper-evident storage*. Tamper-evidence at
+the record level is now in place: the audit tables are per-scope
+hash chains with database-enforced immutability, and the chain
+head is attested inside the signed, offline-verifiable evidence
+pack (§3.3). What remains open is integration with an external
+*write-once* substrate (S3 Object Lock, an immutable filesystem,
+or a public timestamp/anchor beyond the built-in RFC 3161
+support) so that the storage medium itself, and not only the
+record's internal structure, resists deletion. That integration
+is documented but not yet deployed in production.
 
 Third, *multi-party signature flows* under §11.200(a)(3) of
-21 CFR Part 11. Single-signer approval gates are stable;
-two-signer flows where both signers must independently
-authenticate are implemented in policy form
-(`deviation_report.yaml` requires this for critical
-deviations) but the end-to-end UI flow is not yet shipped.
+21 CFR Part 11. The signature-grade approval path (§3.2) now
+enforces an *n*-of-*m* quorum of distinct, authenticated
+approvers end-to-end over the HTTP API, with a TOTP second
+factor and a per-approval signature. What remains is not the
+enforcement but the *operator experience*: a polished
+review-and-sign UI, and a study of whether the quorum and
+second-factor friction is acceptable to working QA reviewers —
+a question best answered in the discovery phase (§6.4) rather
+than asserted here.
 
 ### 6.4 Threats to validity
 
