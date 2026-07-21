@@ -33,7 +33,7 @@ limitation of the framework.
 | §11.10(b) | Ability to generate accurate and complete copies of records in human-readable and electronic form | Evidence pack export under `release_repo` and the operations canvas surface; signed manifest with SHA-256 of every embedded artefact | `Beta` | `evidence_packs/<id>.zip` |
 | §11.10(c) | Protection of records to enable accurate and ready retrieval throughout the records retention period | Append-only audit trail at the persistence layer; backup directory configurable via `data/backups/`; **chain-of-custody integration with an external WORM store is `Experimental`** | `Partial` | `data/backups/`, `openmiura/persistence/` |
 | §11.10(d) | Limiting system access to authorized individuals | RBAC via `auth_repo` (api tokens, auth users, auth sessions), bootstrap admin only via env var, role-aware route gating | `Beta` | `tests/test_phase2_rbac_*.py` |
-| §11.10(e) | Use of secure, computer-generated, time-stamped audit trails to record date/time of operator entries and actions that create, modify, or delete records | Append-only `events`, `decision_traces` and `tool_calls` tables; every write carries `signer`, `timestamp` and `meaning`; export through evidence pack | `Beta` | `tests/test_phase5_decision_trace_*.py` |
+| §11.10(e) | Use of secure, computer-generated, time-stamped audit trails to record date/time of operator entries and actions that create, modify, or delete records | Per-scope, append-only **hash chain** over `events`, `tool_calls`, `decision_traces` and `release_approvals` (each row hashes its canonical content plus the previous row's hash; `UPDATE`/`DELETE` rejected by database triggers; the chain head is recomputed and matched by `openmiura db verify-chain` and attested inside the signed evidence pack); every write carries `signer`, `timestamp` and `meaning` | `Beta` | `tests/test_phase5_decision_trace_*.py`, `tests/unit/test_audit_hashchain_pr3_verify.py`, `tests/unit/test_audit_hashchain_pr4_triggers.py` |
 | §11.10(f) | Use of operational system checks to enforce permitted sequencing of steps and events | `openmiura doctor` config validation; policy engine refuses out-of-sequence approvals (e.g. cannot promote a release before its approval gate is signed) | `Experimental` | `openmiura/cli.py`, `openmiura/persistence/release_repo.py` |
 | §11.10(g) | Use of authority checks to ensure that only authorized individuals can use the system, electronically sign a record, access the operation or computer system input or output device, alter a record, or perform the operation at hand | Policy engine + approval-gate signer-role enforcement; signing attempts that don't match the policy's required role are rejected at write time | `Beta` | `tests/test_phase4_policy_admin.py` |
 | §11.10(h) | Use of device (e.g., terminal) checks to determine, as appropriate, the validity of the source of data input or operational instruction | n/a — typically delivered by the host operating environment (corporate endpoint management, MDM, network controls) | `n/a` | — |
@@ -81,11 +81,11 @@ encryption, digital signatures.
 
 | Section | Title (paraphrased) | openMiura primitive(s) | Status | Evidence path |
 |---|---|---|---|---|
-| §11.200(a)(1)(i) | Employ at least two distinct identification components such as an identification code and password, in the case of a non-biometric signature | Single-factor (api token / password) is the default; multi-factor (e.g. token + TOTP) is **`Experimental`** at the project level | `Experimental` | — |
+| §11.200(a)(1)(i) | Employ at least two distinct identification components such as an identification code and password, in the case of a non-biometric signature | Single-factor (api token / password) is the default; on the signature-grade release-approval path a second factor is available — a single-use TOTP whose secret is encrypted at rest via an env-supplied key-encryption key | `Beta` | `tests/unit/test_sig_approvals_pr3_totp.py`, `tests/unit/test_sig_approvals_pr7_singleuse.py` |
 | §11.200(a)(1)(ii) | The first signing in a continuous session shall require all components; subsequent signings shall require, at minimum, one component | Implemented through session lifetime + per-action challenge for sensitive routes | `Partial` | `openmiura/persistence/auth_repo.py` (auth_sessions) |
 | §11.200(a)(1)(iii) | A signing not performed during a single, continuous period of controlled system access shall require all components | Session timeout enforced in `auth_repo`; rotating sessions on idle is `Beta` | `Partial` | `openmiura/persistence/auth_repo.py` (session timeout) |
 | §11.200(a)(2) | Be used only by their genuine owners | Organisational control — genuine-owner use cannot be technically enforced at the platform layer (tied to the identity proofing of §11.100(b)) | `n/a` | — |
-| §11.200(a)(3) | Be administered and executed to ensure that attempted use of an individual's electronic signature by anyone other than its genuine owner requires collaboration of two or more individuals | Multi-party signature flow is **`Experimental`** | `Experimental` | — |
+| §11.200(a)(3) | Be administered and executed to ensure that attempted use of an individual's electronic signature by anyone other than its genuine owner requires collaboration of two or more individuals | Signature-grade release approval enforces an *n*-of-*m* quorum of **distinct**, authenticated approvers end-to-end (the release creator and submitter are blocked from approving, and no signer may vote twice), each vote carrying a TOTP second factor and a per-approval Ed25519 signature on the same hash chain | `Beta` | `tests/test_sig_approvals_pr5_http.py`, `tests/unit/test_sig_approvals_pr4_policy.py`, `tests/unit/test_sig_approvals_pr6_signature.py` |
 | §11.200(b) | Electronic signatures based upon biometrics shall be designed to ensure that they cannot be used by anyone other than their genuine owners | n/a — biometrics are out of scope for the technical layer | `n/a` | — |
 
 ### §11.300 — Controls for identification codes/passwords
@@ -105,9 +105,9 @@ encryption, digital signatures.
 | Status | Count of controls |
 |---|---:|
 | Stable | 0 |
-| Beta | 5 |
+| Beta | 7 |
 | Partial | 10 |
-| Experimental | 4 |
+| Experimental | 2 |
 | n/a (organisational/hardware) | 7 |
 | **Total** | **26** |
 
