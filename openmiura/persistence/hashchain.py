@@ -11,8 +11,10 @@ The per-table ``row_fields`` reconstruction MUST mirror the writer
 writer and verifier hash the same canonical dict. A cross-check test
 (a freshly written chain must verify) pins them together.
 
-decision_traces is intentionally absent: it legitimately upserts and needs
-option-A immutable versions before it can be chained (a later PR).
+decision_traces is chained too, via option-A immutable versions: instead of
+upserting a row in place it appends a new immutable version row, and each
+version row is its own chained entry (``version`` is part of the hashed
+content). See ``tools_repo`` for the writer side.
 """
 from __future__ import annotations
 
@@ -121,8 +123,8 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Tables whose write path computes a chain link today (decision_traces is not
-# chained yet — see module docstring).
+# Tables whose write path computes a chain link today — all four, including
+# decision_traces (chained via option-A immutable versions; see module docstring).
 CHAINED_TABLES: tuple[str, ...] = tuple(_SPECS.keys())
 
 
