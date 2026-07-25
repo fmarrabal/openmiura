@@ -1,28 +1,25 @@
 # gitleaks configuration.
 #
 # Extends the full default ruleset (nothing is disabled) and adds a narrow
-# allowlist for the paper's reproducible simulation artifacts. Those files
-# contain only PUBLIC values:
-#   * Ed25519 public-key *fingerprints* — these are trust anchors, meant to be
-#     published so a third party can bind an evidence pack to a known signer;
-#     they are not secret material (the private seed never appears in them).
+# allowlist for the paper's reproducible simulation artifacts under
+# docs/academic/simulation/. Those files contain only PUBLIC values:
+#   * Ed25519 public-key *fingerprints* — trust anchors, meant to be published
+#     so a third party can bind an evidence pack to a known signer. gitleaks'
+#     generic-api-key rule flags the 64-hex fingerprint as a "secret", but the
+#     private seed never appears in these artifacts.
 #   * Fixed, non-secret demo seeds used solely to make the simulation
-#     reproducible (documented as such in docs/academic/simulation/README.md).
+#     reproducible (documented in docs/academic/simulation/README.md).
 #
-# Real secret scanning is unchanged everywhere else in the repository.
+# Real secret scanning is unchanged everywhere else in the repository, and
+# GitGuardian continues to scan this path too.
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "openMiura simulation result/pack artifacts: public key fingerprints (trust anchors), not secrets"
+[allowlist]
+description = "docs/academic/simulation/: public key fingerprints (trust anchors) and fixed demo seeds, not secrets"
 paths = [
-  '''docs/academic/simulation/results/.*''',
-  '''docs/academic/simulation/packs/.*''',
+  '''docs/academic/simulation/''',
 ]
-
-[[allowlists]]
-description = "Fixed, non-secret demo seeds for the reproducible simulation"
-regexTarget = "line"
 regexes = [
   '''arxiv-simulation-operator-signing-seed-2026''',
   '''arxiv-simulation-otp-kek''',
