@@ -1,0 +1,332 @@
+{
+  "chain_heads": {
+    "chained_tables": [
+      "events",
+      "tool_calls",
+      "decision_traces",
+      "release_approvals"
+    ],
+    "heads": [
+      {
+        "head_hash": "b32258b6bfc34b5fad46ef8bf3c729ee1b494317cf12917f45756991efa6b1df",
+        "head_seq": 12,
+        "scope": "44599e2ec0f4d088b509d4eb7d2b08663e1449d485546d20697db3b2e437153e",
+        "table": "events"
+      },
+      {
+        "head_hash": "80dcf209c159a7eb44f790f2e452bef610f3fa942715982c03462e26ebe2fac0",
+        "head_seq": 29,
+        "scope": "45a0644109ef50206a60d6ed2c1d6093336da68aaaf05b6bc7eb1d0b8e2ca4d2",
+        "table": "events"
+      },
+      {
+        "head_hash": "a7129db26a7c1fa2df77358cff1336ed0b1936b464fe7670302e9954a72837f4",
+        "head_seq": 4,
+        "scope": "44599e2ec0f4d088b509d4eb7d2b08663e1449d485546d20697db3b2e437153e",
+        "table": "release_approvals"
+      },
+      {
+        "head_hash": "2de6cff9ef63222323bebf519f93b6b09d57e60f6295ad232211ee487c9c1f0d",
+        "head_seq": 3,
+        "scope": "45a0644109ef50206a60d6ed2c1d6093336da68aaaf05b6bc7eb1d0b8e2ca4d2",
+        "table": "release_approvals"
+      }
+    ],
+    "row_counts": {
+      "decision_traces": 0,
+      "events": 41,
+      "release_approvals": 7,
+      "tool_calls": 0
+    }
+  },
+  "config_path": "C:\\Users\\fmarr\\Documents\\openmiura-pr\\docs\\academic\\simulation\\workspace\\openmiura.yaml",
+  "db_path": "C:\\Users\\fmarr\\Documents\\openmiura-pr\\docs\\academic\\simulation\\workspace\\audit.db",
+  "finished_utc": "2026-07-25T10:47:50Z",
+  "openmiura_version": "1.1.0",
+  "scenarios": {
+    "A_governed_runtime": {
+      "approval_id": "f47eaaa2-373e-4692-baaa-32a6fe740dc0",
+      "runtime_id": "2aedee9a-b41d-4da3-ab00-9dfdfe915811",
+      "success": true,
+      "validation": {
+        "admin_events_available": true,
+        "approval_required": true,
+        "blocked_before_approval": true,
+        "canvas_operator_action_visible": true,
+        "current_version_matches": true,
+        "executed_after_approval": true,
+        "pending_approval_visible": true,
+        "runtime_timeline_available": true,
+        "signed_release_present": true
+      }
+    },
+    "B_nmr_pilot": {
+      "escalation": {
+        "report": {
+          "evidence_pack": {
+            "draft_evaluation": {
+              "denied": false,
+              "deny_reasons": [],
+              "matched_rules": [
+                {
+                  "id": "spectrum_hash_recorded",
+                  "matched": true
+                },
+                {
+                  "id": "model_version_pinned",
+                  "matched": true
+                },
+                {
+                  "id": "scope_isolation",
+                  "matched": true
+                }
+              ],
+              "required_signers": []
+            },
+            "manifest_sha256": "d12bb263947b706f83cd6bf32fb2cdaedc1089422c96bddda8427690036da89f",
+            "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+            "policy_version": "1.0",
+            "prompt_sha256": "7f2c30edfd96a17e2e6f04324ec8d5157c205bf22e09fac26919639810b33e27",
+            "publish_evaluation": {
+              "denied": false,
+              "deny_reasons": [],
+              "matched_rules": [
+                {
+                  "id": "unknown_impurity_requires_pi_approval",
+                  "matched": true
+                },
+                {
+                  "id": "evidence_pack_with_full_chain",
+                  "matched": true
+                },
+                {
+                  "id": "scope_isolation",
+                  "matched": true
+                }
+              ],
+              "required_signers": [
+                {
+                  "meaning": "approved for laboratory notebook despite unknown impurity flag",
+                  "multi_party": false,
+                  "role": "pi_approver",
+                  "rule_id": "unknown_impurity_requires_pi_approval"
+                }
+              ]
+            },
+            "scope": {
+              "environment": "research",
+              "tenant_id": "ual",
+              "workspace_id": "nmrmbc"
+            },
+            "signatures": [
+              {
+                "meaning": "reviewed; assignments match spectrum and known chemistry",
+                "role": "nmr_reviewer",
+                "signer": "pilot-nmr_reviewer-11daf68b-dbd3-4e12-af6d-b394431c310a",
+                "timestamp": 1784976470.1070485
+              },
+              {
+                "meaning": "approved for laboratory notebook despite unknown impurity flag",
+                "role": "pi_approver",
+                "signer": "pilot-pi_approver-6ea6003c-7e08-4f8f-826d-e90a35c48c5d",
+                "timestamp": 1784976470.1070485
+              }
+            ],
+            "spectrum_sha256": "3b96938c74dfce93fff969fb1985464be122d0afe98ef92b254756f3c1bcee4c"
+          },
+          "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+          "policy_version": "1.0",
+          "scope": {
+            "environment": "research",
+            "tenant_id": "ual",
+            "workspace_id": "nmrmbc"
+          },
+          "stage": "evidence_pack_written",
+          "success": true
+        },
+        "returncode": 0
+      },
+      "nominal": {
+        "report": {
+          "evidence_pack": {
+            "draft_evaluation": {
+              "denied": false,
+              "deny_reasons": [],
+              "matched_rules": [
+                {
+                  "id": "spectrum_hash_recorded",
+                  "matched": true
+                },
+                {
+                  "id": "model_version_pinned",
+                  "matched": true
+                },
+                {
+                  "id": "scope_isolation",
+                  "matched": true
+                }
+              ],
+              "required_signers": []
+            },
+            "manifest_sha256": "d12bb263947b706f83cd6bf32fb2cdaedc1089422c96bddda8427690036da89f",
+            "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+            "policy_version": "1.0",
+            "prompt_sha256": "7f2c30edfd96a17e2e6f04324ec8d5157c205bf22e09fac26919639810b33e27",
+            "publish_evaluation": {
+              "denied": false,
+              "deny_reasons": [],
+              "matched_rules": [
+                {
+                  "id": "routine_assignment_requires_reviewer",
+                  "matched": true
+                },
+                {
+                  "id": "evidence_pack_with_full_chain",
+                  "matched": true
+                },
+                {
+                  "id": "scope_isolation",
+                  "matched": true
+                }
+              ],
+              "required_signers": [
+                {
+                  "meaning": "reviewed; assignments match spectrum and known chemistry",
+                  "multi_party": false,
+                  "role": "nmr_reviewer",
+                  "rule_id": "routine_assignment_requires_reviewer"
+                }
+              ]
+            },
+            "scope": {
+              "environment": "research",
+              "tenant_id": "ual",
+              "workspace_id": "nmrmbc"
+            },
+            "signatures": [
+              {
+                "meaning": "reviewed; assignments match spectrum and known chemistry",
+                "role": "nmr_reviewer",
+                "signer": "pilot-nmr_reviewer-28afea76-9e7a-477a-bd27-ab7944f7113c",
+                "timestamp": 1784976469.9446125
+              },
+              {
+                "meaning": "approved for laboratory notebook",
+                "role": "pi_approver",
+                "signer": "pilot-pi_approver-500a8dbf-fc41-4fbd-92d6-c2c3a52fdd1e",
+                "timestamp": 1784976469.9446125
+              }
+            ],
+            "spectrum_sha256": "3b96938c74dfce93fff969fb1985464be122d0afe98ef92b254756f3c1bcee4c"
+          },
+          "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+          "policy_version": "1.0",
+          "scope": {
+            "environment": "research",
+            "tenant_id": "ual",
+            "workspace_id": "nmrmbc"
+          },
+          "stage": "evidence_pack_written",
+          "success": true
+        },
+        "returncode": 0
+      }
+    },
+    "C_signature_grade": {
+      "distinct_signers": [
+        "user:carol",
+        "user:dave"
+      ],
+      "events": [
+        {
+          "blocked": true,
+          "http_status": 403,
+          "step": "self_approval_alice"
+        },
+        {
+          "blocked": true,
+          "http_status": 403,
+          "step": "unknown_approver_ghost"
+        },
+        {
+          "blocked": true,
+          "http_status": 403,
+          "step": "carol_without_otp"
+        },
+        {
+          "http_status": 200,
+          "quorum_met": false,
+          "step": "carol_with_otp"
+        },
+        {
+          "http_status": 200,
+          "quorum_met": true,
+          "step": "dave_with_otp"
+        }
+      ],
+      "quorum_required_n": 2,
+      "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+      "signed_approvals": [
+        {
+          "action": "submit",
+          "actor": "user:bob",
+          "chain_seq": 1,
+          "created_at": 1784976469.4111493,
+          "meaning": null,
+          "otp_verified_at": null,
+          "prev_hash": "",
+          "reason": "",
+          "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+          "row_hash": "2302d897a1f567efac34a111a2e3789016d490c1cadba5c9b4d85df2595f5787",
+          "second_factor_method": null,
+          "signature": null,
+          "signature_scheme": null,
+          "signer_key_id": null,
+          "signer_user_key": null
+        },
+        {
+          "action": "approve",
+          "actor": "user:carol",
+          "chain_seq": 2,
+          "created_at": 1784976469.4666224,
+          "meaning": "approved release for promotion",
+          "otp_verified_at": 1784976469.4478822,
+          "prev_hash": "2302d897a1f567efac34a111a2e3789016d490c1cadba5c9b4d85df2595f5787",
+          "reason": "",
+          "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+          "row_hash": "87c85b8e51c86b8ebbfbec3f4ac8a18054f5ad713c1652e8dc442e24baa4a2ee",
+          "second_factor_method": "totp",
+          "signature": "w0/xELn7XAVks5Za5776l1a4bBOrTqo9r70Q1kO9W5ysu1xqrn3C2Hn4OD8wpJzWzinR+DIQhggegFu7Q2FvCQ==",
+          "signature_scheme": "ed25519",
+          "signer_key_id": "openmiura-release-approvals",
+          "signer_user_key": "user:carol"
+        },
+        {
+          "action": "approve",
+          "actor": "user:dave",
+          "chain_seq": 3,
+          "created_at": 1784976469.4697025,
+          "meaning": "approved release for promotion",
+          "otp_verified_at": 1784976469.4686792,
+          "prev_hash": "87c85b8e51c86b8ebbfbec3f4ac8a18054f5ad713c1652e8dc442e24baa4a2ee",
+          "reason": "",
+          "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+          "row_hash": "2de6cff9ef63222323bebf519f93b6b09d57e60f6295ad232211ee487c9c1f0d",
+          "second_factor_method": "totp",
+          "signature": "Kl9OBI3tsRqZSJkdg8t1ODMpGB4bDrpS2Dj348oSZuXpuV17/Y7bIIzPEYy9ZQYcvuk/JVsCNgYvR9QmfH+NDA==",
+          "signature_scheme": "ed25519",
+          "signer_key_id": "openmiura-release-approvals",
+          "signer_user_key": "user:dave"
+        }
+      ],
+      "status_after_first": "pending_approval",
+      "status_after_second": "approved"
+    },
+    "D_evidence_pack": {
+      "pack_path": "C:\\Users\\fmarr\\Documents\\openmiura-pr\\docs\\academic\\simulation\\packs\\evidence_pack.zip",
+      "portfolio_id": "2b3f0bf1-e352-4969-b748-4168945dabad",
+      "size_bytes": 81927
+    }
+  },
+  "started_utc": "2026-07-25T10:47:47Z"
+}

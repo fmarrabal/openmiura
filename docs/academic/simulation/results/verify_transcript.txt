@@ -1,0 +1,164 @@
+========================================================================
+1) Audit hash-chain — live DB is intact
+========================================================================
+------------------------------------------------------------------------
+$ openmiura db verify-chain --config C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\workspace\openmiura.yaml
+  [PASS] events scope=44599e2ec0f4… chained=12 preexisting=0
+  [PASS] events scope=45a0644109ef… chained=29 preexisting=0
+  [PASS] release_approvals scope=44599e2ec0f4… chained=4 preexisting=0
+  [PASS] release_approvals scope=45a0644109ef… chained=3 preexisting=0
+  
+  VERDICT: all audit chains intact
+  -> exit 0
+
+========================================================================
+2) Evidence pack — offline verification (WHAT + WHO)
+========================================================================
+------------------------------------------------------------------------
+$ openmiura verify C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack.zip
+  openMiura evidence pack: C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack.zip
+  archive sha256: 420ed3e442bb166739a43001e3c656018d3dd757b4f32d3cbae9298d02475d68
+  package: 635f1def-d09d-4d02-b712-b36640bd3038  portfolio: 2b3f0bf1-e352-4969-b748-4168945dabad
+  signature: ed25519  provider: local-ed25519  origin: derived_seed
+  public key fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  [PASS] manifest_hash_valid
+  [PASS] manifest_links_valid
+  [PASS] package_integrity_valid
+  [PASS] attestation_export_valid
+  [PASS] postmortem_export_valid
+  [PASS] sidecar_docs_match_signed_package
+  [INFO] chain_of_custody: 3 entries, chain_valid=True
+  [SKIP] not verified offline (need time/policy/cloud): notarization
+  
+  VERDICT: VERIFIED (internally consistent, signature valid)
+  Note: this proves the pack is untampered and signed by whoever held the
+  embedded key; it does not by itself prove the signer's identity. Pass
+  --trust-anchor to bind the pack to a known signer.
+  -> exit 0
+
+========================================================================
+3) Trust anchor — bind the pack to a known signer (WHO)
+========================================================================
+------------------------------------------------------------------------
+$ openmiura verify C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack.zip --trust-anchor 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  openMiura evidence pack: C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack.zip
+  archive sha256: 420ed3e442bb166739a43001e3c656018d3dd757b4f32d3cbae9298d02475d68
+  package: 635f1def-d09d-4d02-b712-b36640bd3038  portfolio: 2b3f0bf1-e352-4969-b748-4168945dabad
+  signature: ed25519  provider: local-ed25519  origin: derived_seed
+  public key fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  [PASS] manifest_hash_valid
+  [PASS] manifest_links_valid
+  [PASS] package_integrity_valid
+  [PASS] attestation_export_valid
+  [PASS] postmortem_export_valid
+  [PASS] sidecar_docs_match_signed_package
+  [INFO] chain_of_custody: 3 entries, chain_valid=True
+  [SKIP] not verified offline (need time/policy/cloud): notarization
+  
+  VERDICT: VERIFIED (internally consistent, signature valid)
+  Signer matches a supplied trust anchor — authenticity confirmed.
+  -> exit 0
+
+------------------------------------------------------------------------
+$ openmiura verify C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack.zip --trust-anchor 0000000000000000000000000000000000000000000000000000000000000000
+  openMiura evidence pack: C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack.zip
+  archive sha256: 420ed3e442bb166739a43001e3c656018d3dd757b4f32d3cbae9298d02475d68
+  package: 635f1def-d09d-4d02-b712-b36640bd3038  portfolio: 2b3f0bf1-e352-4969-b748-4168945dabad
+  signature: ed25519  provider: local-ed25519  origin: derived_seed
+  public key fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  [PASS] manifest_hash_valid
+  [PASS] manifest_links_valid
+  [PASS] package_integrity_valid
+  [PASS] attestation_export_valid
+  [PASS] postmortem_export_valid
+  [PASS] sidecar_docs_match_signed_package
+  [INFO] chain_of_custody: 3 entries, chain_valid=True
+  [SKIP] not verified offline (need time/policy/cloud): notarization
+  
+  VERDICT: NON-AUTHORITATIVE — pack is internally consistent and cryptographically
+  signed, BUT the signing key is NOT one of the supplied trust anchors, so the
+  signer's identity is not trusted (a forged pack signed with an unknown key looks
+  like this). Signer fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  -> exit 2
+
+========================================================================
+4) Tampered pack — one byte of signed content changed
+========================================================================
+------------------------------------------------------------------------
+$ openmiura verify C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack_tampered.zip
+  openMiura evidence pack: C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack_tampered.zip
+  archive sha256: 4a742a25938b468f3444302b6e8d601dcf86f336abab128d14f190ec8ab97cec
+  package: 635f1def-d09d-4d02-b712-b36640bd3038  portfolio: 2b3f0bf1-e352-4969-b748-4168945dabad
+  signature: ed25519  provider: local-ed25519  origin: derived_seed
+  public key fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  [PASS] manifest_hash_valid
+  [PASS] manifest_links_valid
+  [FAIL] package_integrity_valid
+  [PASS] attestation_export_valid
+  [PASS] postmortem_export_valid
+  [PASS] sidecar_docs_match_signed_package
+  [INFO] chain_of_custody: 3 entries, chain_valid=True
+  [SKIP] not verified offline (need time/policy/cloud): notarization
+  
+  VERDICT: FAILED — package_integrity_valid
+  -> exit 1
+
+========================================================================
+5-6) Two-layer tamper-evidence
+========================================================================
+  Layer 1 — append-only DB triggers on the operational audit tables
+            (events, tool_calls, decision_traces): a plain UPDATE is
+            rejected at the database.
+  Layer 2 — the per-scope hash chain covers ALL chained tables,
+            including release_approvals (which is chain-protected, not
+            trigger-protected): a direct edit is caught by verify-chain.
+
+  Layer 1: events has triggers ['trg_events_no_update', 'trg_events_no_delete']
+  [REJECTED] plain UPDATE on events: events is append-only (audit hash-chain)
+
+  Layer 2: release_approvals has triggers [] (chain-protected)
+  target signed approval: rowid=2 actor='user:carol' chain_seq=2
+  attacker force-updated the signed approval (row_hash left stale)
+
+------------------------------------------------------------------------
+$ openmiura db verify-chain --config C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\workspace\openmiura_tampered.yaml
+  [PASS] events scope=44599e2ec0f4… chained=12 preexisting=0
+  [PASS] events scope=45a0644109ef… chained=29 preexisting=0
+  [PASS] release_approvals scope=44599e2ec0f4… chained=4 preexisting=0
+  [FAIL] release_approvals scope=45a0644109ef… chained=3 preexisting=0 (first_bad_seq=2)
+  
+  VERDICT: TAMPER DETECTED
+  -> exit 1
+
+========================================================================
+7) RFC 3161 trusted timestamp (WHEN) — network-gated
+========================================================================
+------------------------------------------------------------------------
+$ openmiura timestamp C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack.zip --tsa-url https://freetsa.org/tsr -o C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack_stamped.zip
+  timestamped pack written to C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack_stamped.zip
+  -> exit 0
+
+------------------------------------------------------------------------
+$ openmiura verify C:\Users\fmarr\Documents\openmiura-pr\docs\academic\simulation\packs\evidence_pack_stamped.zip
+  openMiura evidence pack: C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack_stamped.zip
+  archive sha256: 813bcdf883163e6b3d0b8cae8c0b33978969af295a850647359857b498a8deec
+  package: 635f1def-d09d-4d02-b712-b36640bd3038  portfolio: 2b3f0bf1-e352-4969-b748-4168945dabad
+  signature: ed25519  provider: local-ed25519  origin: derived_seed
+  public key fingerprint: 7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e
+  [PASS] manifest_hash_valid
+  [PASS] manifest_links_valid
+  [PASS] package_integrity_valid
+  [PASS] attestation_export_valid
+  [PASS] postmortem_export_valid
+  [PASS] sidecar_docs_match_signed_package
+  [INFO] chain_of_custody: 3 entries, chain_valid=True
+  [PASS] rfc3161 timestamp: genTime=2026-07-25T16:14:04+00:00 (no TSA anchor given; State/Province: Bayern, Country: DE, Locality: Wuerzburg, Email Address: busilezas@mailbox.org, Common Name: www.freetsa.org, 2.5.4.13: This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, Organizational Unit: TSA, Organization: Free TSA)
+  [SKIP] not verified offline (need time/policy/cloud): notarization
+  
+  VERDICT: VERIFIED (internally consistent, signature valid)
+  Note: this proves the pack is untampered and signed by whoever held the
+  embedded key; it does not by itself prove the signer's identity. Pass
+  --trust-anchor to bind the pack to a known signer.
+  -> exit 0
+
+

@@ -1,0 +1,53 @@
+openMiura simulation — version 1.1.0 — 2026-07-25T10:47:47Z
+repo root: C:\Users\fmarr\Documents\openmiura-pr
+
+========================================================================
+SCENARIO A — Governed runtime: block a policy change until approved
+========================================================================
+  runtime_id           : 2aedee9a-b41d-4da3-ab00-9dfdfe915811
+  approval_id          : f47eaaa2-373e-4692-baaa-32a6fe740dc0
+  requester / approver : platform-admin / security-admin
+  [PASS] approval_required
+  [PASS] blocked_before_approval
+  [PASS] pending_approval_visible
+  [PASS] canvas_operator_action_visible
+  [PASS] executed_after_approval
+  [PASS] signed_release_present
+  [PASS] runtime_timeline_available
+  [PASS] admin_events_available
+  [PASS] current_version_matches
+  overall success      : True
+
+========================================================================
+SCENARIO C — Signature-grade approval (SoD + n-of-m quorum + TOTP + signature)
+========================================================================
+  registered identities: user:alice (creator), user:bob (submitter), user:carol, user:dave (approvers)
+  release_id           : 9c0839e5-3232-43d5-9d2e-44573934994b  (created_by alice, submitted_by bob, quorum n=2)
+  [BLOCKED] creator user:alice self-approval -> HTTP 403
+  [BLOCKED] unknown approver 'ghost' -> HTTP 403
+  enrolled 2FA         : user:carol (confirm HTTP 200)
+  enrolled 2FA         : user:dave (confirm HTTP 200)
+  [BLOCKED] user:carol without OTP -> HTTP 403
+  [OK] user:carol with OTP -> HTTP 200, quorum_met=False
+  release status (1/2) : pending_approval
+  [OK] user:dave with OTP -> HTTP 200, quorum_met=True
+  release status (2/2) : approved
+  signed approvals     : 2 (ed25519, on the audit hash chain)
+     - user:carol :: 2fa=totp :: sig=w0/xELn7XAVks5Za…
+     - user:dave :: 2fa=totp :: sig=Kl9OBI3tsRqZSJkd…
+
+========================================================================
+SCENARIO D — Export a real signed evidence pack (offline-verifiable)
+========================================================================
+  portfolio_id         : 2b3f0bf1-e352-4969-b748-4168945dabad
+  evidence pack        : docs\academic\simulation\packs\evidence_pack.zip (81927 bytes)
+  artifact filename    : openmiura-portfolio-2b3f0bf1-e352-4969-b748-4168945dabad-635f1def-d09d-4d02-b712-b36640bd3038.zip
+
+========================================================================
+SCENARIO B — UAL NMR interpretation pilot (nmr_interpretation policy pack)
+========================================================================
+  nominal    : success=True stage=evidence_pack_written policy_version=1.0
+               required signers: nmr_reviewer
+  escalation : success=True stage=evidence_pack_written policy_version=1.0
+               required signers: pi_approver
+

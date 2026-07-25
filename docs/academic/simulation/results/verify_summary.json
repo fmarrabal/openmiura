@@ -1,0 +1,50 @@
+{
+  "db_tamper": {
+    "any_tamper_detected": true,
+    "layer1_plain_update_rejected": true,
+    "layer1_trigger_error": "events is append-only (audit hash-chain)",
+    "layer1_trigger_table": "events",
+    "layer1_triggers": [
+      "trg_events_no_update",
+      "trg_events_no_delete"
+    ],
+    "layer2_edited_actor": "user:carol",
+    "layer2_table": "release_approvals",
+    "layer2_triggers": [],
+    "verify_chain_exit": 1
+  },
+  "rfc3161": {
+    "gen_time": "2026-07-25T16:14:04+00:00",
+    "rfc3161_line": "[PASS] rfc3161 timestamp: genTime=2026-07-25T16:14:04+00:00 (no TSA anchor given; State/Province: Bayern, Country: DE, Locality: Wuerzburg, Email Address: busilezas@mailbox.org, Common Name: www.freetsa.org, 2.5.4.13: This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, Organizational Unit: TSA, Organization: Free TSA)",
+    "stamped": true,
+    "timestamp_exit": 0,
+    "tsa_common_name": "www.freetsa.org",
+    "tsa_url": "https://freetsa.org/tsr",
+    "verify_stamped_exit": 0
+  },
+  "trust_anchor": {
+    "foreign_anchor_authoritative": false,
+    "foreign_anchor_exit": 2,
+    "foreign_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+    "real_anchor_authoritative": true,
+    "real_anchor_exit": 0
+  },
+  "verify_chain_intact": {
+    "any_tamper": false,
+    "exit": 0
+  },
+  "verify_pack_no_anchor": {
+    "authoritative": true,
+    "exit": 0,
+    "fingerprint": "7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e",
+    "signature_scheme": "ed25519",
+    "verdict": "verified"
+  },
+  "verify_pack_tampered": {
+    "exit": 1,
+    "failures": [
+      "package_integrity_valid"
+    ],
+    "verdict": "failed"
+  }
+}
