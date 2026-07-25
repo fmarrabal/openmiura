@@ -1,0 +1,69 @@
+{
+  "any_tamper": false,
+  "backend": "sqlite",
+  "ok": true,
+  "tables": [
+    {
+      "any_tamper": false,
+      "chains": [
+        {
+          "chain_valid": true,
+          "count": 12,
+          "first_bad_seq": null,
+          "head_hash": "b32258b6bfc34b5fad46ef8bf3c729ee1b494317cf12917f45756991efa6b1df",
+          "head_matches": true,
+          "head_seq": 12,
+          "preexisting_count": 0,
+          "scope": "44599e2ec0f4d088b509d4eb7d2b08663e1449d485546d20697db3b2e437153e"
+        },
+        {
+          "chain_valid": true,
+          "count": 29,
+          "first_bad_seq": null,
+          "head_hash": "80dcf209c159a7eb44f790f2e452bef610f3fa942715982c03462e26ebe2fac0",
+          "head_matches": true,
+          "head_seq": 29,
+          "preexisting_count": 0,
+          "scope": "45a0644109ef50206a60d6ed2c1d6093336da68aaaf05b6bc7eb1d0b8e2ca4d2"
+        }
+      ],
+      "table": "events"
+    },
+    {
+      "any_tamper": false,
+      "chains": [],
+      "table": "tool_calls"
+    },
+    {
+      "any_tamper": false,
+      "chains": [],
+      "table": "decision_traces"
+    },
+    {
+      "any_tamper": false,
+      "chains": [
+        {
+          "chain_valid": true,
+          "count": 4,
+          "first_bad_seq": null,
+          "head_hash": "a7129db26a7c1fa2df77358cff1336ed0b1936b464fe7670302e9954a72837f4",
+          "head_matches": true,
+          "head_seq": 4,
+          "preexisting_count": 0,
+          "scope": "44599e2ec0f4d088b509d4eb7d2b08663e1449d485546d20697db3b2e437153e"
+        },
+        {
+          "chain_valid": true,
+          "count": 3,
+          "first_bad_seq": null,
+          "head_hash": "2de6cff9ef63222323bebf519f93b6b09d57e60f6295ad232211ee487c9c1f0d",
+          "head_matches": true,
+          "head_seq": 3,
+          "preexisting_count": 0,
+          "scope": "45a0644109ef50206a60d6ed2c1d6093336da68aaaf05b6bc7eb1d0b8e2ca4d2"
+        }
+      ],
+      "table": "release_approvals"
+    }
+  ]
+}

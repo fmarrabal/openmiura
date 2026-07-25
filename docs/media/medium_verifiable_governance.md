@@ -34,7 +34,7 @@ pip install openmiura
 
 ## WHAT: a tamper-evident audit trail
 
-Every governance-relevant write — events, tool calls, decision traces, release approvals — is appended to a per-scope hash chain: each row stores a `row_hash` over its canonical content plus the previous row's hash, so any later edit, reorder, or deletion breaks the chain. Append-only is a database-enforced guarantee (triggers reject `UPDATE`/`DELETE`), not a convention.
+Every governance-relevant write — events, tool calls, decision traces, release approvals — is appended to a per-scope hash chain: each row stores a `row_hash` over its canonical content plus the previous row's hash, so any later edit, reorder, or deletion breaks the chain. Append-only isn't a convention: the operational tables (events, tool calls, decision traces) enforce it with database triggers that reject `UPDATE`/`DELETE`, and the chain catches any edit that slips past them — including to the approvals table, which the chain guards directly.
 
 You verify the live database against its own chain heads with one command:
 

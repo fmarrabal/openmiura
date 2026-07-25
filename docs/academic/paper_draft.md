@@ -235,11 +235,16 @@ does not trust the operator. First, the operational audit tables
 (`events`, `tool_calls`, `decision_traces`, `release_approvals`)
 are each an append-only **hash chain**, partitioned per scope:
 every row stores a digest over its canonical content plus the
-previous row's digest, database triggers reject any `UPDATE` or
-`DELETE`, and a chain head can be recomputed and matched
-(`openmiura db verify-chain`); the head is attested inside the
-signed pack, so a later edit to the live database is detectable
-against the pack. Second, the pack is verifiable **offline**: a
+previous row's digest, so any edit, reordering or deletion breaks
+the chain. Tamper-evidence is defended in two layers: three of the
+four tables (`events`, `tool_calls`, `decision_traces`)
+additionally carry database triggers that reject `UPDATE`/`DELETE`
+outright, while `release_approvals` is protected by the chain
+alone; either way a chain head can be recomputed and matched
+(`openmiura db verify-chain`), and because the head is attested
+inside the signed pack, a later edit to the live database — even
+one that drops a trigger or targets the trigger-free table — is
+detectable against the pack. Second, the pack is verifiable **offline**: a
 standalone `openmiura verify <pack.zip>` re-hashes every embedded
 document, recomputes the manifest, and checks the Ed25519 (or
 ECDSA-P256) signature over a canonical signing input, using only
@@ -379,6 +384,63 @@ future clinical pilot, with explicit separation of repositories
 seven minimum policy primitives including
 *payload_anonymisation_attested* and
 *irb_reference_required_for_publication*.
+
+### 5.1 An executable end-to-end run
+
+To keep the claims of §3–§5 honest, the repository carries a
+reproducible harness (`docs/academic/simulation/`) that drives
+the **real** system — the same FastAPI app, persistence layer,
+policy/approval engine and Ed25519 signing that ship in the
+package — and records every result as JSON plus a transcript.
+The figures below are generated from that captured output; no
+outcome is hand-authored. This is a *faithfulness* artefact,
+not a performance benchmark, and it inherits the empirical
+limits stated in §6.4.
+
+The harness exercises four scenarios and then the auditor's
+side of the system. In the governed-runtime scenario, a
+sensitive quiet-hours policy change is blocked at
+*pending_approval*, becomes executable only after a distinct
+approver signs from the operator surface, and leaves a signed
+release; all nine post-conditions of the canonical demo hold
+(Fig. 1). The signature-grade release scenario shows the
+separation-of-duties, quorum and second-factor controls of
+§3.2 rejecting a creator's self-approval, an unregistered
+identity and a missing TOTP code, then admitting two distinct
+TOTP-authenticated approvers to reach the *n*-of-*m* quorum,
+each writing an Ed25519 signature onto the hash chain (Fig. 5).
+
+The verification chain of §3.3 is then reproduced against the
+exported artefacts (Fig. 2). `openmiura db verify-chain` reports
+every per-scope chain intact; `openmiura verify` reads the
+evidence pack as *verified* and, once bound with
+`--trust-anchor` to the operator's real key fingerprint, as
+*authoritative* — while the same pack under a foreign anchor is
+reported *non-authoritative* (a distinct exit code) and a
+one-byte edit to signed content *fails* outright (Fig. 4).
+Tamper-evidence is defended in two layers (Fig. 3): a plain
+`UPDATE` on a trigger-protected operational table is rejected at
+the database, and a direct edit to a signed approval in the
+trigger-free `release_approvals` table — the kind of edit an
+operator with raw database access could make — is nonetheless
+caught by `verify-chain`, which pins the first broken row. The
+per-(table, scope) chain structure, with the head hash that is
+attested inside the signed pack, is shown in Fig. 6. Finally,
+`openmiura timestamp` obtains an RFC 3161 token from a public
+Timestamping Authority over the pack signature, which
+`openmiura verify` then checks offline, attesting an independent
+*when* (Fig. 7).
+
+![Fig. 3 — two-layer tamper-evidence: the live chain is intact,
+and a forced edit to a signed approval is detected, with the
+first broken row pinned.](simulation/figures/fig3_tamper_detection.png)
+
+![Fig. 4 — offline evidence-pack verification distinguishes
+untampered-but-unbound, signer-bound, foreign-key and tampered
+packs by distinct exit codes.](simulation/figures/fig4_pack_verification.png)
+
+The full set of figures, the JSON results and the three scripts
+that regenerate them are under `docs/academic/simulation/`.
 
 ## 6. Discussion
 

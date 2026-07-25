@@ -1,0 +1,105 @@
+{
+  "archive_sha256": "4a742a25938b468f3444302b6e8d601dcf86f336abab128d14f190ec8ab97cec",
+  "archive_size_bytes": 81937,
+  "authoritative": false,
+  "checks": {
+    "attestation_export_valid": true,
+    "manifest_hash_valid": true,
+    "manifest_links_valid": true,
+    "package_integrity_valid": false,
+    "postmortem_export_valid": true,
+    "sidecar_docs_match_signed_package": true
+  },
+  "consistent": false,
+  "cryptographically_signed": true,
+  "details": {
+    "attestation_export": {
+      "error": null,
+      "expected_payload_hash": "e160959ecc56d12b640185b9c4c3e7037391a2c1ebcb8361dfc8f4ccfaabfd38",
+      "expected_signature": null,
+      "key_origin": "derived_seed",
+      "payload_hash_valid": true,
+      "public_key_fingerprint": "7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e",
+      "public_key_valid": true,
+      "report_type": "openmiura_portfolio_attestation_export_v1",
+      "scheme": "ed25519",
+      "signature_input_valid": true,
+      "signature_valid": true,
+      "signed": true,
+      "signer_key_id": "arxiv-operator-ci",
+      "signer_provider": "local-ed25519",
+      "valid": true
+    },
+    "chain_of_custody": {
+      "chain_valid": true,
+      "count": 3,
+      "head_hash": "81963db2b6bb77035c505b2cb6bda60aebbc93e76fb691a4fdb8d8a3e82ffd6b",
+      "invalid_entry_ids": [],
+      "signature_valid_count": 3,
+      "valid": true
+    },
+    "package_integrity": {
+      "error": "InvalidSignature",
+      "expected_payload_hash": "0f4bbda9a0489fd0fa974a2987c2c2bf919cb526c7cf3199373f8f06a50ffb60",
+      "expected_signature": null,
+      "key_origin": "derived_seed",
+      "payload_hash_valid": false,
+      "public_key_fingerprint": "7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e",
+      "public_key_valid": true,
+      "report_type": "openmiura_portfolio_evidence_package_v1",
+      "scheme": "ed25519",
+      "signature_input_valid": false,
+      "signature_valid": false,
+      "signed": true,
+      "signer_key_id": "arxiv-operator-ci",
+      "signer_provider": "local-ed25519",
+      "valid": false
+    },
+    "postmortem_export": {
+      "error": null,
+      "expected_payload_hash": "47a89f8eb3d90c604979a75b02e17891223fde661580a6235b042a21ad1a7cf5",
+      "expected_signature": null,
+      "key_origin": "derived_seed",
+      "payload_hash_valid": true,
+      "public_key_fingerprint": "7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e",
+      "public_key_valid": true,
+      "report_type": "openmiura_portfolio_postmortem_v1",
+      "scheme": "ed25519",
+      "signature_input_valid": true,
+      "signature_valid": true,
+      "signed": true,
+      "signer_key_id": "arxiv-operator-ci",
+      "signer_provider": "local-ed25519",
+      "valid": true
+    }
+  },
+  "dev_key_fingerprint_match": false,
+  "dev_signing_key": false,
+  "failures": [
+    "package_integrity_valid"
+  ],
+  "key_origin": "derived_seed",
+  "manifest": {
+    "expected_manifest_hash": "3128ef7d88f33e78de3e986f6985d9cb12296fcf18403021c887d6a58eb2f819",
+    "manifest_hash": "3128ef7d88f33e78de3e986f6985d9cb12296fcf18403021c887d6a58eb2f819",
+    "valid": true
+  },
+  "not_verified_offline": {
+    "custody_anchor_present": false,
+    "escrow_present": false,
+    "notarization_present": true
+  },
+  "ok": true,
+  "pack": "C:/Users/fmarr/Documents/openmiura-pr/docs/academic/simulation/packs/evidence_pack_tampered.zip",
+  "package_id": "635f1def-d09d-4d02-b712-b36640bd3038",
+  "portfolio_id": "2b3f0bf1-e352-4969-b748-4168945dabad",
+  "public_key_fingerprint": "7573864941f89fecde124793b9164e1854582dd17a32fb05f1f715aef824455e",
+  "signature_scheme": "ed25519",
+  "signed": true,
+  "signer_provider": "local-ed25519",
+  "signing_warning": null,
+  "timestamp": null,
+  "trust_anchor_checked": false,
+  "trusted_signer": null,
+  "verdict": "failed"
+}

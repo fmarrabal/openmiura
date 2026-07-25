@@ -1,0 +1,90 @@
+{
+  "distinct_signers": [
+    "user:carol",
+    "user:dave"
+  ],
+  "events": [
+    {
+      "blocked": true,
+      "http_status": 403,
+      "step": "self_approval_alice"
+    },
+    {
+      "blocked": true,
+      "http_status": 403,
+      "step": "unknown_approver_ghost"
+    },
+    {
+      "blocked": true,
+      "http_status": 403,
+      "step": "carol_without_otp"
+    },
+    {
+      "http_status": 200,
+      "quorum_met": false,
+      "step": "carol_with_otp"
+    },
+    {
+      "http_status": 200,
+      "quorum_met": true,
+      "step": "dave_with_otp"
+    }
+  ],
+  "quorum_required_n": 2,
+  "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+  "signed_approvals": [
+    {
+      "action": "submit",
+      "actor": "user:bob",
+      "chain_seq": 1,
+      "created_at": 1784976469.4111493,
+      "meaning": null,
+      "otp_verified_at": null,
+      "prev_hash": "",
+      "reason": "",
+      "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+      "row_hash": "2302d897a1f567efac34a111a2e3789016d490c1cadba5c9b4d85df2595f5787",
+      "second_factor_method": null,
+      "signature": null,
+      "signature_scheme": null,
+      "signer_key_id": null,
+      "signer_user_key": null
+    },
+    {
+      "action": "approve",
+      "actor": "user:carol",
+      "chain_seq": 2,
+      "created_at": 1784976469.4666224,
+      "meaning": "approved release for promotion",
+      "otp_verified_at": 1784976469.4478822,
+      "prev_hash": "2302d897a1f567efac34a111a2e3789016d490c1cadba5c9b4d85df2595f5787",
+      "reason": "",
+      "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+      "row_hash": "87c85b8e51c86b8ebbfbec3f4ac8a18054f5ad713c1652e8dc442e24baa4a2ee",
+      "second_factor_method": "totp",
+      "signature": "w0/xELn7XAVks5Za5776l1a4bBOrTqo9r70Q1kO9W5ysu1xqrn3C2Hn4OD8wpJzWzinR+DIQhggegFu7Q2FvCQ==",
+      "signature_scheme": "ed25519",
+      "signer_key_id": "openmiura-release-approvals",
+      "signer_user_key": "user:carol"
+    },
+    {
+      "action": "approve",
+      "actor": "user:dave",
+      "chain_seq": 3,
+      "created_at": 1784976469.4697025,
+      "meaning": "approved release for promotion",
+      "otp_verified_at": 1784976469.4686792,
+      "prev_hash": "87c85b8e51c86b8ebbfbec3f4ac8a18054f5ad713c1652e8dc442e24baa4a2ee",
+      "reason": "",
+      "release_id": "9c0839e5-3232-43d5-9d2e-44573934994b",
+      "row_hash": "2de6cff9ef63222323bebf519f93b6b09d57e60f6295ad232211ee487c9c1f0d",
+      "second_factor_method": "totp",
+      "signature": "Kl9OBI3tsRqZSJkdg8t1ODMpGB4bDrpS2Dj348oSZuXpuV17/Y7bIIzPEYy9ZQYcvuk/JVsCNgYvR9QmfH+NDA==",
+      "signature_scheme": "ed25519",
+      "signer_key_id": "openmiura-release-approvals",
+      "signer_user_key": "user:dave"
+    }
+  ],
+  "status_after_first": "pending_approval",
+  "status_after_second": "approved"
+}

@@ -1,0 +1,82 @@
+{
+  "success": true,
+  "stage": "evidence_pack_written",
+  "policy_version": "1.0",
+  "scope": {
+    "tenant_id": "ual",
+    "workspace_id": "nmrmbc",
+    "environment": "research"
+  },
+  "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+  "evidence_pack": {
+    "spectrum_sha256": "3b96938c74dfce93fff969fb1985464be122d0afe98ef92b254756f3c1bcee4c",
+    "prompt_sha256": "7f2c30edfd96a17e2e6f04324ec8d5157c205bf22e09fac26919639810b33e27",
+    "model_identifier": "openmiura-research-mock@0.0.1-pilot",
+    "scope": {
+      "tenant_id": "ual",
+      "workspace_id": "nmrmbc",
+      "environment": "research"
+    },
+    "policy_version": "1.0",
+    "manifest_sha256": "d12bb263947b706f83cd6bf32fb2cdaedc1089422c96bddda8427690036da89f",
+    "signatures": [
+      {
+        "signer": "pilot-nmr_reviewer-11daf68b-dbd3-4e12-af6d-b394431c310a",
+        "role": "nmr_reviewer",
+        "meaning": "reviewed; assignments match spectrum and known chemistry",
+        "timestamp": 1784976470.1070485
+      },
+      {
+        "signer": "pilot-pi_approver-6ea6003c-7e08-4f8f-826d-e90a35c48c5d",
+        "role": "pi_approver",
+        "meaning": "approved for laboratory notebook despite unknown impurity flag",
+        "timestamp": 1784976470.1070485
+      }
+    ],
+    "draft_evaluation": {
+      "matched_rules": [
+        {
+          "id": "spectrum_hash_recorded",
+          "matched": true
+        },
+        {
+          "id": "model_version_pinned",
+          "matched": true
+        },
+        {
+          "id": "scope_isolation",
+          "matched": true
+        }
+      ],
+      "required_signers": [],
+      "denied": false,
+      "deny_reasons": []
+    },
+    "publish_evaluation": {
+      "matched_rules": [
+        {
+          "id": "unknown_impurity_requires_pi_approval",
+          "matched": true
+        },
+        {
+          "id": "evidence_pack_with_full_chain",
+          "matched": true
+        },
+        {
+          "id": "scope_isolation",
+          "matched": true
+        }
+      ],
+      "required_signers": [
+        {
+          "rule_id": "unknown_impurity_requires_pi_approval",
+          "role": "pi_approver",
+          "meaning": "approved for laboratory notebook despite unknown impurity flag",
+          "multi_party": false
+        }
+      ],
+      "denied": false,
+      "deny_reasons": []
+    }
+  }
+}
