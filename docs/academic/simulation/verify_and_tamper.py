@@ -284,6 +284,23 @@ def demo_rfc3161() -> None:
             (RESULTS / "verify_pack_stamped.json").write_text(json.dumps(js, indent=2, sort_keys=True), encoding="utf-8")
         except Exception:
             pass
+        # Anchored variant: fetch the TSA's public certificate and verify the
+        # token against it, so the '--tsa-anchor' form is evidenced by a real
+        # run too (network-gated; recorded either way).
+        cert_url = os.environ.get("OPENMIURA_SIM_TSA_CERT_URL", "https://freetsa.org/files/tsa.crt")
+        cert_path = WORKSPACE / "freetsa_tsa.crt"
+        if not cert_path.exists():
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(cert_url, cert_path)  # noqa: S310 — fixed https URL
+            except Exception as exc:
+                outcome["tsa_anchor"] = {"fetched": False, "error": repr(exc)}
+        if cert_path.exists():
+            acode, atext = show("verify <stamped pack> --tsa-anchor <TSA cert>",
+                                ["verify", str(stamped), "--tsa-anchor", str(cert_path)])
+            trusted = any("trusted TSA" in ln for ln in atext.splitlines())
+            outcome["tsa_anchor"] = {"fetched": True, "cert_url": cert_url,
+                                     "verify_exit": acode, "reported_trusted": trusted}
     else:
         log("  RFC 3161 timestamping did not complete (no network access to a public TSA).")
         log("  The offline verification path is exercised by tests/test_rfc3161_*.py and")

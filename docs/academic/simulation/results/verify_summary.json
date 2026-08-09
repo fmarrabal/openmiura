@@ -14,10 +14,16 @@
     "verify_chain_exit": 1
   },
   "rfc3161": {
-    "gen_time": "2026-07-25T16:14:04+00:00",
-    "rfc3161_line": "[PASS] rfc3161 timestamp: genTime=2026-07-25T16:14:04+00:00 (no TSA anchor given; State/Province: Bayern, Country: DE, Locality: Wuerzburg, Email Address: busilezas@mailbox.org, Common Name: www.freetsa.org, 2.5.4.13: This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, Organizational Unit: TSA, Organization: Free TSA)",
+    "gen_time": "2026-08-09T22:03:56+00:00",
+    "rfc3161_line": "[PASS] rfc3161 timestamp: genTime=2026-08-09T22:03:56+00:00 (no TSA anchor given; State/Province: Bayern, Country: DE, Locality: Wuerzburg, Email Address: busilezas@mailbox.org, Common Name: www.freetsa.org, 2.5.4.13: This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, Organizational Unit: TSA, Organization: Free TSA)",
     "stamped": true,
     "timestamp_exit": 0,
+    "tsa_anchor": {
+      "cert_url": "https://freetsa.org/files/tsa.crt",
+      "fetched": true,
+      "reported_trusted": true,
+      "verify_exit": 0
+    },
     "tsa_common_name": "www.freetsa.org",
     "tsa_url": "https://freetsa.org/tsr",
     "verify_stamped_exit": 0
