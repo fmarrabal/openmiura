@@ -139,14 +139,17 @@ Same legend as in [`mapping_21cfr_part11.md`](mapping_21cfr_part11.md):
 
 ## Summary
 
-| Status | Count of controls |
+Counted at the granularity of the table rows above (Annex 11
+clauses and sub-clauses each get one row):
+
+| Status | Count of rows |
 |---|---:|
 | Stable | 0 |
-| Beta | 9 |
-| Partial | 11 |
+| Beta | 13 |
+| Partial | 14 |
 | Experimental | 1 |
 | n/a (organisational) | 4 |
-| **Total** | **25** |
+| **Total** | **32** |
 
 The Annex 11 mapping is denser than Part 11 because the EU
 framework asks more explicitly about lifecycle and change

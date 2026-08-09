@@ -102,14 +102,17 @@ encryption, digital signatures.
 
 ## Summary
 
-| Status | Count of controls |
+Counted at the granularity of the table rows above (each
+regulation paragraph or sub-paragraph gets one row):
+
+| Status | Count of rows |
 |---|---:|
 | Stable | 0 |
-| Beta | 7 |
-| Partial | 10 |
+| Beta | 9 |
+| Partial | 11 |
 | Experimental | 2 |
 | n/a (organisational/hardware) | 7 |
-| **Total** | **26** |
+| **Total** | **29** |
 
 The reading is straightforward: openMiura provides a credible
 technical contribution to roughly half of the Part 11 controls,

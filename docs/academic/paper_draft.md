@@ -35,17 +35,18 @@ RFC 3161 trusted timestamp. We
 position openMiura as a GAMP 5 Category 4 product: the value
 comes from the policy packs, not the binary. We map the
 primitives control-by-control to FDA 21 CFR Part 11, EU GMP
-Annex 11 and ALCOA+ data integrity, arguing that the platform
-contributes meaningfully to roughly half of the technical
-controls while making the residual organisational
+Annex 11 and ALCOA+ data integrity with an honest per-control
+maturity label, making the residual organisational
 responsibilities explicit. We describe a
-non-clinical reference implementation: a governed assistant
+non-clinical reference implementation — a governed assistant
 for ¹H / ¹³C NMR interpretation of organometallic catalytic
 compounds at the Universidad de Almería, with three distinct
-identities, signature-grade approval (resolved identity,
-separation of duties, an *n*-of-*m* quorum, a TOTP second factor
-and a per-approval signature), and a
-reproducible smoke-test artefact. We discuss the limits of any governance
+identities and reviewer-before-approver gating — and an
+executable end-to-end run of the platform that exercises the
+signature-grade approval path (resolved identity, separation
+of duties, an *n*-of-*m* quorum, a single-use TOTP second
+factor, a per-approval signature) and reproduces the offline
+verification chain from the exported artefacts. We discuss the limits of any governance
 layer that cannot, by construction, eliminate hallucination
 inside the agent itself, and we frame the path that takes a
 non-governed laboratory copilot through four stages — mirror,
@@ -55,7 +56,7 @@ control-mapping that practitioners can use today; the open
 question is whether the pattern survives contact with a
 sufficient number of QA / regulatory teams to become the
 default.
-*(272 words)*
+*(284 words)*
 
 ## 1. Introduction
 
@@ -136,12 +137,12 @@ openMiura's policy engine, but their approval-gate concept is
 operational (e.g. "this prompt requires approval before being
 sent to a model") rather than regulatory (signer + meaning +
 timestamp tied to a record). Credal in particular has an
-enterprise-compliance focus, but its evidence model is closed
-and not aligned with 21 CFR Part 11 §11.50 / §11.70. A reviewer
-cannot inspect Credal's approval gate format and conclude that
-it is — or is not — congruent with the framework they validate
-against; the only available answer is the vendor's marketing
-claim, which a regulatory inspection does not accept.
+enterprise-compliance focus, but its evidence format is not
+publicly documented, so a reviewer cannot independently assess
+whether its approval records are congruent with 21 CFR Part 11
+§11.50 / §11.70. openMiura's record formats and their mapping
+are published precisely so that this assessment is possible
+without relying on vendor statements.
 
 **Cloud agent-governance bundles.** Microsoft Agent Governance
 Toolkit, AWS Bedrock Agents and Google Vertex AI Agent Builder
@@ -152,19 +153,17 @@ that a Quality Assurance reviewer can put in a validation
 package without further work. Data sovereignty under EU pharma
 data protection rules [@gdpr] is also a recurring concern for
 EU-regulated organisations adopting US cloud-bundled tooling;
-several mid-size pharma companies have stated openly that they
-require either an on-premises or an EU-region-only deployment
-for any system that touches their batch records, which rules
-out most cloud-bundle answers as the *primary* governance
-plane.
+an organisation that requires an on-premises or EU-region-only
+deployment for systems touching its batch records cannot adopt
+most cloud-bundle answers as the *primary* governance plane.
 
 **Academic prototypes.** A handful of academic prototypes
 explore agent governance in research settings, but they are
 typically (a) tied to a specific runtime, (b) released under
 ad-hoc licences that complicate adoption inside a corporate
 quality system, and (c) do not provide regulatory mappings.
-We position openMiura as the bridge between the academic
-clarity of intent and the production-grade requirements of
+We position openMiura as a bridge between the academic
+clarity of intent and the operational requirements of
 GxP environments.
 
 The literature on LLM evaluation [@helm; @lost_in_the_middle]
@@ -221,12 +220,16 @@ altered or back-dated after the fact.
 ### 3.3 Evidence packs
 
 Every workflow that ends in a record can produce a self-
-contained evidence pack: the audit trail (policy decisions,
-approval gates, tool calls), the complete prompt-and-completion
-pairs of the agent invocations involved, a snapshot of the
-relevant policy YAML at the time of decision, the signed
-manifest with SHA-256 hashes of every embedded artefact, and
-the signer identity and signature meaning. The pack is the
+contained evidence pack: the governed timeline of the workflow
+(runtime audit events including the approval decisions),
+attestation and post-mortem exports, a chain-of-custody log
+that embeds the audit-chain head, a notarization receipt, the
+signed manifest with SHA-256 hashes of every embedded
+document, and the signer identity and signature meaning. The
+underlying decision traces — prompt, completion, tools
+considered, policies applied — remain queryable in the audit
+store; the pack embeds the governed timeline and its custody
+chain rather than raw model I/O. The pack is the
 unit of record an inspector or an internal investigation
 would request.
 
@@ -241,14 +244,21 @@ four tables (`events`, `tool_calls`, `decision_traces`)
 additionally carry database triggers that reject `UPDATE`/`DELETE`
 outright, while `release_approvals` is protected by the chain
 alone; either way a chain head can be recomputed and matched
-(`openmiura db verify-chain`), and because the head is attested
-inside the signed pack, a later edit to the live database — even
-one that drops a trigger or targets the trigger-free table — is
-detectable against the pack. Second, the pack is verifiable **offline**: a
+(`openmiura db verify-chain`). Self-verification has a stated
+limit: an actor with unrestricted database access who rewrites a
+chain *consistently* — recomputing every downstream digest and
+the stored head — will pass it. This is why the head is also
+attested inside the signed pack: an auditor who holds a
+previously exported pack can compare heads, so a later rewrite of
+the live database — even one that drops a trigger, targets the
+trigger-free table, or recomputes the chain — is detectable
+against the pack unless the operator can forge the pack
+signature. Second, the pack is verifiable **offline**: a
 standalone `openmiura verify <pack.zip>` re-hashes every embedded
 document, recomputes the manifest, and checks the Ed25519 (or
 ECDSA-P256) signature over a canonical signing input, using only
-the `cryptography` library — no server, no database. A supplied
+the `cryptography` and `asn1crypto` libraries — no server, no
+database, no network. A supplied
 `--trust-anchor` binds the pack to a *known* signer (a pack
 forged with an attacker's own key then reads as
 *non-authoritative*), and the built-in public development seed is
@@ -262,11 +272,13 @@ adding a trusted *when* to the trusted *what* and *who*.
 
 Every persistent record carries a triple
 `(tenant_id, workspace_id, environment)`. The persistence
-layer enforces scope filtering at SQL level — there is no path
-that returns records outside the requested scope unless the
-requester holds an explicit cross-scope role. This is the
-technical mechanism that prevents accidental cross-tenant
-exposure during search, listing or replay.
+layer applies scope filtering at SQL level in every query
+path, so that records outside the requested scope are not
+returned unless the requester holds an explicit cross-scope
+role. This property has been verified by tests at the SQL
+level; a formal red-team audit of the filter remains open
+(§6.3). The mechanism's purpose is to prevent accidental
+cross-tenant exposure during search, listing or replay.
 
 ### 3.5 Implementation
 
@@ -275,7 +287,7 @@ FastAPI [@fastapi] and SQLite/PostgreSQL. After Phase 1 of
 the project, the persistence layer comprises 12 specialised
 repository classes under `openmiura/persistence/`, none of
 them over 1,500 lines of code. The HTTP admin layer is split
-into 15 sub-routers under `openmiura/interfaces/http/routes/admin/`.
+into 16 sub-routers under `openmiura/interfaces/http/routes/admin/`.
 The codebase is GAMP 5 Category 4: the binary is generic, the
 configuration (policy packs in YAML, role assignments,
 deployment profile) is the validated artefact. The auditor-facing
@@ -295,10 +307,12 @@ implementation.
 We summarise the mapping; the full control-by-control tables
 live in the project repository under `docs/regulated/`.
 
-**21 CFR Part 11.** openMiura contributes meaningfully to 17
-of 26 controls (Beta or Partial); 7 of 26 are out of technical
-scope (organisational training, hardware tokens, certification
-to FDA). The strongest contributions are §11.10(e) audit
+**21 CFR Part 11.** Counting at the granularity of the mapping
+table (one row per regulation paragraph or sub-paragraph),
+openMiura contributes at *Beta* or *Partial* maturity to 20 of
+the 29 mapped rows; 7 of 29 are out of technical scope
+(organisational training, hardware tokens, certification to
+FDA) and 2 remain *Experimental*. The strongest contributions are §11.10(e) audit
 trail, §11.50 signature manifestations and §11.70
 signature/record linking. Since the initial mapping, the
 audit-trail control §11.10(e) has been strengthened from a
@@ -311,8 +325,10 @@ quorum. These are also the controls under which most CSV
 remediations get cited, so the contribution is
 practically valuable, not merely formal.
 
-**EU GMP Annex 11.** openMiura contributes to 19 of 25
-controls; 5 of 25 are organisational. The strongest
+**EU GMP Annex 11.** At the same row granularity, openMiura
+contributes at *Beta* or *Partial* maturity to 27 of the 32
+mapped rows; 4 of 32 are organisational and 1 remains
+*Experimental*. The strongest
 contribution is control 14 (electronic signatures: signer +
 meaning + timestamp + linked_record_id, all enforced at write
 time) and control 15 (batch release: QP role enforcement on
@@ -366,9 +382,13 @@ are pinned at draft time. Paramagnetic samples are explicitly
 out of scope.
 
 A reproducible smoke-test artefact (`scripts/run_pilot_ual_nmr_demo.py`)
-walks the synthetic workflow end to end and writes a signed
-JSON report. The script is idempotent: the manifest hash is
-stable across runs for the same synthetic input. The smoke
+walks the synthetic workflow end to end and writes a JSON
+report whose manifest hash is stable across runs for the same
+synthetic input. The report records the signer identities,
+roles and signature meanings as structured fields; it does not
+carry a cryptographic signature of its own — that property
+belongs to the platform's evidence packs (§3.3), not to this
+policy-pack smoke test. The smoke
 test is the *vendor-side* Operational Qualification artefact;
 the *organisation-side* PQ requires three real spectra
 acquired over three different days by three different
@@ -413,11 +433,13 @@ each writing an Ed25519 signature onto the hash chain (Fig. 5).
 The verification chain of §3.3 is then reproduced against the
 exported artefacts (Fig. 2). `openmiura db verify-chain` reports
 every per-scope chain intact; `openmiura verify` reads the
-evidence pack as *verified* and, once bound with
-`--trust-anchor` to the operator's real key fingerprint, as
-*authoritative* — while the same pack under a foreign anchor is
-reported *non-authoritative* (a distinct exit code) and a
-one-byte edit to signed content *fails* outright (Fig. 4).
+evidence pack as *verified* (signature valid, internally
+consistent — without asserting who the signer is). Binding the
+verdict with `--trust-anchor` to the operator's known key
+fingerprint confirms the signer; the same pack checked against a
+foreign anchor is demoted to *non-authoritative* with a distinct
+exit code, and a one-byte edit to signed content *fails*
+outright (Fig. 4).
 Tamper-evidence is defended in two layers (Fig. 3): a plain
 `UPDATE` on a trigger-protected operational table is rejected at
 the database, and a direct edit to a signed approval in the
@@ -435,9 +457,11 @@ Timestamping Authority over the pack signature, which
 and a forced edit to a signed approval is detected, with the
 first broken row pinned.](simulation/figures/fig3_tamper_detection.png)
 
-![Fig. 4 — offline evidence-pack verification distinguishes
-untampered-but-unbound, signer-bound, foreign-key and tampered
-packs by distinct exit codes.](simulation/figures/fig4_pack_verification.png)
+![Fig. 4 — offline evidence-pack verification: an unanchored and
+a correctly signer-bound pack both verify (exit 0, with the
+signer asserted only in the bound case), a foreign trust anchor
+demotes the verdict to non-authoritative (exit 2), and tampered
+signed content fails (exit 1).](simulation/figures/fig4_pack_verification.png)
 
 The full set of figures, the JSON results and the three scripts
 that regenerate them are under `docs/academic/simulation/`.
@@ -504,11 +528,16 @@ than asserted here.
 
 Three threats to validity are worth naming explicitly.
 
-The *empirical evidence base* is currently one synthetic
-smoke-test artefact and a discovery interview kit that has not
-yet been exercised at scale. We do not claim that the
-governance pattern is proven by the work in this paper; the
-contribution is the artefact and the mapping. The discovery
+The *empirical evidence base* is currently two synthetic
+artefacts — the NMR policy-pack smoke test (§5) and the
+executable end-to-end run (§5.1) — plus a discovery interview
+kit that has not yet been exercised at scale. Both artefacts
+demonstrate *faithfulness* (the platform does what the paper
+says it does); neither demonstrates *efficacy* (that governed
+deployments produce better scientific or regulatory outcomes),
+and no real user has yet operated the pilot. We do not claim
+that the governance pattern is proven by the work in this
+paper; the contribution is the artefact and the mapping. The discovery
 phase will produce, over the next 4–8 weeks, the qualitative
 data needed to assess whether the pattern matches a real pain
 across organisations. We commit to publishing follow-up work

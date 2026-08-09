@@ -208,9 +208,11 @@ evident log (e.g. a corporate immutable store) is **Experimental**.
 
 Every persistent record carries a triple
 `(tenant_id, workspace_id, environment)`. The persistence layer
-enforces scope filtering at SQL level — there is no path that
-returns records outside the requested scope unless the requester
-holds an explicit cross-scope role. This prevents accidental
+applies scope filtering at SQL level in every query path, so that
+records outside the requested scope are not returned unless the
+requester holds an explicit cross-scope role — a property
+verified by tests at the SQL level, with the formal red-team
+audit below still open. Its purpose is to prevent accidental
 cross-tenant exposure during search, listing or replay.
 
 Scope isolation is **Beta**: implemented across the persistence

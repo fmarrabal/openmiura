@@ -34,7 +34,7 @@ token (see *Notes*).
 | **A. Governed runtime** | A sensitive policy change is *blocked* until a human approves it, then executes, leaving a signed release and an auditable trail. | `openmiura/demo/canonical_case.py`, driven over the in-process FastAPI app |
 | **B. NMR pilot** | The synthetic UAL ¹H/¹³C NMR interpretation workflow against the `nmr_interpretation` policy pack — nominal (requires `nmr_reviewer`) and the unknown-impurity escalation (requires `pi_approver`). | `scripts/run_pilot_ual_nmr_demo.py` |
 | **C. Signature-grade approval** | Separation of duties (creator/submitter blocked), an *n*-of-*m* quorum of distinct approvers, a single-use **TOTP** second factor, and a per-approval **Ed25519** signature — all on the audit hash chain. | `/admin/releases/*`, `/admin/auth/otp/*` |
-| **D. Evidence pack** | A real signed evidence pack exported for offline verification. | `/admin/openclaw/alert-governance/portfolios/*/evidence-package-export` |
+| **D. Evidence pack** | A real signed evidence pack exported for offline verification. | the runtime-adapter alert-governance portfolio export route (see `run_simulation.py`, scenario D, for the exact path) |
 
 The verification driver then runs the auditor's side: `openmiura db
 verify-chain`, `openmiura verify` (with and without `--trust-anchor`), a
@@ -98,6 +98,11 @@ simulation/
   the run has no network, scenario 7 records that it was skipped; the offline
   verification path is covered by `tests/test_cli_verify_timestamp.py` and
   `tests/test_rfc3161_*.py`.
+- **Raw captures are verbatim.** The JSON under `results/` is the system's
+  actual output, unedited. It therefore contains the deprecated internal
+  identifier for the external runtime adapter in route paths and action names;
+  sanitising captured evidence would defeat its purpose, so it is kept
+  as-recorded (the identifier is scheduled for a controlled rename).
 - **No UI screenshots.** openMiura's UI v2 is currently a *design-tokens
   preview*, not yet a functional operations console (auth and the admin surface
   land in later PRs, and it self-labels as such). Presenting it as a live

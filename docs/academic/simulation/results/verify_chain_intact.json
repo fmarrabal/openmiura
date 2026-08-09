@@ -18,11 +18,11 @@
         },
         {
           "chain_valid": true,
-          "count": 29,
+          "count": 30,
           "first_bad_seq": null,
-          "head_hash": "80dcf209c159a7eb44f790f2e452bef610f3fa942715982c03462e26ebe2fac0",
+          "head_hash": "40b8750787983c3a6d24ffe1405d75b3707013f66fda96bbefa64192d3ad781d",
           "head_matches": true,
-          "head_seq": 29,
+          "head_seq": 30,
           "preexisting_count": 0,
           "scope": "45a0644109ef50206a60d6ed2c1d6093336da68aaaf05b6bc7eb1d0b8e2ca4d2"
         }

@@ -1,6 +1,6 @@
 {
-  "archive_sha256": "813bcdf883163e6b3d0b8cae8c0b33978969af295a850647359857b498a8deec",
-  "archive_size_bytes": 85675,
+  "archive_sha256": "fd5bc1fe930fd47e7956b2c271f54660f40d6fbe58bb00312b581cb5f23e5b48",
+  "archive_size_bytes": 85679,
   "authoritative": true,
   "checks": {
     "attestation_export_valid": true,
@@ -99,10 +99,10 @@
   "timestamp": {
     "covers": "integrity.signature",
     "error": null,
-    "gen_time": "2026-07-25T16:14:04+00:00",
+    "gen_time": "2026-08-09T22:03:56+00:00",
     "imprint_match": true,
     "present": true,
-    "serial_number": 108820539,
+    "serial_number": 115273164,
     "signature_valid": true,
     "trusted": null,
     "tsa": "State/Province: Bayern, Country: DE, Locality: Wuerzburg, Email Address: busilezas@mailbox.org, Common Name: www.freetsa.org, 2.5.4.13: This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, Organizational Unit: TSA, Organization: Free TSA",
