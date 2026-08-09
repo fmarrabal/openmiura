@@ -43,7 +43,12 @@ dependencies = [
   "PyYAML>=6.0,<7",
   "click>=8.3.2,<9",
   "discord.py>=2.4,<3",
-  "cryptography>=46.0.7,<50",
+  # <50 excluded the fix for PYSEC-2026-3552 / CVE-2026-69247 (PKCS#7
+  # EnvelopedData Bleichenbacher oracle, fixed in 50.0.0; openMiura does not
+  # call the affected decryption path, but the audit gate rightly flags it).
+  # https://osv.dev/vulnerability/PYSEC-2026-3552
+  # https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
+  "cryptography>=46.0.7,<51",
   # RFC 3161 trusted-timestamp parsing/verification (TimeStampToken / TSTInfo /
   # CMS). Pure-Python, MIT (Apache-2.0 compatible), no transitive deps.
   "asn1crypto>=1.5,<2",
