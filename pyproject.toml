@@ -53,7 +53,7 @@ dependencies = [
   # CMS). Pure-Python, MIT (Apache-2.0 compatible), no transitive deps.
   "asn1crypto>=1.5,<2",
   "prometheus-client>=0.25.0,<1",
-  "mcp>=1.0,<2",
+  "mcp>=1.0,<3",
 ]
 
 
