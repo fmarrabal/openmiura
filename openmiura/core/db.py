@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -62,6 +63,12 @@ class DBConnection:
         self.backend = _normalize_backend(backend)
         self.db_path = db_path
         self.database_url = database_url
+        # Serialises append-only audit writes. The SQLite connection is shared
+        # across threads (check_same_thread=False below) and the hash-chain
+        # link is a read-modify-write of the per-scope head, so concurrent
+        # writers must not interleave. Held by
+        # ``openmiura.persistence.base.chain_write``.
+        self.write_lock = threading.RLock()
         if self.backend == "sqlite":
             if self.db_path != ":memory:":
                 Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)

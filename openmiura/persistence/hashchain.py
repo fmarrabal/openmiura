@@ -95,7 +95,10 @@ _SPECS: dict[str, dict[str, Any]] = {
             "ts, session_id, user_key, channel, agent_id, request_text, response_text, status, "
             "provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, "
             "total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, "
-            "policies_json, decisions_json, version FROM decision_traces WHERE chain_seq IS NOT NULL"
+            # No "chain_seq IS NOT NULL" filter: like the other chained tables,
+            # fetch every row so an unchained one is surfaced as
+            # preexisting_count instead of being invisible to the verifier.
+            "policies_json, decisions_json, version FROM decision_traces"
         ),
         # Reuse the exact writer-side canonical builder (one source of truth).
         "fields": lambda row: decision_trace_chain_fields(
@@ -194,7 +197,10 @@ def verify_audit_chain(conn: Any, *, chain_table: str) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     any_tamper = False
-    for scope in sorted(set(chains) | set(preexisting)):
+    # Heads are part of the scope set: a scope whose rows were ALL deleted
+    # leaves an orphan head behind, and iterating only over surviving rows made
+    # a wholesale deletion (the loudest tamper there is) report "intact".
+    for scope in sorted(set(chains) | set(preexisting) | set(heads)):
         crows = sorted(chains.get(scope, []), key=lambda r: int(r["chain_seq"]))
         chain_valid = True
         first_bad_seq: int | None = None
@@ -219,10 +225,17 @@ def verify_audit_chain(conn: Any, *, chain_table: str) -> dict[str, Any]:
             prev = str(r["row_hash"])
 
         head_hash, head_seq = heads.get(scope, (None, None))
-        head_matches = (
-            not crows
-            or (chain_valid and head_hash == crows[-1]["row_hash"] and head_seq == int(crows[-1]["chain_seq"]))
-        )
+        if not crows:
+            # No chained rows. That is only legitimate when no head was ever
+            # written for this scope (a scope holding pre-feature rows only).
+            # A head with no rows means the chain was truncated to nothing.
+            head_matches = head_hash is None
+        else:
+            head_matches = bool(
+                chain_valid
+                and head_hash == crows[-1]["row_hash"]
+                and head_seq == int(crows[-1]["chain_seq"])
+            )
         ok = chain_valid and head_matches
         if not ok:
             any_tamper = True

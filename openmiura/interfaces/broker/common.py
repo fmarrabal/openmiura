@@ -278,6 +278,31 @@ def require_permission(request: Request, permission: str):
     raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
 
 
+def resolve_request_scope(auth_ctx: dict[str, Any], payload: Any) -> tuple[Any, Any, Any]:
+    """Effective ``(tenant_id, workspace_id, environment)`` for a broker request.
+
+    Use this instead of ``payload.get("tenant_id") or auth_ctx.get("tenant_id")``.
+    That idiom takes the scope from the request body *without* validating it,
+    while ``AuthService._enforce_requested_scope`` only ever sees the
+    header-derived scope — so a workspace-bound principal refused a scope in
+    the headers (403) could reach it by putting the same scope in the body.
+
+    A body-supplied scope is validated against the principal's binding here and
+    rejected with 403 on escalation; when the body supplies nothing, the
+    already-validated header scope is used unchanged.
+    """
+    body = payload if isinstance(payload, dict) else {}
+    try:
+        return AuthService.enforce_requested_scope(
+            auth_ctx,
+            tenant_id=body.get("tenant_id"),
+            workspace_id=body.get("workspace_id"),
+            environment=body.get("environment"),
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 def require_broker(request: Request):
     gw, _ = broker_auth_context(request)
     return gw

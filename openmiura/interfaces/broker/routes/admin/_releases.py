@@ -14,6 +14,7 @@ from openmiura.interfaces.broker.common import (
     metrics_summary,
     require_csrf,
     require_permission,
+    resolve_request_scope,
 )
 
 
@@ -119,20 +120,45 @@ def register_routes(router, tenancy_service) -> None:
         gw, auth_ctx = require_permission(request, "admin.write")
         require_csrf(request, auth_ctx)
         payload = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+        # A body-supplied scope is validated against the principal's binding
+        # (the raw `payload.get(...) or auth_ctx.get(...)` idiom skipped that
+        # check entirely — see resolve_request_scope).
+        scope_tenant, scope_workspace, _ = resolve_request_scope(auth_ctx, payload)
+        actor = str(payload.get("actor") or auth_ctx.get("username") or "broker-admin")
+        # Signature-grade is opt-in PER RELEASE, exactly as on the HTTP admin
+        # route: with a quorum policy configured the strict path runs (identity
+        # + anti-self-approval + TOTP + n-of-m quorum). This route called the
+        # legacy path unconditionally, so a quorum-governed release could be
+        # approved here by its own creator, with no signature recorded.
+        strict = gw.audit.get_release_quorum(release_id=release_id, action="approve") is not None
         try:
-            response = AdminService().approve_release(
-                gw,
-                release_id=release_id,
-                actor=str(payload.get("actor") or auth_ctx.get("username") or "broker-admin"),
-                reason=str(payload.get("reason") or ""),
-                tenant_id=payload.get("tenant_id") or auth_ctx.get("tenant_id"),
-                workspace_id=payload.get("workspace_id") or auth_ctx.get("workspace_id"),
-            )
+            if strict:
+                response = AdminService().cast_release_approval_vote(
+                    gw,
+                    release_id=release_id,
+                    actor=actor,
+                    reason=str(payload.get("reason") or ""),
+                    meaning=payload.get("meaning"),
+                    otp_code=payload.get("otp_code"),
+                    tenant_id=scope_tenant,
+                    workspace_id=scope_workspace,
+                )
+            else:
+                response = AdminService().approve_release(
+                    gw,
+                    release_id=release_id,
+                    actor=actor,
+                    reason=str(payload.get("reason") or ""),
+                    tenant_id=scope_tenant,
+                    workspace_id=scope_workspace,
+                )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="release_not_found") from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        audit_sensitive(gw, action="admin_release_approve", auth_ctx=auth_ctx, status="ok", target=release_id)
+        audit_sensitive(gw, action="admin_release_approve", auth_ctx=auth_ctx, status="ok", target=release_id, details={"strict": strict, "quorum_met": response.get("quorum_met")})
         return response
 
     @router.post("/admin/releases/{release_id}/promote")

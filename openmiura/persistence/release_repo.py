@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    chain_write,
     compute_chain_link,
     infer_scope_from_session,
     release_approval_chain_fields,
@@ -628,42 +629,42 @@ class ReleaseRepo:
         # mirroring sessions_repo.log_event. The signature-grade columns are
         # part of the canonical row, so filling them (signature-grade vote) vs
         # leaving them NULL (legacy action) both hash consistently.
-        prev_hash, row_hash, chain_seq = compute_chain_link(
-            self._conn,
-            chain_table='release_approvals',
-            row_fields=release_approval_chain_fields(
-                release_id=release_id,
-                action=action,
-                actor=actor,
-                reason=reason or '',
-                created_at=now,
-                signer_user_key=signer_user_key,
-                meaning=meaning,
-                second_factor_method=second_factor_method,
-                otp_verified_at=otp_verified_at,
-                signature=signature,
-                signature_scheme=signature_scheme,
-                signer_key_id=signer_key_id,
-                signature_input_hash=signature_input_hash,
-            ),
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            now_ts=now,
-        )
-        cur.execute(
-            'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, '
-            'tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method, '
-            'otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash, '
-            'row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (
-                approval_id, release_id, actor, action, reason or '', now,
-                tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method,
-                otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash,
-                row_hash, prev_hash, chain_seq,
-            ),
-        )
-        self._conn.commit()
+        with chain_write(self._conn):
+            prev_hash, row_hash, chain_seq = compute_chain_link(
+                self._conn,
+                chain_table='release_approvals',
+                row_fields=release_approval_chain_fields(
+                    release_id=release_id,
+                    action=action,
+                    actor=actor,
+                    reason=reason or '',
+                    created_at=now,
+                    signer_user_key=signer_user_key,
+                    meaning=meaning,
+                    second_factor_method=second_factor_method,
+                    otp_verified_at=otp_verified_at,
+                    signature=signature,
+                    signature_scheme=signature_scheme,
+                    signer_key_id=signer_key_id,
+                    signature_input_hash=signature_input_hash,
+                ),
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+                now_ts=now,
+            )
+            cur.execute(
+                'INSERT INTO release_approvals(approval_id, release_id, actor, action, reason, created_at, '
+                'tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method, '
+                'otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash, '
+                'row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                (
+                    approval_id, release_id, actor, action, reason or '', now,
+                    tenant_id, workspace_id, environment, signer_user_key, meaning, second_factor_method,
+                    otp_verified_at, signature, signature_scheme, signer_key_id, signature_input_hash,
+                    row_hash, prev_hash, chain_seq,
+                ),
+            )
         return {
             'approval_id': approval_id,
             'release_id': release_id,

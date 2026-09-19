@@ -548,6 +548,43 @@ class AuthService:
         return scope_access, scope_level
 
     @classmethod
+    def enforce_requested_scope(
+        cls,
+        auth_ctx: dict[str, Any],
+        *,
+        tenant_id: Any = None,
+        workspace_id: Any = None,
+        environment: Any = None,
+    ) -> tuple[Any, Any, Any]:
+        """Validate a caller-supplied scope against the principal's binding
+        and return the effective scope.
+
+        :meth:`_enforce_requested_scope` only ever sees the *header*-derived
+        scope carried in ``auth_ctx``. Routes that accepted a scope from the
+        request body with ``payload.get("tenant_id") or auth_ctx.get(...)``
+        therefore short-circuited it entirely, letting a workspace-bound
+        principal reach another workspace simply by moving the scope out of
+        the headers and into the body. This is the public entry point so a
+        route never has to re-implement the rule (or reach for the private
+        method) to honour it.
+
+        Raises ``PermissionError`` on escalation, exactly like the header path.
+        """
+        requested = dict(auth_ctx or {})
+        if tenant_id is not None:
+            requested["tenant_id"] = tenant_id
+        if workspace_id is not None:
+            requested["workspace_id"] = workspace_id
+        if environment is not None:
+            requested["environment"] = environment
+        cls._enforce_requested_scope(requested)
+        return (
+            requested.get("tenant_id"),
+            requested.get("workspace_id"),
+            requested.get("environment"),
+        )
+
+    @classmethod
     def _enforce_requested_scope(cls, auth_ctx: dict[str, Any]) -> None:
         scope_access = str(auth_ctx.get("scope_access") or "scoped")
         scope_level = str(auth_ctx.get("scope_level") or "workspace")

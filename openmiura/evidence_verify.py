@@ -496,11 +496,19 @@ def verify_pack(
     embedded_fingerprint = package_verify.get("public_key_fingerprint")
     if embedded_fingerprint:
         try:
+            # Derive from the SAME value the signature is bound to. The
+            # signing input uses the stripped signer_key_id (see
+            # _verify_crypto_signature), so deriving from the raw field let an
+            # attacker defeat this guard with one leading space: the signature
+            # still verified, the derived dev key no longer matched, and a
+            # worthless dev-seed pack read as VERIFIED + authoritative once the
+            # two unsigned dev_signing_key/signing_warning fields were stripped.
             dev_key_fingerprint_match = embedded_fingerprint == _dev_seed_public_fingerprint(
-                str(integrity.get("signer_key_id") or "")
+                str(package_verify.get("signer_key_id") or integrity.get("signer_key_id") or "").strip()
             )
         except Exception:
-            dev_key_fingerprint_match = False
+            # Fail CLOSED: this is the guard that catches a publicly-known key.
+            dev_key_fingerprint_match = True
     dev_signing_key = bool(public_key_block.get("dev_signing_key")) or dev_key_fingerprint_match
     signing_warning = public_key_block.get("signing_warning")
 
@@ -595,7 +603,16 @@ def _exit_code_for(result: dict[str, Any], *, allow_dev_seed: bool) -> int:
     # Consistent but not authoritative. The only opt-in that flips this to
     # success is --allow-dev-seed, and only for a genuinely dev-seed-signed
     # pack (an unsigned / legacy-signed pack is never made "OK" by it).
-    if result.get("dev_signing_key") and result.get("cryptographically_signed") and allow_dev_seed:
+    # It must NOT override an explicit --trust-anchor: a caller who pinned the
+    # signer has asked a stricter question, and a convenience flag for local
+    # dev packs cannot answer it. Only `trusted_signer is False` blocks here;
+    # None means no anchor was supplied.
+    if (
+        result.get("dev_signing_key")
+        and result.get("cryptographically_signed")
+        and allow_dev_seed
+        and result.get("trusted_signer") is not False
+    ):
         return EXIT_OK
     return EXIT_NON_AUTHORITATIVE
 

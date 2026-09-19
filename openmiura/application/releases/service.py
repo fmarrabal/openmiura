@@ -227,6 +227,22 @@ class ReleaseService:
         tenant_id: str | None = None,
         workspace_id: str | None = None,
     ) -> dict[str, Any]:
+        """Legacy single-approver path.
+
+        Refuses outright when a quorum policy is configured for this release.
+        Signature-grade approval used to be a dispatch decision replicated in
+        each route, so a route that had not been updated — the broker admin
+        approve route, and two non-HTTP callers — silently took this path and
+        let a release creator approve their own quorum-governed release with no
+        identity resolution, no second factor and no signature recorded.
+        Making the refusal a property of the service closes every call site at
+        once, including callers that do not exist yet.
+        """
+        if gw.audit.get_release_quorum(release_id=release_id, action='approve') is not None:
+            raise PermissionError(
+                'this release is governed by an approval quorum and must be approved '
+                'through the signature-grade path (cast_release_approval_vote)'
+            )
         release = gw.audit.approve_release_bundle(
             release_id,
             actor=actor,
