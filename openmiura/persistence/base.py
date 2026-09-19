@@ -8,13 +8,67 @@ can call them without requiring the same object identity.
 from __future__ import annotations
 
 import json
-from typing import Any
+import threading
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 # One serializer of record for the audit hash-chain. Reuse the offline
 # verifier's compact canonical digest so a row_hash computed here in the
 # persistence layer is byte-for-byte reproducible by `openmiura verify` and
 # `openmiura db verify-chain`. Do NOT re-implement the JSON canonicalization.
 from openmiura.evidence_verify import stable_digest as canonical_row_digest
+
+
+_FALLBACK_WRITE_LOCK = threading.RLock()
+_CHAIN_WRITE_STATE = threading.local()
+
+
+def _chain_write_depth(conn: Any) -> int:
+    return int(getattr(_CHAIN_WRITE_STATE, "depth", 0))
+
+
+@contextmanager
+def chain_write(conn: Any) -> Iterator[None]:
+    """Serialise a hash-chain link, its row INSERT and the commit into one
+    atomic unit.
+
+    Two defects made this necessary; both were reproducible before it existed
+    and are pinned by ``tests/unit/test_audit_hashchain_pr8_atomicity.py``:
+
+    * ``compute_chain_link`` reads the per-scope head and writes it back. The
+      SQLite connection is shared across threads (``check_same_thread=False``),
+      so two concurrent writers could read the same head and be handed the
+      SAME ``chain_seq``. The append-only triggers then make that duplicate
+      unrepairable, so ``verify-chain`` reports TAMPER forever on a perfectly
+      honest system.
+    * The head is advanced BEFORE the caller's INSERT. If the INSERT raised
+      (a bind or constraint error), the advanced head stayed in the shared
+      connection's open transaction and was committed by the *next* writer,
+      permanently orphaning a sequence number.
+
+    Holding one lock across the whole critical section fixes the first;
+    rolling back on any exception fixes the second. The lock is re-entrant so
+    nested writers (a repo method calling another) do not deadlock.
+    """
+    lock = getattr(conn, "write_lock", None)
+    if lock is None:
+        lock = _FALLBACK_WRITE_LOCK
+    with lock:
+        _CHAIN_WRITE_STATE.depth = _chain_write_depth(conn) + 1
+        try:
+            yield
+        except BaseException:
+            # Never leave an advanced head behind for the next writer to commit.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        else:
+            if _chain_write_depth(conn) == 1:
+                conn.commit()
+        finally:
+            _CHAIN_WRITE_STATE.depth = _chain_write_depth(conn) - 1
 
 
 def parse_json_column(text: Any) -> Any:
@@ -191,6 +245,11 @@ def compute_chain_link(
     column text — see the two-serializer trap). The verifier rebuilds the
     identical canonical dict, so the writer and verifier hash the same bytes.
     """
+    if not _chain_write_depth(conn):
+        raise RuntimeError(
+            "compute_chain_link must be called inside a chain_write(conn) block "
+            "so the link, the row INSERT and the commit are one atomic unit"
+        )
     scope = canonical_chain_scope(tenant_id, workspace_id, environment)
     cur = conn.cursor()
     head = cur.execute(

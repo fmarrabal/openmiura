@@ -17,8 +17,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    chain_write,
     compute_chain_link,
     infer_scope_from_session,
+    parse_json_column,
     row_scope,
     scope_payload,
     scope_where,
@@ -355,29 +357,36 @@ class SessionsRepo:
             environment = inferred.get("environment")
         cur = self._conn.cursor()
         ts = time.time()
-        # Tamper-evident hash-chain link (same transaction as the row INSERT).
-        prev_hash, row_hash, chain_seq = compute_chain_link(
-            self._conn,
-            chain_table="events",
-            row_fields={
-                "ts": ts,
-                "direction": direction,
-                "channel": channel,
-                "user_id": user_id,
-                "session_id": session_id,
-                "payload": payload,
-            },
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            now_ts=ts,
-        )
-        cur.execute(
-            "INSERT INTO events(ts, direction, channel, user_id, session_id, payload_json, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            (ts, direction, channel, user_id, session_id, json.dumps(payload, ensure_ascii=False), tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
-        )
-        event_id = getattr(cur, 'lastrowid', None)
-        self._conn.commit()
+        # Serialize the payload ONCE and hash what is actually stored. Hashing
+        # the pre-serialization object instead would drift from the verifier,
+        # which can only rebuild the payload by re-parsing payload_json: a dict
+        # with non-string keys ({2: 'b'}) sorts numerically here but
+        # lexicographically after the JSON round-trip, so an untampered chain
+        # would fail verification. See the two-serializer trap in base.py.
+        payload_text = json.dumps(payload, ensure_ascii=False)
+        with chain_write(self._conn):
+            # Tamper-evident hash-chain link (same transaction as the row INSERT).
+            prev_hash, row_hash, chain_seq = compute_chain_link(
+                self._conn,
+                chain_table="events",
+                row_fields={
+                    "ts": ts,
+                    "direction": direction,
+                    "channel": channel,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "payload": parse_json_column(payload_text),
+                },
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+                now_ts=ts,
+            )
+            cur.execute(
+                "INSERT INTO events(ts, direction, channel, user_id, session_id, payload_json, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (ts, direction, channel, user_id, session_id, payload_text, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
+            )
+            event_id = getattr(cur, 'lastrowid', None)
         try:
             return int(event_id) if event_id is not None else None
         except Exception:

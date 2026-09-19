@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from openmiura.core.db import DBConnection, CompatRow
 from openmiura.core.tenancy.scope import assert_scope_match, normalize_scope
 from openmiura.persistence.base import (
+    chain_write,
     compute_chain_link,
     decision_trace_chain_fields,
     infer_scope_from_session,
@@ -53,35 +54,35 @@ class ToolsRepo:
             environment = inferred.get("environment")
         cur = self._conn.cursor()
         ts = time.time()
-        # Tamper-evident hash-chain link (same transaction as the row INSERT).
-        prev_hash, row_hash, chain_seq = compute_chain_link(
-            self._conn,
-            chain_table="tool_calls",
-            row_fields={
-                "ts": ts,
-                "session_id": session_id,
-                "user_key": user_key,
-                "agent_id": agent_id,
-                "tool_name": tool_name,
-                "args": parse_json_column(args_json),
-                "ok": bool(ok),
-                "result_excerpt": result_excerpt,
-                "error": error,
-                "duration_ms": float(duration_ms),
-            },
-            tenant_id=tenant_id,
-            workspace_id=workspace_id,
-            environment=environment,
-            now_ts=ts,
-        )
-        cur.execute(
-            """
-            INSERT INTO tool_calls(ts, session_id, user_key, agent_id, tool_name, args_json, ok, result_excerpt, error, duration_ms, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (ts, session_id, user_key, agent_id, tool_name, args_json, 1 if ok else 0, result_excerpt, error, float(duration_ms), tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
-        )
-        self._conn.commit()
+        with chain_write(self._conn):
+            # Tamper-evident hash-chain link (same transaction as the row INSERT).
+            prev_hash, row_hash, chain_seq = compute_chain_link(
+                self._conn,
+                chain_table="tool_calls",
+                row_fields={
+                    "ts": ts,
+                    "session_id": session_id,
+                    "user_key": user_key,
+                    "agent_id": agent_id,
+                    "tool_name": tool_name,
+                    "args": parse_json_column(args_json),
+                    "ok": bool(ok),
+                    "result_excerpt": result_excerpt,
+                    "error": error,
+                    "duration_ms": float(duration_ms),
+                },
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                environment=environment,
+                now_ts=ts,
+            )
+            cur.execute(
+                """
+                INSERT INTO tool_calls(ts, session_id, user_key, agent_id, tool_name, args_json, ok, result_excerpt, error, duration_ms, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (ts, session_id, user_key, agent_id, tool_name, args_json, 1 if ok else 0, result_excerpt, error, float(duration_ms), tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq),
+            )
 
     def count_tool_calls(self, *, tenant_id: str | None = None, workspace_id: str | None = None, environment: str | None = None) -> int:
         cur = self._conn.cursor()
@@ -181,11 +182,6 @@ class ToolsRepo:
         # (get/list) return the latest version per trace_id, so external
         # behaviour is unchanged. The composite PK (trace_id, version) makes the
         # table truly append-only (a prerequisite for chaining it).
-        ver_row = cur.execute(
-            "SELECT MAX(version) FROM decision_traces WHERE trace_id=?",
-            (trace_id,),
-        ).fetchone()
-        version = (int(ver_row[0]) + 1) if (ver_row and ver_row[0] is not None) else 1
         ts = time.time()
         # Sanitize once so the hashed content matches the stored content exactly.
         _req = request_text or ""
@@ -205,36 +201,47 @@ class ToolsRepo:
         _tu = tools_used_json or "[]"
         _pol = policies_json or "[]"
         _dec = decisions_json or "{}"
-        # Tamper-evident hash-chain link (same transaction as the INSERT). Each
-        # immutable version row is its own chained entry; version is part of the
-        # hashed content.
-        prev_hash, row_hash, chain_seq = compute_chain_link(
-            self._conn,
-            chain_table="decision_traces",
-            row_fields=decision_trace_chain_fields(
-                ts=ts, session_id=session_id, user_key=user_key, channel=channel,
-                agent_id=agent_id, request_text=_req, response_text=_resp, status=_status,
-                provider=_provider, model=_model, latency_ms=_lat, estimated_cost=_cost,
-                llm_calls=_llm, input_tokens=_in, output_tokens=_out, total_tokens=_tot,
-                context_json=_ctx, memory_json=_mem, tools_considered_json=_tc,
-                tools_used_json=_tu, policies_json=_pol, decisions_json=_dec, version=version,
-            ),
-            tenant_id=tenant_id, workspace_id=workspace_id, environment=environment,
-            now_ts=ts,
-        )
-        values = (
-            trace_id, ts, session_id, user_key, channel, agent_id, _req, _resp, _status,
-            _provider, _model, _lat, _cost, _llm, _in, _out, _tot, _ctx, _mem, _tc, _tu, _pol,
-            _dec, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq, version,
-        )
-        cur.execute(
-            """
-            INSERT INTO decision_traces(trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq, version)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            values,
-        )
-        self._conn.commit()
+        with chain_write(self._conn):
+            # The next version is read inside the serialised block: MAX(version)+1
+            # computed outside it is a read-modify-write against the composite PK
+            # (trace_id, version), and two overlapping writes for the same turn
+            # (a cancelled stream whose disconnect and completion handlers both
+            # fire) collided on the UNIQUE constraint — after the loser had
+            # already advanced the chain head.
+            ver_row = cur.execute(
+                "SELECT MAX(version) FROM decision_traces WHERE trace_id=?",
+                (trace_id,),
+            ).fetchone()
+            version = (int(ver_row[0]) + 1) if (ver_row and ver_row[0] is not None) else 1
+            # Tamper-evident hash-chain link (same transaction as the INSERT). Each
+            # immutable version row is its own chained entry; version is part of the
+            # hashed content.
+            prev_hash, row_hash, chain_seq = compute_chain_link(
+                self._conn,
+                chain_table="decision_traces",
+                row_fields=decision_trace_chain_fields(
+                    ts=ts, session_id=session_id, user_key=user_key, channel=channel,
+                    agent_id=agent_id, request_text=_req, response_text=_resp, status=_status,
+                    provider=_provider, model=_model, latency_ms=_lat, estimated_cost=_cost,
+                    llm_calls=_llm, input_tokens=_in, output_tokens=_out, total_tokens=_tot,
+                    context_json=_ctx, memory_json=_mem, tools_considered_json=_tc,
+                    tools_used_json=_tu, policies_json=_pol, decisions_json=_dec, version=version,
+                ),
+                tenant_id=tenant_id, workspace_id=workspace_id, environment=environment,
+                now_ts=ts,
+            )
+            values = (
+                trace_id, ts, session_id, user_key, channel, agent_id, _req, _resp, _status,
+                _provider, _model, _lat, _cost, _llm, _in, _out, _tot, _ctx, _mem, _tc, _tu, _pol,
+                _dec, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq, version,
+            )
+            cur.execute(
+                """
+                INSERT INTO decision_traces(trace_id, ts, session_id, user_key, channel, agent_id, request_text, response_text, status, provider, model, latency_ms, estimated_cost, llm_calls, input_tokens, output_tokens, total_tokens, context_json, memory_json, tools_considered_json, tools_used_json, policies_json, decisions_json, tenant_id, workspace_id, environment, row_hash, prev_hash, chain_seq, version)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                values,
+            )
 
     def _decision_trace_row_to_dict(self, row: Any) -> dict[str, Any]:
         def _loads(raw: Any, fallback: Any):
